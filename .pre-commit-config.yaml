@@ -1,0 +1,14 @@
+# Pre-commit configuration for xtlass project
+# See https://pre-commit.com for more information
+
+repos:
+  - repo: local
+    hooks:
+      - id: clang-format
+        name: clang-format
+        description: Format C++ files with clang-format-18
+        entry: clang-format-18
+        language: system
+        types_or: [c++, c]
+        args: ['-i', '-style=file']
+        files: \.(cpp|h|hpp|cc|cxx)$

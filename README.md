@@ -60,6 +60,128 @@ Some of the key features of TORQ-Tile are the following:
 
 > ℹ️ The micro-kernel API is designed to be as generic as possible for integration into third-party runtimes.
 
+## Supported instructions and extensions
+
+- RISC-V Vector Extension (RVV)
+
+## Filename convention
+
+The `src/gemm` directory is the home for all GEMM (General Matrix Multiply) micro-kernels. The micro-kernels are grouped in separate directories based on the data types. For example, all the FP16 matrix-multiplication micro-kernels are held in the `gemm_f16_f16_f16/` directory.
+
+Inside the operator directory, you can find:
+
+- *The common utilities*, which are helper functions necessary for the correct functioning of the micro-kernels. For example, packing utilities are available in `src/common/tqt_pack_rvv.h`.
+- *The micro-kernels* files, which are held in separate sub-directories.
+
+The name of the micro-kernel folder provides the description of the operation performed and the data type of the destination and source tensors. The general syntax for the micro-kernel folder is as follows:
+
+`<op>_<dst-data-type>_<src0-data-type>_<src1-data-type>_...`
+
+All **.c/.cpp** and **.h** pair files in that folder are micro-kernel variants. The variants are differentiated by specifying the computational parameters (for example, the tile size like `8x3vl`), the RISC-V extension (for example, RVV). The general syntax for the micro-kernel variant is as follows:
+
+`tqt_<op>_<data-types>_<compute-params>_<extension>.c/.h`
+
+For example:
+- `tqt_gemm_1xnbias_clamp_f16_f16_f16t_8x3vl_rvv.h` - FP16 GEMM with bias and clamp, using 8x3vl tile size, optimized for RVV
+- `tqt_gemm_1xnbias_clamp_f32_f32p_f32p_8x3vl_rvv.h` - FP32 packed GEMM with bias and clamp, using RVV
+
+All functions defined in the **.h** header file of the micro-kernel variant follow the naming pattern:
+
+`tqt_<op>_<micro-kernel-variant-filename>.c/.cpp/.h`
+
+## Supported micro-kernels
+
+For a list of supported micro-kernels refer to the [source](/src/) directory. The micro-kernels are grouped in separate directories based on the data types.
+
+Currently supported GEMM variants include:
+- **FP32**: `gemm_f32_f32_f32/` - Single precision floating point
+- **FP16**: `gemm_f16_f16_f16/` - Half precision floating point
+
+Each variant includes optimized implementations for:
+- RVV (RISC-V Vector Extension) - e.g., `8x3vl_rvv`
+
+Common operations supported:
+- `gemm_1xnbias_clamp` - GEMM with bias addition and clamp activation
+- Packed and transposed variants (indicated by `p` and `t` suffixes)
+
+## Project Structure
+
+```bash
+torq-tile/
+├── cmake/            # CMake configuration files
+├── examples/         # Usage examples
+├── scripts/          # Build and utility scripts
+├── src/              # Source code
+│   ├── gemm/         # GEMM micro-kernel implementations
+│   └── common/       # Common utilities and headers
+└── test/             # Test cases
+```
+
+## How to build
+
+### Prerequisites
+
+TORQ-Tile requires the following dependencies, obtainable via your preferred package manager, to be installed and available on your system to be able to build the project.
+
+- `build-essential`
+- `cmake >= 3.18`
+
+In addition, you may choose to use the following toolchains:
+
+- (Optional) `RISC-V GNU toolchain` for cross-compilation to RISC-V targets
+- (Optional) `XuanTie toolchain` available from XuanTie official channels for optimal performance on XuanTie processors
+
+### Build Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `CMAKE_C_FLAGS` / `CMAKE_CXX_FLAGS` | String | *(required)* | Compiler flags specifying the target platform and architecture. Must be set according to your target CPU, e.g. `-march=rv64gcv -mabi=lp64d` |
+| `TORQ_TILE_BUILD_SHARED` | Bool | `OFF` | Build as shared library (`.so`) instead of static library (`.a`) |
+| `TORQ_TILE_BUILD_TEST` | Bool | `ON` | Build test programs |
+| `TORQ_TILE_BUILD_BENCHMARK` | Bool | `OFF` | Build benchmark programs |
+| `TORQ_TILE_TEST_RUNNER` | String | *(empty)* | Command prefix for running test executables. Useful for cross-compiled binaries that require an emulator, e.g. `"qemu-riscv64 -cpu any -L /path/to/sysroot"` |
+
+### Compile natively on a RISC-V system
+
+You can quickly compile TORQ-Tile on your system with a RISC-V processor by using the following commands:
+
+```shell
+cmake -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_C_FLAGS="-march=rv64gcv_zvfh -mabi=lp64d" \
+    -DCMAKE_CXX_FLAGS="-march=rv64gcv_zvfh -mabi=lp64d" \
+    -S . -B build/
+cmake --build ./build
+```
+
+### Cross-compile to RISC-V Linux®
+
+The RISC-V GNU toolchain can be used to cross-compile to a Linux system with a RISC-V processor from an x86_64 Linux host machine. Ensure the toolchain is available on your PATH and provide to CMake the RISC-V toolchain CMakefile found in `cmake` directory with the `-DCMAKE_TOOLCHAIN_FILE` option.
+
+```shell
+cmake -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_TOOLCHAIN_FILE=cmake/riscv64-unknown-linux-gnu.toolchain.cmake \
+    -DCMAKE_C_FLAGS="-march=rv64gcv_zvfh -mabi=lp64d" \
+    -DCMAKE_CXX_FLAGS="-march=rv64gcv_zvfh -mabi=lp64d" \
+    -S . -B build/
+cmake --build ./build
+```
+
+### Build and run tests
+
+To build with tests enabled and run them via QEMU:
+
+```shell
+cmake -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_TOOLCHAIN_FILE=cmake/riscv64-unknown-linux-gnu.toolchain.cmake \
+    -DCMAKE_C_FLAGS="-march=rv64gcv_zvfh -mabi=lp64d" \
+    -DCMAKE_CXX_FLAGS="-march=rv64gcv_zvfh -mabi=lp64d" \
+    -DTORQ_TILE_BUILD_TEST=ON \
+    -DTORQ_TILE_TEST_RUNNER="qemu-riscv64 -cpu any -L /path/to/sysroot" \
+    -S . -B build/
+cmake --build ./build
+ctest --test-dir build/test --output-on-failure
+```
+
 ## Release
 
 ### Cadence

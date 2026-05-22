@@ -69,5 +69,5 @@ struct tqt_gemm_mx1bias_clamp_f32_f32p_f32p_ukernel
 };
 
 #ifdef __cplusplus
-}
+}  // extern "C"
 #endif

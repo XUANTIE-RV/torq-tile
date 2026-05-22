@@ -14,7 +14,7 @@
 extern "C" {
 #endif  // __cplusplus
 
-/// Micro-kernel: GEMM with 1xN bias and clamp for FP32 with packed A and B
+/// Micro-kernel: GEMM with Mx1 bias and clamp for FP32 with packed A and B
 ///
 /// This is a rvv (8 x 3*vl tile) implementation where vl = csrr_vlenb() / sizeof(float).
 /// Computes: D = clamp(C + A_packed*B_packed + bias, min, max)
@@ -72,7 +72,7 @@ size_t tqt_get_c_offset_gemm_mx1bias_clamp_f32_f32p_f32p_8x3vl_rvv(size_t m_idx,
 
 /// Gets the offset in bytes to the data element in the bias vector buffer.
 ///
-/// @param[in] n_idx Column index.
+/// @param[in] m_idx Row index.
 ///
 /// @return The offset in bytes to the bias element.
 size_t tqt_get_bias_offset_gemm_mx1bias_clamp_f32_f32p_f32p_8x3vl_rvv(size_t m_idx);
@@ -167,13 +167,13 @@ void tqt_run_bt_pack_gemm_mx1bias_clamp_f32_f32p_f32p_8x3vl_rvv(size_t n, size_t
 /// @param[in]  ldc Leading dimension of C.
 /// @param[out] D Output matrix D [m, n] in row-major format.
 /// @param[in]  ldd Leading dimension of D.
-/// @param[in]  bias Bias vector [1, n], broadcast across all rows.
+/// @param[in]  bias Bias vector [m, 1], broadcast across all columns.
 /// @param[in]  clamp_min Minimum value for clamping.
 /// @param[in]  clamp_max Maximum value for clamping.
 ///
 /// @note All matrices use float elements.
 /// @note A_packed and B_packed are pre-packed using the pack functions.
-/// @note The bias vector has shape [1, n] and is added to each row of the result.
+/// @note The bias vector has shape [m, 1] and is added to each column of the result.
 /// @note k_idx_a and k_idx_b are used when A and B are sub-buffers with different sizes.
 ///
 void tqt_run_gemm_mx1bias_clamp_f32_f32p_f32p_8x3vl_rvv(

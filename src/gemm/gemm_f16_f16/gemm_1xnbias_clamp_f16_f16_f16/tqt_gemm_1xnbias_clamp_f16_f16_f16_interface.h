@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <stddef.h>
+#include "src/common/tqt_common.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -50,5 +50,5 @@ struct tqt_gemm_1xnbias_clamp_f16_f16_f16_ukernel
 };
 
 #ifdef __cplusplus
-}
+}  // extern "C"
 #endif

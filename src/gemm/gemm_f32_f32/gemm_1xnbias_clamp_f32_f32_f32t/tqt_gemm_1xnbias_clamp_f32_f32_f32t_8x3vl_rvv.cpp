@@ -10,8 +10,8 @@
 
 #include "tqt_gemm_1xnbias_clamp_f32_f32_f32t_8x3vl_rvv.h"
 
-#include "../tqt_kernel_gemm_f32_f32_f32_rvv.h"
 #include "src/common/tqt_common.h"
+#include "src/gemm/gemm_f32_f32/tqt_kernel_gemm_f32_f32_8x3vl_rvv.h"
 
 static const size_t VLENB = csrr_vlenb();
 static const size_t vlmax = VLENB / sizeof(float);
@@ -97,24 +97,34 @@ static void gemm_kernel(size_t K, float *D, const float *A, const float *B, cons
     const float *b_ptr = B;
 
     if (C) {
-        tqt_init_c_kernel_gemm_f32_f32_f32_rvv<MR, NR>(vl, C, c_stride_row, c_stride_col);
+        tqt_init_c_kernel_gemm_f32_f32_8x3vl_rvv<MR, NR>(vl, C, c_stride_row, c_stride_col);
     } else {
-        tqt_init_zero_kernel_gemm_f32_f32_f32_rvv<MR, NR>(vl);
+        tqt_init_zero_kernel_gemm_f32_f32_8x3vl_rvv<MR, NR>(vl);
     }
 
-    for (size_t k_idx = 0; k_idx < K; k_idx++) {
-        tqt_load_a_kernel_gemm_f32_f32_f32_rvv<MR>(a_ptr, a_stride_row);
-        tqt_load_bt_kernel_gemm_f32_f32_f32_rvv<NR>(vl, b_ptr, b_stride_row);
-        tqt_vfmacc_kernel_gemm_f32_f32_f32_rvv<MR, NR>(vl);
+    // Prologue: load first iteration's A and B data into ft0-ft7 / v0-v2
+    tqt_load_a_kernel_gemm_f32_f32_8x3vl_rvv<MR>(a_ptr, a_stride_row);
+    tqt_load_bt_kernel_gemm_f32_f32_8x3vl_rvv<NR>(vl, b_ptr, b_stride_row);
+    a_ptr += 1;
+    b_ptr += 1;
+
+    // Steady-state K-loop: compute current iteration (column-first) while
+    // prefetching next iteration's A and B data via software pipelining
+    for (size_t k_idx = 1; k_idx < K; k_idx++) {
+        tqt_fused_load_vfmacc_axbt_kernel_gemm_f32_f32_8x3vl_rvv<MR, NR>(vl, a_ptr, a_stride_row,
+                                                                         b_ptr, b_stride_row);
         a_ptr += 1;
         b_ptr += 1;
     }
 
+    // Epilogue: last iteration's pure vfmacc (no prefetch needed)
+    tqt_epilogue_vfmacc_kernel_gemm_f32_f32_8x3vl_rvv<MR, NR>();
+
     if (bias) {
-        tqt_add_1xnbias_kernel_gemm_f32_f32_f32_rvv<MR, NR>(vl, bias);
+        tqt_add_1xnbias_kernel_gemm_f32_f32_8x3vl_rvv<MR, NR>(vl, bias);
     }
-    tqt_clamp_kernel_gemm_f32_f32_f32_rvv<MR, NR>(vl, clamp_min, clamp_max);
-    tqt_store_kernel_gemm_f32_f32_f32_rvv<MR, NR>(vl, D, d_stride_row, d_stride_col);
+    tqt_clamp_kernel_gemm_f32_f32_8x3vl_rvv<MR, NR>(vl, clamp_min, clamp_max);
+    tqt_store_kernel_gemm_f32_f32_8x3vl_rvv<MR, NR>(vl, D, d_stride_row, d_stride_col);
 }
 
 // Function pointer type for kernel dispatch

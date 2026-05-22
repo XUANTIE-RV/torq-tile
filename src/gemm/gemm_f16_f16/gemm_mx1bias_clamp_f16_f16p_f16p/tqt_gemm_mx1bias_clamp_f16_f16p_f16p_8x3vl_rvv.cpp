@@ -10,9 +10,9 @@
 
 #include "tqt_gemm_mx1bias_clamp_f16_f16p_f16p_8x3vl_rvv.h"
 
-#include "../tqt_kernel_gemm_f16_f16_f16_rvv.h"
 #include "src/common/tqt_common.h"
-#include "src/common/tqt_pack_rvv.h"
+#include "src/common/tqt_gemm_pack_rvv.h"
+#include "src/gemm/gemm_f16_f16/tqt_kernel_gemm_f16_f16_8x3vl_rvv.h"
 
 static const size_t VLENB = csrr_vlenb();
 static const size_t vlmax = VLENB / sizeof(float16_t);
@@ -94,21 +94,21 @@ void tqt_run_a_pack_gemm_mx1bias_clamp_f16_f16p_f16p_8x3vl_rvv(size_t m, size_t 
                                                                size_t lda_packed, size_t k_idx,
                                                                const void *A, void *A_packed)
 {
-    tqt_run_pack_mxk_8x1_e16_rvv(m, k, lda, lda_packed, k_idx, A, A_packed);
+    tqt_gemm_pack_mxk_8x1_e16_rvv(m, k, lda, lda_packed, k_idx, A, A_packed);
 }
 
 void tqt_run_b_pack_gemm_mx1bias_clamp_f16_f16p_f16p_8x3vl_rvv(size_t n, size_t k, size_t ldb,
                                                                size_t ldb_packed, size_t k_idx,
                                                                const void *B, void *B_packed)
 {
-    tqt_run_pack_kxn_1x3vl_rvv(n, k, ldb, ldb_packed, k_idx, B, B_packed, 16);
+    tqt_gemm_pack_kxn_1x3vl_rvv(n, k, ldb, ldb_packed, k_idx, B, B_packed, 16);
 }
 
 void tqt_run_bt_pack_gemm_mx1bias_clamp_f16_f16p_f16p_8x3vl_rvv(size_t n, size_t k, size_t ldb,
                                                                 size_t ldb_packed, size_t k_idx,
                                                                 const void *B, void *B_packed)
 {
-    tqt_run_pack_nxk_1x3vl_e16_rvv(n, k, ldb, ldb_packed, k_idx, B, B_packed);
+    tqt_gemm_pack_nxk_1x3vl_e16_rvv(n, k, ldb, ldb_packed, k_idx, B, B_packed);
 }
 
 // ===========================================================================
@@ -138,24 +138,33 @@ static void gemm_kernel(size_t K, float16_t *D, const float16_t *A, const float1
     const float16_t *b_ptr = B;
 
     if (C) {
-        tqt_init_c_kernel_gemm_f16_f16_f16_rvv<MR, NR>(vl, C, c_stride_row, c_stride_col);
+        tqt_init_c_kernel_gemm_f16_f16_8x3vl_rvv<MR, NR>(vl, C, c_stride_row, c_stride_col);
     } else {
-        tqt_init_zero_kernel_gemm_f16_f16_f16_rvv<MR, NR>(vl);
+        tqt_init_zero_kernel_gemm_f16_f16_8x3vl_rvv<MR, NR>(vl);
     }
 
-    for (size_t k_idx = 0; k_idx < K; k_idx++) {
-        tqt_load_a_kernel_gemm_f16_f16_f16_rvv<MR>(a_ptr, a_stride_row);
-        tqt_load_b_kernel_gemm_f16_f16_f16_rvv<NR>(vl, b_ptr, b_stride_col);
-        tqt_vfmacc_kernel_gemm_f16_f16_f16_rvv<MR, NR>(vl);
+    // Prologue: load first iteration's data
+    tqt_load_a_kernel_gemm_f16_f16_8x3vl_rvv<MR>(a_ptr, a_stride_row);
+    tqt_load_b_kernel_gemm_f16_f16_8x3vl_rvv<NR>(vl, b_ptr, b_stride_col);
+    a_ptr += MR;
+    b_ptr += NR * vl;
+
+    // Steady-state K-loop
+    for (size_t k_idx = 1; k_idx < K; k_idx++) {
+        tqt_fused_load_vfmacc_axb_kernel_gemm_f16_f16_8x3vl_rvv<MR, NR>(a_ptr, a_stride_row, b_ptr,
+                                                                        b_stride_col);
         a_ptr += MR;
         b_ptr += NR * vl;
     }
 
+    // Epilogue
+    tqt_epilogue_vfmacc_kernel_gemm_f16_f16_8x3vl_rvv<MR, NR>();
+
     if (bias) {
-        tqt_add_mx1bias_kernel_gemm_f16_f16_f16_rvv<MR, NR>(vl, bias);
+        tqt_add_mx1bias_kernel_gemm_f16_f16_8x3vl_rvv<MR, NR>(vl, bias);
     }
-    tqt_clamp_kernel_gemm_f16_f16_f16_rvv<MR, NR>(vl, clamp_min, clamp_max);
-    tqt_store_kernel_gemm_f16_f16_f16_rvv<MR, NR>(vl, D, d_stride_row, d_stride_col);
+    tqt_clamp_kernel_gemm_f16_f16_8x3vl_rvv<MR, NR>(vl, clamp_min, clamp_max);
+    tqt_store_kernel_gemm_f16_f16_8x3vl_rvv<MR, NR>(vl, D, d_stride_row, d_stride_col);
 }
 
 // Function pointer type for kernel dispatch

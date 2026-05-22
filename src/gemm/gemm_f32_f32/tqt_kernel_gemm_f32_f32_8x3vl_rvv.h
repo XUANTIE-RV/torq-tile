@@ -24,7 +24,7 @@
 
 /// Initialize accumulator registers to zero
 template <size_t MR, size_t NR>
-static inline void tqt_init_zero_kernel_gemm_f32_f32_f32_rvv(size_t vl)
+static inline void tqt_init_zero_kernel_gemm_f32_f32_8x3vl_rvv(size_t vl)
 {
     static_assert(MR >= 1 && MR <= 8, "MR must be in range [1, 8]");
     static_assert(NR >= 1 && NR <= 3, "NR must be in range [1, 3]");
@@ -107,8 +107,8 @@ static inline void tqt_init_zero_kernel_gemm_f32_f32_f32_rvv(size_t vl)
 
 /// Initialize accumulator registers from C matrix
 template <size_t MR, size_t NR>
-static inline void tqt_init_c_kernel_gemm_f32_f32_f32_rvv(size_t vl, const float *C,
-                                                          size_t stride_row, size_t stride_col)
+static inline void tqt_init_c_kernel_gemm_f32_f32_8x3vl_rvv(size_t vl, const float *C,
+                                                            size_t stride_row, size_t stride_col)
 {
     static_assert(MR >= 1 && MR <= 8, "MR must be in range [1, 8]");
     static_assert(NR >= 1 && NR <= 3, "NR must be in range [1, 3]");
@@ -199,7 +199,7 @@ static inline void tqt_init_c_kernel_gemm_f32_f32_f32_rvv(size_t vl, const float
 
 /// Load A matrix elements (scalars) into floating-point registers
 template <size_t MR>
-static inline void tqt_load_a_kernel_gemm_f32_f32_f32_rvv(const float *A, size_t stride_row)
+static inline void tqt_load_a_kernel_gemm_f32_f32_8x3vl_rvv(const float *A, size_t stride_row)
 {
     static_assert(MR >= 1 && MR <= 8, "MR must be in range [1, 8]");
 
@@ -223,8 +223,8 @@ static inline void tqt_load_a_kernel_gemm_f32_f32_f32_rvv(const float *A, size_t
 
 /// Load B matrix columns (vectors) into vector registers
 template <size_t NR>
-static inline void tqt_load_b_kernel_gemm_f32_f32_f32_rvv(size_t vl, const float *B,
-                                                          size_t stride_col)
+static inline void tqt_load_b_kernel_gemm_f32_f32_8x3vl_rvv(size_t vl, const float *B,
+                                                            size_t stride_col)
 {
     static_assert(NR >= 1 && NR <= 3, "NR must be in range [1, 3]");
 
@@ -240,8 +240,8 @@ static inline void tqt_load_b_kernel_gemm_f32_f32_f32_rvv(size_t vl, const float
 
 /// Load transposed B matrix columns (vectors) into vector registers
 template <size_t NR>
-static inline void tqt_load_bt_kernel_gemm_f32_f32_f32_rvv(size_t vl, const float *B,
-                                                           size_t stride_row)
+static inline void tqt_load_bt_kernel_gemm_f32_f32_8x3vl_rvv(size_t vl, const float *B,
+                                                             size_t stride_row)
 {
     static_assert(NR >= 1 && NR <= 3, "NR must be in range [1, 3]");
 
@@ -267,7 +267,7 @@ static inline void tqt_load_bt_kernel_gemm_f32_f32_f32_rvv(size_t vl, const floa
 
 /// Perform VFMACC operations
 template <size_t MR, size_t NR>
-static inline void tqt_vfmacc_kernel_gemm_f32_f32_f32_rvv(size_t vl)
+static inline void tqt_vfmacc_kernel_gemm_f32_f32_8x3vl_rvv(size_t vl)
 {
     static_assert(MR >= 1 && MR <= 8, "MR must be in range [1, 8]");
     static_assert(NR >= 1 && NR <= 3, "NR must be in range [1, 3]");
@@ -350,7 +350,7 @@ static inline void tqt_vfmacc_kernel_gemm_f32_f32_f32_rvv(size_t vl)
 
 /// Add 1xn bias to accumulator registers
 template <size_t MR, size_t NR>
-static inline void tqt_add_1xnbias_kernel_gemm_f32_f32_f32_rvv(size_t vl, const float *BIAS)
+static inline void tqt_add_1xnbias_kernel_gemm_f32_f32_8x3vl_rvv(size_t vl, const float *BIAS)
 {
     static_assert(MR >= 1 && MR <= 8, "MR must be in range [1, 8]");
     static_assert(NR >= 1 && NR <= 3, "NR must be in range [1, 3]");
@@ -440,7 +440,7 @@ static inline void tqt_add_1xnbias_kernel_gemm_f32_f32_f32_rvv(size_t vl, const 
 
 /// Add mx1 bias to accumulator registers
 template <size_t MR, size_t NR>
-static inline void tqt_add_mx1bias_kernel_gemm_f32_f32_f32_rvv(size_t vl, const float *BIAS)
+static inline void tqt_add_mx1bias_kernel_gemm_f32_f32_8x3vl_rvv(size_t vl, const float *BIAS)
 {
     static_assert(MR >= 1 && MR <= 8, "MR must be in range [1, 8]");
     static_assert(NR >= 1 && NR <= 3, "NR must be in range [1, 3]");
@@ -531,7 +531,7 @@ static inline void tqt_add_mx1bias_kernel_gemm_f32_f32_f32_rvv(size_t vl, const 
 
 /// Apply clamp (min/max) to accumulator registers
 template <size_t MR, size_t NR>
-static inline void tqt_clamp_kernel_gemm_f32_f32_f32_rvv(size_t vl, float min, float max)
+static inline void tqt_clamp_kernel_gemm_f32_f32_8x3vl_rvv(size_t vl, float min, float max)
 {
     static_assert(MR >= 1 && MR <= 8, "MR must be in range [1, 8]");
     static_assert(NR >= 1 && NR <= 3, "NR must be in range [1, 3]");
@@ -669,8 +669,8 @@ static inline void tqt_clamp_kernel_gemm_f32_f32_f32_rvv(size_t vl, float min, f
 
 /// Store accumulator registers to D matrix
 template <size_t MR, size_t NR>
-static inline void tqt_store_kernel_gemm_f32_f32_f32_rvv(size_t vl, float *D, size_t stride_row,
-                                                         size_t stride_col)
+static inline void tqt_store_kernel_gemm_f32_f32_8x3vl_rvv(size_t vl, float *D, size_t stride_row,
+                                                           size_t stride_col)
 {
     static_assert(MR >= 1 && MR <= 8, "MR must be in range [1, 8]");
     static_assert(NR >= 1 && NR <= 3, "NR must be in range [1, 3]");
@@ -748,5 +748,321 @@ static inline void tqt_store_kernel_gemm_f32_f32_f32_rvv(size_t vl, float *D, si
             asm volatile("vse32.v v30, (%0)" : : "r"(d_row_7 + 1 * stride_col) : "memory");
         if constexpr (NR >= 3)
             asm volatile("vse32.v v31, (%0)" : : "r"(d_row_7 + 2 * stride_col) : "memory");
+    }
+}
+
+/// Fused load + vfmacc kernel (A*B) with column-first ordering and software pipelining.
+/// B is loaded with vle32 (contiguous). Used for packed and non-packed B variants.
+/// Computes current iteration's MR*NR vfmacc operations while prefetching
+/// next iteration's A scalars (into ft0-ft7) and B vectors (into v0-v2).
+/// Assumes ft0-ft7 and v0-v2 already hold the current iteration's data.
+template <size_t MR, size_t NR>
+static inline void tqt_fused_load_vfmacc_axb_kernel_gemm_f32_f32_8x3vl_rvv(const float *A_next,
+                                                                           size_t a_stride_row,
+                                                                           const float *B_next,
+                                                                           size_t b_col_stride)
+{
+    static_assert(MR >= 1 && MR <= 8, "MR must be in range [1, 8]");
+    static_assert(NR >= 1 && NR <= 3, "NR must be in range [1, 3]");
+
+    // =================================================================
+    // Column 0: all v0 uses
+    // =================================================================
+    if constexpr (MR >= 1)
+        asm volatile("vfmacc.vf v8,  ft0, v0" ::: "v8");
+    if constexpr (MR >= 2)
+        asm volatile("vfmacc.vf v11, ft1, v0" ::: "v11");
+    if constexpr (MR >= 3)
+        asm volatile("vfmacc.vf v14, ft2, v0" ::: "v14");
+    if constexpr (MR >= 4)
+        asm volatile("vfmacc.vf v17, ft3, v0" ::: "v17");
+    if constexpr (MR >= 5)
+        asm volatile("vfmacc.vf v20, ft4, v0" ::: "v20");
+    if constexpr (MR >= 6)
+        asm volatile("vfmacc.vf v23, ft5, v0" ::: "v23");
+    if constexpr (MR >= 7)
+        asm volatile("vfmacc.vf v26, ft6, v0" ::: "v26");
+    if constexpr (MR >= 8)
+        asm volatile("vfmacc.vf v29, ft7, v0" ::: "v29");
+    // v0 freed → prefetch next B col 0
+    asm volatile("vle32.v v0, (%0)" : : "r"(B_next) : "v0", "memory");
+
+    // =================================================================
+    // Column 1: all v1 uses (NR >= 2)
+    // =================================================================
+    if constexpr (NR >= 2) {
+        if constexpr (MR >= 1)
+            asm volatile("vfmacc.vf v9,  ft0, v1" ::: "v9");
+        if constexpr (MR >= 2)
+            asm volatile("vfmacc.vf v12, ft1, v1" ::: "v12");
+        if constexpr (MR >= 3)
+            asm volatile("vfmacc.vf v15, ft2, v1" ::: "v15");
+        if constexpr (MR >= 4)
+            asm volatile("vfmacc.vf v18, ft3, v1" ::: "v18");
+        if constexpr (MR >= 5)
+            asm volatile("vfmacc.vf v21, ft4, v1" ::: "v21");
+        if constexpr (MR >= 6)
+            asm volatile("vfmacc.vf v24, ft5, v1" ::: "v24");
+        if constexpr (MR >= 7)
+            asm volatile("vfmacc.vf v27, ft6, v1" ::: "v27");
+        if constexpr (MR >= 8)
+            asm volatile("vfmacc.vf v30, ft7, v1" ::: "v30");
+        // v1 freed → prefetch next B col 1
+        asm volatile("vle32.v v1, (%0)" : : "r"(B_next + b_col_stride) : "v1", "memory");
+    }
+
+    // =================================================================
+    // Last column: vfmacc interleaved with next iteration's A loads.
+    // After each vfmacc using ftX, ftX is freed and reloaded for next K.
+    // =================================================================
+    if constexpr (NR == 3) {
+        // Column 2: vfmacc with v2, interleaved with A prefetch
+        if constexpr (MR >= 1) {
+            asm volatile("vfmacc.vf v10, ft0, v2" ::: "v10");
+            asm volatile("flw ft0, 0(%0)" : : "r"(A_next + 0 * a_stride_row) : "ft0", "memory");
+        }
+        if constexpr (MR >= 2) {
+            asm volatile("vfmacc.vf v13, ft1, v2" ::: "v13");
+            asm volatile("flw ft1, 0(%0)" : : "r"(A_next + 1 * a_stride_row) : "ft1", "memory");
+        }
+        if constexpr (MR >= 3) {
+            asm volatile("vfmacc.vf v16, ft2, v2" ::: "v16");
+            asm volatile("flw ft2, 0(%0)" : : "r"(A_next + 2 * a_stride_row) : "ft2", "memory");
+        }
+        if constexpr (MR >= 4) {
+            asm volatile("vfmacc.vf v19, ft3, v2" ::: "v19");
+            asm volatile("flw ft3, 0(%0)" : : "r"(A_next + 3 * a_stride_row) : "ft3", "memory");
+        }
+        if constexpr (MR >= 5) {
+            asm volatile("vfmacc.vf v22, ft4, v2" ::: "v22");
+            asm volatile("flw ft4, 0(%0)" : : "r"(A_next + 4 * a_stride_row) : "ft4", "memory");
+        }
+        if constexpr (MR >= 6) {
+            asm volatile("vfmacc.vf v25, ft5, v2" ::: "v25");
+            asm volatile("flw ft5, 0(%0)" : : "r"(A_next + 5 * a_stride_row) : "ft5", "memory");
+        }
+        if constexpr (MR >= 7) {
+            asm volatile("vfmacc.vf v28, ft6, v2" ::: "v28");
+            asm volatile("flw ft6, 0(%0)" : : "r"(A_next + 6 * a_stride_row) : "ft6", "memory");
+        }
+        if constexpr (MR >= 8) {
+            asm volatile("vfmacc.vf v31, ft7, v2" ::: "v31");
+            asm volatile("flw ft7, 0(%0)" : : "r"(A_next + 7 * a_stride_row) : "ft7", "memory");
+        }
+        // v2 freed → prefetch next B col 2
+        asm volatile("vle32.v v2, (%0)" : : "r"(B_next + 2 * b_col_stride) : "v2", "memory");
+
+    } else {
+        // NR=1 or NR=2: last vfmacc column already emitted above.
+        // A prefetch: load sequentially (no vfmacc to interleave with)
+        if constexpr (MR >= 1)
+            asm volatile("flw ft0, 0(%0)" : : "r"(A_next + 0 * a_stride_row) : "ft0", "memory");
+        if constexpr (MR >= 2)
+            asm volatile("flw ft1, 0(%0)" : : "r"(A_next + 1 * a_stride_row) : "ft1", "memory");
+        if constexpr (MR >= 3)
+            asm volatile("flw ft2, 0(%0)" : : "r"(A_next + 2 * a_stride_row) : "ft2", "memory");
+        if constexpr (MR >= 4)
+            asm volatile("flw ft3, 0(%0)" : : "r"(A_next + 3 * a_stride_row) : "ft3", "memory");
+        if constexpr (MR >= 5)
+            asm volatile("flw ft4, 0(%0)" : : "r"(A_next + 4 * a_stride_row) : "ft4", "memory");
+        if constexpr (MR >= 6)
+            asm volatile("flw ft5, 0(%0)" : : "r"(A_next + 5 * a_stride_row) : "ft5", "memory");
+        if constexpr (MR >= 7)
+            asm volatile("flw ft6, 0(%0)" : : "r"(A_next + 6 * a_stride_row) : "ft6", "memory");
+        if constexpr (MR >= 8)
+            asm volatile("flw ft7, 0(%0)" : : "r"(A_next + 7 * a_stride_row) : "ft7", "memory");
+    }
+}
+
+/// Fused load + vfmacc kernel (A*B^T) with column-first ordering and software pipelining.
+/// B is loaded with vlse32 (strided). Used for transposed B variants.
+/// b_stride_row is the row stride of transposed B matrix (= ldb).
+template <size_t MR, size_t NR>
+static inline void tqt_fused_load_vfmacc_axbt_kernel_gemm_f32_f32_8x3vl_rvv(
+    size_t vl, const float *A_next, size_t a_stride_row, const float *B_next, size_t b_stride_row)
+{
+    static_assert(MR >= 1 && MR <= 8, "MR must be in range [1, 8]");
+    static_assert(NR >= 1 && NR <= 3, "NR must be in range [1, 3]");
+    size_t stride_bytes = b_stride_row * sizeof(float);
+
+    // =================================================================
+    // Column 0: all v0 uses
+    // =================================================================
+    if constexpr (MR >= 1)
+        asm volatile("vfmacc.vf v8,  ft0, v0" ::: "v8");
+    if constexpr (MR >= 2)
+        asm volatile("vfmacc.vf v11, ft1, v0" ::: "v11");
+    if constexpr (MR >= 3)
+        asm volatile("vfmacc.vf v14, ft2, v0" ::: "v14");
+    if constexpr (MR >= 4)
+        asm volatile("vfmacc.vf v17, ft3, v0" ::: "v17");
+    if constexpr (MR >= 5)
+        asm volatile("vfmacc.vf v20, ft4, v0" ::: "v20");
+    if constexpr (MR >= 6)
+        asm volatile("vfmacc.vf v23, ft5, v0" ::: "v23");
+    if constexpr (MR >= 7)
+        asm volatile("vfmacc.vf v26, ft6, v0" ::: "v26");
+    if constexpr (MR >= 8)
+        asm volatile("vfmacc.vf v29, ft7, v0" ::: "v29");
+    // v0 freed → prefetch next B col 0 (strided)
+    asm volatile("vlse32.v v0, (%0), %1"
+                 :
+                 : "r"(B_next + 0 * vl * b_stride_row), "r"(stride_bytes)
+                 : "v0", "memory");
+
+    // =================================================================
+    // Column 1: all v1 uses (NR >= 2)
+    // =================================================================
+    if constexpr (NR >= 2) {
+        if constexpr (MR >= 1)
+            asm volatile("vfmacc.vf v9,  ft0, v1" ::: "v9");
+        if constexpr (MR >= 2)
+            asm volatile("vfmacc.vf v12, ft1, v1" ::: "v12");
+        if constexpr (MR >= 3)
+            asm volatile("vfmacc.vf v15, ft2, v1" ::: "v15");
+        if constexpr (MR >= 4)
+            asm volatile("vfmacc.vf v18, ft3, v1" ::: "v18");
+        if constexpr (MR >= 5)
+            asm volatile("vfmacc.vf v21, ft4, v1" ::: "v21");
+        if constexpr (MR >= 6)
+            asm volatile("vfmacc.vf v24, ft5, v1" ::: "v24");
+        if constexpr (MR >= 7)
+            asm volatile("vfmacc.vf v27, ft6, v1" ::: "v27");
+        if constexpr (MR >= 8)
+            asm volatile("vfmacc.vf v30, ft7, v1" ::: "v30");
+        // v1 freed → prefetch next B col 1 (strided)
+        asm volatile("vlse32.v v1, (%0), %1"
+                     :
+                     : "r"(B_next + 1 * vl * b_stride_row), "r"(stride_bytes)
+                     : "v1", "memory");
+    }
+
+    // =================================================================
+    // Last column: vfmacc interleaved with next iteration's A loads
+    // =================================================================
+    if constexpr (NR == 3) {
+        if constexpr (MR >= 1) {
+            asm volatile("vfmacc.vf v10, ft0, v2" ::: "v10");
+            asm volatile("flw ft0, 0(%0)" : : "r"(A_next + 0 * a_stride_row) : "ft0", "memory");
+        }
+        if constexpr (MR >= 2) {
+            asm volatile("vfmacc.vf v13, ft1, v2" ::: "v13");
+            asm volatile("flw ft1, 0(%0)" : : "r"(A_next + 1 * a_stride_row) : "ft1", "memory");
+        }
+        if constexpr (MR >= 3) {
+            asm volatile("vfmacc.vf v16, ft2, v2" ::: "v16");
+            asm volatile("flw ft2, 0(%0)" : : "r"(A_next + 2 * a_stride_row) : "ft2", "memory");
+        }
+        if constexpr (MR >= 4) {
+            asm volatile("vfmacc.vf v19, ft3, v2" ::: "v19");
+            asm volatile("flw ft3, 0(%0)" : : "r"(A_next + 3 * a_stride_row) : "ft3", "memory");
+        }
+        if constexpr (MR >= 5) {
+            asm volatile("vfmacc.vf v22, ft4, v2" ::: "v22");
+            asm volatile("flw ft4, 0(%0)" : : "r"(A_next + 4 * a_stride_row) : "ft4", "memory");
+        }
+        if constexpr (MR >= 6) {
+            asm volatile("vfmacc.vf v25, ft5, v2" ::: "v25");
+            asm volatile("flw ft5, 0(%0)" : : "r"(A_next + 5 * a_stride_row) : "ft5", "memory");
+        }
+        if constexpr (MR >= 7) {
+            asm volatile("vfmacc.vf v28, ft6, v2" ::: "v28");
+            asm volatile("flw ft6, 0(%0)" : : "r"(A_next + 6 * a_stride_row) : "ft6", "memory");
+        }
+        if constexpr (MR >= 8) {
+            asm volatile("vfmacc.vf v31, ft7, v2" ::: "v31");
+            asm volatile("flw ft7, 0(%0)" : : "r"(A_next + 7 * a_stride_row) : "ft7", "memory");
+        }
+        // v2 freed → prefetch next B col 2 (strided)
+        asm volatile("vlse32.v v2, (%0), %1"
+                     :
+                     : "r"(B_next + 2 * vl * b_stride_row), "r"(stride_bytes)
+                     : "v2", "memory");
+
+    } else {
+        // NR=1 or NR=2: A prefetch (sequential, no vfmacc to interleave with)
+        if constexpr (MR >= 1)
+            asm volatile("flw ft0, 0(%0)" : : "r"(A_next + 0 * a_stride_row) : "ft0", "memory");
+        if constexpr (MR >= 2)
+            asm volatile("flw ft1, 0(%0)" : : "r"(A_next + 1 * a_stride_row) : "ft1", "memory");
+        if constexpr (MR >= 3)
+            asm volatile("flw ft2, 0(%0)" : : "r"(A_next + 2 * a_stride_row) : "ft2", "memory");
+        if constexpr (MR >= 4)
+            asm volatile("flw ft3, 0(%0)" : : "r"(A_next + 3 * a_stride_row) : "ft3", "memory");
+        if constexpr (MR >= 5)
+            asm volatile("flw ft4, 0(%0)" : : "r"(A_next + 4 * a_stride_row) : "ft4", "memory");
+        if constexpr (MR >= 6)
+            asm volatile("flw ft5, 0(%0)" : : "r"(A_next + 5 * a_stride_row) : "ft5", "memory");
+        if constexpr (MR >= 7)
+            asm volatile("flw ft6, 0(%0)" : : "r"(A_next + 6 * a_stride_row) : "ft6", "memory");
+        if constexpr (MR >= 8)
+            asm volatile("flw ft7, 0(%0)" : : "r"(A_next + 7 * a_stride_row) : "ft7", "memory");
+    }
+}
+
+/// Epilogue vfmacc kernel: column-first ordering, no prefetch.
+/// Used for the last K iteration when there is no next iteration to prefetch.
+template <size_t MR, size_t NR>
+static inline void tqt_epilogue_vfmacc_kernel_gemm_f32_f32_8x3vl_rvv()
+{
+    static_assert(MR >= 1 && MR <= 8, "MR must be in range [1, 8]");
+    static_assert(NR >= 1 && NR <= 3, "NR must be in range [1, 3]");
+
+    // Column 0
+    if constexpr (MR >= 1)
+        asm volatile("vfmacc.vf v8,  ft0, v0" ::: "v8");
+    if constexpr (MR >= 2)
+        asm volatile("vfmacc.vf v11, ft1, v0" ::: "v11");
+    if constexpr (MR >= 3)
+        asm volatile("vfmacc.vf v14, ft2, v0" ::: "v14");
+    if constexpr (MR >= 4)
+        asm volatile("vfmacc.vf v17, ft3, v0" ::: "v17");
+    if constexpr (MR >= 5)
+        asm volatile("vfmacc.vf v20, ft4, v0" ::: "v20");
+    if constexpr (MR >= 6)
+        asm volatile("vfmacc.vf v23, ft5, v0" ::: "v23");
+    if constexpr (MR >= 7)
+        asm volatile("vfmacc.vf v26, ft6, v0" ::: "v26");
+    if constexpr (MR >= 8)
+        asm volatile("vfmacc.vf v29, ft7, v0" ::: "v29");
+
+    // Column 1
+    if constexpr (NR >= 2) {
+        if constexpr (MR >= 1)
+            asm volatile("vfmacc.vf v9,  ft0, v1" ::: "v9");
+        if constexpr (MR >= 2)
+            asm volatile("vfmacc.vf v12, ft1, v1" ::: "v12");
+        if constexpr (MR >= 3)
+            asm volatile("vfmacc.vf v15, ft2, v1" ::: "v15");
+        if constexpr (MR >= 4)
+            asm volatile("vfmacc.vf v18, ft3, v1" ::: "v18");
+        if constexpr (MR >= 5)
+            asm volatile("vfmacc.vf v21, ft4, v1" ::: "v21");
+        if constexpr (MR >= 6)
+            asm volatile("vfmacc.vf v24, ft5, v1" ::: "v24");
+        if constexpr (MR >= 7)
+            asm volatile("vfmacc.vf v27, ft6, v1" ::: "v27");
+        if constexpr (MR >= 8)
+            asm volatile("vfmacc.vf v30, ft7, v1" ::: "v30");
+    }
+
+    // Column 2
+    if constexpr (NR >= 3) {
+        if constexpr (MR >= 1)
+            asm volatile("vfmacc.vf v10, ft0, v2" ::: "v10");
+        if constexpr (MR >= 2)
+            asm volatile("vfmacc.vf v13, ft1, v2" ::: "v13");
+        if constexpr (MR >= 3)
+            asm volatile("vfmacc.vf v16, ft2, v2" ::: "v16");
+        if constexpr (MR >= 4)
+            asm volatile("vfmacc.vf v19, ft3, v2" ::: "v19");
+        if constexpr (MR >= 5)
+            asm volatile("vfmacc.vf v22, ft4, v2" ::: "v22");
+        if constexpr (MR >= 6)
+            asm volatile("vfmacc.vf v25, ft5, v2" ::: "v25");
+        if constexpr (MR >= 7)
+            asm volatile("vfmacc.vf v28, ft6, v2" ::: "v28");
+        if constexpr (MR >= 8)
+            asm volatile("vfmacc.vf v31, ft7, v2" ::: "v31");
     }
 }

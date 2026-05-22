@@ -50,5 +50,5 @@ struct tqt_gemm_1xnbias_clamp_f32_f32_f32_ukernel
 };
 
 #ifdef __cplusplus
-}
+}  // extern "C"
 #endif

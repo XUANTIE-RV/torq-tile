@@ -20,10 +20,6 @@
 #include <riscv_vector.h>
 #endif
 
-#if defined(__riscv_xtheadmatrixmin)
-#include <thead_matrix.h>
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -138,22 +134,6 @@ static inline int csrr_vlenb(void)
 }
 #endif
 
-#if defined(__riscv_xtheadmatrixmin)
-static inline int csrr_xrlen(void)
-{
-    int a = 0;
-    asm volatile("csrr %0, xrlenb" : "=r"(a) : : "memory");
-    return a * 8;
-}
-
-static inline int csrr_xrlenb(void)
-{
-    int a = 0;
-    asm volatile("csrr %0, xrlenb" : "=r"(a) : : "memory");
-    return a;
-}
-#endif
-
 #ifdef __cplusplus
-}
+}  // extern "C"
 #endif

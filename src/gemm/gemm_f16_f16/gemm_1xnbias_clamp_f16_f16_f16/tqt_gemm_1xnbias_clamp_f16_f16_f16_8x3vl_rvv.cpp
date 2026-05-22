@@ -10,8 +10,8 @@
 
 #include "tqt_gemm_1xnbias_clamp_f16_f16_f16_8x3vl_rvv.h"
 
-#include "../tqt_kernel_gemm_f16_f16_f16_rvv.h"
 #include "src/common/tqt_common.h"
+#include "src/gemm/gemm_f16_f16/tqt_kernel_gemm_f16_f16_8x3vl_rvv.h"
 
 static const size_t VLENB = csrr_vlenb();
 static const size_t vlmax = VLENB / sizeof(float16_t);
@@ -97,24 +97,33 @@ static void gemm_kernel(size_t K, float16_t *D, const float16_t *A, const float1
     const float16_t *b_ptr = B;
 
     if (C) {
-        tqt_init_c_kernel_gemm_f16_f16_f16_rvv<MR, NR>(vl, C, c_stride_row, c_stride_col);
+        tqt_init_c_kernel_gemm_f16_f16_8x3vl_rvv<MR, NR>(vl, C, c_stride_row, c_stride_col);
     } else {
-        tqt_init_zero_kernel_gemm_f16_f16_f16_rvv<MR, NR>(vl);
+        tqt_init_zero_kernel_gemm_f16_f16_8x3vl_rvv<MR, NR>(vl);
     }
 
-    for (size_t k_idx = 0; k_idx < K; k_idx++) {
-        tqt_load_a_kernel_gemm_f16_f16_f16_rvv<MR>(a_ptr, a_stride_row);
-        tqt_load_b_kernel_gemm_f16_f16_f16_rvv<NR>(vl, b_ptr, b_stride_col);
-        tqt_vfmacc_kernel_gemm_f16_f16_f16_rvv<MR, NR>(vl);
+    // Prologue: load first iteration's data
+    tqt_load_a_kernel_gemm_f16_f16_8x3vl_rvv<MR>(a_ptr, a_stride_row);
+    tqt_load_b_kernel_gemm_f16_f16_8x3vl_rvv<NR>(vl, b_ptr, b_stride_col);
+    a_ptr += 1;
+    b_ptr += ldb;
+
+    // Steady-state K-loop
+    for (size_t k_idx = 1; k_idx < K; k_idx++) {
+        tqt_fused_load_vfmacc_axb_kernel_gemm_f16_f16_8x3vl_rvv<MR, NR>(a_ptr, a_stride_row, b_ptr,
+                                                                        b_stride_col);
         a_ptr += 1;
         b_ptr += ldb;
     }
 
+    // Epilogue
+    tqt_epilogue_vfmacc_kernel_gemm_f16_f16_8x3vl_rvv<MR, NR>();
+
     if (bias) {
-        tqt_add_1xnbias_kernel_gemm_f16_f16_f16_rvv<MR, NR>(vl, bias);
+        tqt_add_1xnbias_kernel_gemm_f16_f16_8x3vl_rvv<MR, NR>(vl, bias);
     }
-    tqt_clamp_kernel_gemm_f16_f16_f16_rvv<MR, NR>(vl, clamp_min, clamp_max);
-    tqt_store_kernel_gemm_f16_f16_f16_rvv<MR, NR>(vl, D, d_stride_row, d_stride_col);
+    tqt_clamp_kernel_gemm_f16_f16_8x3vl_rvv<MR, NR>(vl, clamp_min, clamp_max);
+    tqt_store_kernel_gemm_f16_f16_8x3vl_rvv<MR, NR>(vl, D, d_stride_row, d_stride_col);
 }
 
 // Function pointer type for kernel dispatch

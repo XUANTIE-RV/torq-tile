@@ -11,6 +11,7 @@ add_library(torq_tile_test_common STATIC
     common/data_generator.cpp
     common/reference_gemm.cpp
     common/reference_conv.cpp
+    common/reference_dwconv.cpp
     common/verify.cpp
 )
 
@@ -74,6 +75,9 @@ if(TORQ_TILE_ENABLE_RVV)
         conv/test_conv_i8_i8_rvv.cpp)
     torq_tile_add_test(test_igemm_i8_i8_rvv
         conv/test_igemm_i8_i8_rvv.cpp)
+    # --- DWConv F32 RVV variants ---
+    torq_tile_add_test(test_dwconv_f32_f32_rvv
+        dwconv/test_dwconv_f32_f32_rvv.cpp)
 endif()
 
 if(TORQ_TILE_ENABLE_RVV_FP16)
@@ -88,6 +92,9 @@ if(TORQ_TILE_ENABLE_RVV_FP16)
         conv/test_conv_f16_f16_rvv.cpp)
     torq_tile_add_test(test_igemm_f16_f16_rvv
         conv/test_igemm_f16_f16_rvv.cpp)
+    # --- DWConv F16 RVV variants ---
+    torq_tile_add_test(test_dwconv_f16_f16_rvv
+        dwconv/test_dwconv_f16_f16_rvv.cpp)
 endif()
 
 if(TORQ_TILE_ENABLE_RVV_BF16)

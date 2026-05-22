@@ -103,6 +103,17 @@ set(TORQ_TILE_RVV_SOURCES
     src/conv/igemm_i8_i8/igemmcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8/tqt_igemmcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8_1vlx4_rvv.cpp
     src/conv/igemm_i8_i8/igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt/tqt_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt_4x1vl_rvv.cpp
     src/conv/igemm_i8_i8/igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp/tqt_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp_4x1vl_rvv.cpp
+    # F32 DWConv RVV
+    src/dwconv/dwconv_f32_f32/dwconvcf_mx1bias_clamp_f32_f32_f32/tqt_dwconvcf_mx1bias_clamp_f32_f32_f32_1x1vl_rvv.cpp
+    src/dwconv/dwconv_f32_f32/dwconvcl_1xnbias_clamp_f32_f32_f32t/tqt_dwconvcl_1xnbias_clamp_f32_f32_f32t_1x1vl_rvv.cpp
+    src/dwconv/dwconv_f32_f32/dwconvcf_mx1bias_clamp_f32p_f32p_f32p/tqt_dwconvcf_mx1bias_clamp_f32p_f32p_f32p_1x1vl_rvv.cpp
+    src/dwconv/dwconv_f32_f32/dwconvcl_1xnbias_clamp_f32p_f32p_f32p/tqt_dwconvcl_1xnbias_clamp_f32p_f32p_f32p_1x1vl_rvv.cpp
+    src/dwconv/dwconv_f32_f32/dwconvcf3x3s1_mx1bias_clamp_f32p_f32p_f32p/tqt_dwconvcf3x3s1_mx1bias_clamp_f32p_f32p_f32p_4x1x1vl_rvv.cpp
+    src/dwconv/dwconv_f32_f32/dwconvcf3x3s2_mx1bias_clamp_f32p_f32p_f32p/tqt_dwconvcf3x3s2_mx1bias_clamp_f32p_f32p_f32p_2x1x1vl_rvv.cpp
+    src/dwconv/dwconv_f32_f32/dwconvcf5x5s1_mx1bias_clamp_f32p_f32p_f32p/tqt_dwconvcf5x5s1_mx1bias_clamp_f32p_f32p_f32p_4x1x1vl_rvv.cpp
+    src/dwconv/dwconv_f32_f32/dwconvcl3x3s1_1xnbias_clamp_f32p_f32p_f32p/tqt_dwconvcl3x3s1_1xnbias_clamp_f32p_f32p_f32p_4x1x1vl_rvv.cpp
+    src/dwconv/dwconv_f32_f32/dwconvcl3x3s2_1xnbias_clamp_f32p_f32p_f32p/tqt_dwconvcl3x3s2_1xnbias_clamp_f32p_f32p_f32p_2x1x1vl_rvv.cpp
+    src/dwconv/dwconv_f32_f32/dwconvcl5x5s1_1xnbias_clamp_f32p_f32p_f32p/tqt_dwconvcl5x5s1_1xnbias_clamp_f32p_f32p_f32p_4x1x1vl_rvv.cpp
 )
 
 # RVV FP16 (RISC-V Vector + Zfh + Zvfh) kernel files
@@ -135,6 +146,16 @@ set(TORQ_TILE_RVV_FP16_SOURCES
     src/conv/igemm_f16_f16/igemmcf_mx1bias_clamp_f16_f16p_f16/tqt_igemmcf_mx1bias_clamp_f16_f16p_f16_3vlx8_rvv.cpp
     src/conv/igemm_f16_f16/igemmcl_1xnbias_clamp_f16_f16_f16t/tqt_igemmcl_1xnbias_clamp_f16_f16_f16t_8x3vl_rvv.cpp
     src/conv/igemm_f16_f16/igemmcl_1xnbias_clamp_f16_f16_f16p/tqt_igemmcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv.cpp
+    src/dwconv/dwconv_f16_f16/dwconvcf_mx1bias_clamp_f16_f16_f16/tqt_dwconvcf_mx1bias_clamp_f16_f16_f16_1x1vl_rvv.cpp
+    src/dwconv/dwconv_f16_f16/dwconvcl_1xnbias_clamp_f16_f16_f16t/tqt_dwconvcl_1xnbias_clamp_f16_f16_f16t_1x1vl_rvv.cpp
+    src/dwconv/dwconv_f16_f16/dwconvcf_mx1bias_clamp_f16p_f16p_f16p/tqt_dwconvcf_mx1bias_clamp_f16p_f16p_f16p_1x1vl_rvv.cpp
+    src/dwconv/dwconv_f16_f16/dwconvcl_1xnbias_clamp_f16p_f16p_f16p/tqt_dwconvcl_1xnbias_clamp_f16p_f16p_f16p_1x1vl_rvv.cpp
+    src/dwconv/dwconv_f16_f16/dwconvcf3x3s1_mx1bias_clamp_f16p_f16p_f16p/tqt_dwconvcf3x3s1_mx1bias_clamp_f16p_f16p_f16p_4x1x1vl_rvv.cpp
+    src/dwconv/dwconv_f16_f16/dwconvcf3x3s2_mx1bias_clamp_f16p_f16p_f16p/tqt_dwconvcf3x3s2_mx1bias_clamp_f16p_f16p_f16p_2x1x1vl_rvv.cpp
+    src/dwconv/dwconv_f16_f16/dwconvcf5x5s1_mx1bias_clamp_f16p_f16p_f16p/tqt_dwconvcf5x5s1_mx1bias_clamp_f16p_f16p_f16p_4x1x1vl_rvv.cpp
+    src/dwconv/dwconv_f16_f16/dwconvcl3x3s1_1xnbias_clamp_f16p_f16p_f16p/tqt_dwconvcl3x3s1_1xnbias_clamp_f16p_f16p_f16p_4x1x1vl_rvv.cpp
+    src/dwconv/dwconv_f16_f16/dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p/tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_2x1x1vl_rvv.cpp
+    src/dwconv/dwconv_f16_f16/dwconvcl5x5s1_1xnbias_clamp_f16p_f16p_f16p/tqt_dwconvcl5x5s1_1xnbias_clamp_f16p_f16p_f16p_4x1x1vl_rvv.cpp
 )
 
 # RVV BF16 (RISC-V Vector + Zvfbfwma) kernel files

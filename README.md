@@ -14,7 +14,7 @@ TORQ-Tile is an open-source library that provides optimized performance-critical
 
 These routines are tuned to exploit the capabilities of RISC-V architecture extensions including RVV (RISC-V Vector Extension) and other extensions, aiming to maximize performance on XuanTie processors.
 
-The TORQ-Tile library has been designed for ease of adoption into C or C++ machine learning (ML) and AI frameworks. Specifically, developers looking to incorporate specific micro-kernels into their projects can only include the corresponding **.c** and **.h** files associated with those micro-kernels and a common header file.
+The TORQ-Tile library has been designed for ease of adoption into C or C++ machine learning (ML) and AI frameworks. Specifically, developers looking to incorporate specific micro-kernels into their projects can only include the corresponding **.cpp** and **.h** files associated with those micro-kernels and a common header file.
 
 ## Who is this library for?
 
@@ -56,7 +56,7 @@ Some of the key features of TORQ-Tile are the following:
 
 - Specialized micro-kernels for different fusion patterns
 
-- Micro-kernel as a standalone library, consisting of only a **.c**, **.cpp** and **.h** files
+- Micro-kernel as a standalone library, consisting of **.cpp** and **.h** files
 
 > ℹ️ The micro-kernel API is designed to be as generic as possible for integration into third-party runtimes.
 
@@ -66,20 +66,20 @@ Some of the key features of TORQ-Tile are the following:
 
 ## Filename convention
 
-The `src/gemm` directory is the home for all GEMM (General Matrix Multiply) micro-kernels. The micro-kernels are grouped in separate directories based on the data types. For example, all the FP16 matrix-multiplication micro-kernels are held in the `gemm_f16_f16_f16/` directory.
+The `src/gemm` directory is the home for all GEMM (General Matrix Multiply) micro-kernels. The micro-kernels are grouped in separate directories based on the data types. For example, all the FP16 matrix-multiplication micro-kernels are held in the `gemm_f16_f16/` directory.
 
 Inside the operator directory, you can find:
 
-- *The common utilities*, which are helper functions necessary for the correct functioning of the micro-kernels. For example, packing utilities are available in `src/common/tqt_pack_rvv.h`.
+- *The common utilities*, which are helper functions necessary for the correct functioning of the micro-kernels. For example, packing utilities are available in `src/common/tqt_gemm_pack_rvv.h`.
 - *The micro-kernels* files, which are held in separate sub-directories.
 
 The name of the micro-kernel folder provides the description of the operation performed and the data type of the destination and source tensors. The general syntax for the micro-kernel folder is as follows:
 
 `<op>_<dst-data-type>_<src0-data-type>_<src1-data-type>_...`
 
-All **.c/.cpp** and **.h** pair files in that folder are micro-kernel variants. The variants are differentiated by specifying the computational parameters (for example, the tile size like `8x3vl`), the RISC-V extension (for example, RVV). The general syntax for the micro-kernel variant is as follows:
+All **.cpp** and **.h** pair files in that folder are micro-kernel variants. The variants are differentiated by specifying the computational parameters (for example, the tile size like `8x3vl`), the RISC-V extension (for example, RVV). The general syntax for the micro-kernel variant is as follows:
 
-`tqt_<op>_<data-types>_<compute-params>_<extension>.c/.h`
+`tqt_<op>_<data-types>_<compute-params>_<extension>.cpp/.h`
 
 For example:
 - `tqt_gemm_1xnbias_clamp_f16_f16_f16t_8x3vl_rvv.h` - FP16 GEMM with bias and clamp, using 8x3vl tile size, optimized for RVV
@@ -87,33 +87,55 @@ For example:
 
 All functions defined in the **.h** header file of the micro-kernel variant follow the naming pattern:
 
-`tqt_<op>_<micro-kernel-variant-filename>.c/.cpp/.h`
+`tqt_<action>_<KERNEL_FULL>(...)`
+
+For example: `tqt_get_m_step_gemm_1xnbias_clamp_f16_f16_f16t_8x3vl_rvv()`, `tqt_run_gemm_1xnbias_clamp_f16_f16_f16t_8x3vl_rvv(...)`.
 
 ## Supported micro-kernels
 
 For a list of supported micro-kernels refer to the [source](/src/) directory. The micro-kernels are grouped in separate directories based on the data types.
 
-Currently supported GEMM variants include:
-- **FP32**: `gemm_f32_f32_f32/` - Single precision floating point
-- **FP16**: `gemm_f16_f16_f16/` - Half precision floating point
+Currently supported micro-kernel families:
+
+- **GEMM**:
+  - **FP32**: `gemm_f32_f32` - Single precision floating point
+  - **FP16**: `gemm_f16_f16` - Half precision floating point
+  - **BF16**: `gemm_bf16_bf16` - Brain floating point
+  - **INT8**: `gemm_i8_i8` - 8-bit integer with 32-bit accumulation
+  - **INT4**: `gemm_f16_i4` - W4A16 (FP16 activation, INT4 weight with block quantization)
+  - **INT4**: `gemm_i8_i4` - W4A8 (per-row asymmetric INT8 activation, per-channel symmetric INT4 weight, FP32/FP16/BF16 output)
+
+- **Convolution** (`conv` = im2col + GEMM, `igemm` = implicit GEMM):
+  - **FP32**: `conv_f32_f32`, `igemm_f32_f32` - Single precision floating point
+  - **FP16**: `conv_f16_f16`, `igemm_f16_f16` - Half precision floating point
+  - **INT8**: `conv_i8_i8`, `igemm_i8_i8` - 8-bit integer with 32-bit accumulation
+
+- **Depthwise Convolution**:
+  - **FP32**: `dwconv_f32_f32` - Single precision floating point
+  - **FP16**: `dwconv_f16_f16` - Half precision floating point
 
 Each variant includes optimized implementations for:
 - RVV (RISC-V Vector Extension) - e.g., `8x3vl_rvv`
 
 Common operations supported:
-- `gemm_1xnbias_clamp` - GEMM with bias addition and clamp activation
+- `1xnbias_clamp` - 1xN bias addition and clamp activation
+- `mx1bias_clamp` - Mx1 bias addition and clamp activation
+- `clamp` - Clamp activation without bias (GEMM only)
 - Packed and transposed variants (indicated by `p` and `t` suffixes)
 
 ## Project Structure
 
 ```bash
 torq-tile/
+├── benchmark/        # Benchmark suites
 ├── cmake/            # CMake configuration files
 ├── examples/         # Usage examples
 ├── scripts/          # Build and utility scripts
 ├── src/              # Source code
-│   ├── gemm/         # GEMM micro-kernel implementations
-│   └── common/       # Common utilities and headers
+│   ├── common/       # Common utilities and headers
+│   ├── conv/         # Convolution micro-kernel implementations
+│   ├── dwconv/       # Depthwise convolution micro-kernel implementations
+│   └── gemm/         # GEMM micro-kernel implementations
 └── test/             # Test cases
 ```
 
@@ -159,7 +181,7 @@ The RISC-V GNU toolchain can be used to cross-compile to a Linux system with a R
 
 ```shell
 cmake -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_TOOLCHAIN_FILE=cmake/riscv64-unknown-linux-gnu.toolchain.cmake \
+    -DCMAKE_TOOLCHAIN_FILE=cmake/riscv64-unknown-linux-gnu-gcc.toolchain.cmake \
     -DCMAKE_C_FLAGS="-march=rv64gcv_zvfh -mabi=lp64d" \
     -DCMAKE_CXX_FLAGS="-march=rv64gcv_zvfh -mabi=lp64d" \
     -S . -B build/
@@ -172,7 +194,7 @@ To build with tests enabled and run them via QEMU:
 
 ```shell
 cmake -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_TOOLCHAIN_FILE=cmake/riscv64-unknown-linux-gnu.toolchain.cmake \
+    -DCMAKE_TOOLCHAIN_FILE=cmake/riscv64-unknown-linux-gnu-gcc.toolchain.cmake \
     -DCMAKE_C_FLAGS="-march=rv64gcv_zvfh -mabi=lp64d" \
     -DCMAKE_CXX_FLAGS="-march=rv64gcv_zvfh -mabi=lp64d" \
     -DTORQ_TILE_BUILD_TEST=ON \

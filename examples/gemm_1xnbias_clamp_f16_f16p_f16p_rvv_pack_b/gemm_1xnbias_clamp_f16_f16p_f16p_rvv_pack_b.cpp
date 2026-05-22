@@ -130,6 +130,13 @@ bool verify_results(size_t rows, size_t cols, const float tolerance, const float
                    diff);
 #endif
             passed = false;
+        } else {
+#ifdef TQT_DEBUG
+            size_t row = i / cols;
+            size_t col = i % cols;
+            printf("[%zu][%zu]: ref=%.6f vs act=%.6f (diff=%.6f) ✅\n", row, col, ref_val, act_val,
+                   diff);
+#endif
         }
     }
 
@@ -247,7 +254,7 @@ int main()
             const uint8_t *bias_ptr = (const uint8_t *)bias + ukernel.get_bias_offset(n_idx);
             uint8_t *d_ptr = (uint8_t *)D + ukernel.get_d_offset(m_idx, n_idx, N);
 #ifdef TQT_DEBUG
-            printf("Processing a %zux%zu output block starting at (%zu, %zu)\n", m_step, n_step,
+            printf("Processing a %zux%zu output block starting at (%zu, %zu)\n", actual_m, actual_n,
                    m_idx, n_idx);
 #endif
 

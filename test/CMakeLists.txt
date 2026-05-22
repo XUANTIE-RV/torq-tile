@@ -70,14 +70,14 @@ if(TORQ_TILE_ENABLE_RVV)
         conv/test_conv_f32_f32_rvv.cpp)
     torq_tile_add_test(test_igemm_f32_f32_rvv
         conv/test_igemm_f32_f32_rvv.cpp)
+    # --- DWConv F32 RVV variants ---
+    torq_tile_add_test(test_dwconv_f32_f32_rvv
+        dwconv/test_dwconv_f32_f32_rvv.cpp)
     # --- Conv INT8 RVV variants ---
     torq_tile_add_test(test_conv_i8_i8_rvv
         conv/test_conv_i8_i8_rvv.cpp)
     torq_tile_add_test(test_igemm_i8_i8_rvv
         conv/test_igemm_i8_i8_rvv.cpp)
-    # --- DWConv F32 RVV variants ---
-    torq_tile_add_test(test_dwconv_f32_f32_rvv
-        dwconv/test_dwconv_f32_f32_rvv.cpp)
 endif()
 
 if(TORQ_TILE_ENABLE_RVV_FP16)

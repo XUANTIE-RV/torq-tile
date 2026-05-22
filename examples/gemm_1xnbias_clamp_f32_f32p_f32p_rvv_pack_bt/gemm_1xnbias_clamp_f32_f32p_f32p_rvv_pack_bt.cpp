@@ -74,13 +74,6 @@ void run_gemm_ref(size_t m, size_t n, size_t k, const float *A, size_t lda, cons
     }
 }
 
-void fill_matrix(size_t rows, size_t cols, float *matrix, const float weight)
-{
-    for (size_t i = 0; i < rows * cols; ++i) {
-        matrix[i] = i * weight;
-    }
-}
-
 void fill_matrix_random(size_t rows, size_t cols, float *matrix, const float min, const float max)
 {
     for (size_t i = 0; i < rows * cols; ++i) {
@@ -255,7 +248,7 @@ int main()
             const uint8_t *bias_ptr = (const uint8_t *)bias + ukernel.get_bias_offset(n_idx);
             uint8_t *d_ptr = (uint8_t *)D + ukernel.get_d_offset(m_idx, n_idx, N);
 #ifdef TQT_DEBUG
-            printf("Processing a %zux%zu output block starting at (%zu, %zu)\n", m_step, n_step,
+            printf("Processing a %zux%zu output block starting at (%zu, %zu)\n", actual_m, actual_n,
                    m_idx, n_idx);
 #endif
 

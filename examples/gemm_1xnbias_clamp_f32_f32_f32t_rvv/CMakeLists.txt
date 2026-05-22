@@ -18,12 +18,12 @@ set(TORQ_TILE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../../)
 # Include directories
 include_directories(
     ${TORQ_TILE_PATH}/
-    ${TORQ_TILE_PATH}/src/gemm/gemm_f32_f32_f32/gemm_1xnbias_clamp_f32_f32_f32t/
+    ${TORQ_TILE_PATH}/src/gemm/gemm_f32_f32/gemm_1xnbias_clamp_f32_f32_f32t/
 )
 
 # Source files
 set(TORQ_TILE_SOURCES
-    ${TORQ_TILE_PATH}/src/gemm/gemm_f32_f32_f32/gemm_1xnbias_clamp_f32_f32_f32t/tqt_gemm_1xnbias_clamp_f32_f32_f32t_8x3vl_rvv.cpp
+    ${TORQ_TILE_PATH}/src/gemm/gemm_f32_f32/gemm_1xnbias_clamp_f32_f32_f32t/tqt_gemm_1xnbias_clamp_f32_f32_f32t_8x3vl_rvv.cpp
 )
 
 # Files required to build the executable

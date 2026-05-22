@@ -33,7 +33,7 @@ Thank you for your interest in contributing to TORQ-Tile! Please be respectful a
 
 Follow the existing naming conventions under `src/`:
 
-- **Directory**: `<op>_<dst-type>_<src0-type>_<src1-type>/` (e.g., `gemm_f16_f16_f16/`)
+- **Directory**: `<op>_<dst-type>_<src0-type>_<src1-type>/` (e.g., `gemm_f16_f16/`)
 - **File**: `tqt_<op>_<data-types>_<compute-params>_<extension>.cpp/.h`
 - **Suffixes**: `t` = transposed, `p` = packed, `rvv` = RISC-V Vector
 

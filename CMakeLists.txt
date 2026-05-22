@@ -253,6 +253,24 @@ else()
     )
 endif()
 
+# Fetch Google Benchmark if external source directory not provided
+if(DEFINED ENV{FETCHCONTENT_SOURCE_DIR_GOOGLEBENCHMARK})
+    set(FETCHCONTENT_SOURCE_DIR_GOOGLEBENCHMARK
+        "$ENV{FETCHCONTENT_SOURCE_DIR_GOOGLEBENCHMARK}")
+    message(STATUS "Using external googlebenchmark source directory: ${FETCHCONTENT_SOURCE_DIR_GOOGLEBENCHMARK}")
+    FetchContent_Declare(
+        googlebenchmark
+        SOURCE_DIR ${FETCHCONTENT_SOURCE_DIR_GOOGLEBENCHMARK}
+    )
+else()
+    FetchContent_Declare(
+        googlebenchmark
+        GIT_REPOSITORY https://github.com/google/benchmark.git
+        GIT_TAG        v1.9.5
+        GIT_SHALLOW    TRUE
+    )
+endif()
+
 # Add test subdirectory if enabled
 if(TORQ_TILE_BUILD_TEST)
     enable_testing()
@@ -267,6 +285,11 @@ endif()
 
 # Add benchmark subdirectory if enabled
 if(TORQ_TILE_BUILD_BENCHMARK)
+    set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+    set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "" FORCE)
+    set(BENCHMARK_DOWNLOAD_DEPENDENCIES OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googlebenchmark)
+
     add_subdirectory(benchmark)
 endif()
 

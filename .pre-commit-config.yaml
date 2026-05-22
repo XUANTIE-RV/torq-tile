@@ -1,4 +1,4 @@
-# Pre-commit configuration for xtlass project
+# Pre-commit configuration for torq-tile project
 # See https://pre-commit.com for more information
 
 repos:

@@ -53,12 +53,12 @@ endmacro()
 # ============================================================================
 if(TORQ_TILE_ENABLE_RVV)
     # --- F32 RVV variants ---
-    torq_tile_add_test(test_gemm_f32_f32_f32_rvv
-        gemm/test_gemm_f32_f32_f32_rvv.cpp)
+    torq_tile_add_test(test_gemm_f32_f32_rvv
+        gemm/test_gemm_f32_f32_rvv.cpp)
 endif()
 
 if(TORQ_TILE_ENABLE_RVV_FP16)
     # --- F16 RVV variants ---
-    torq_tile_add_test(test_gemm_f16_f16_f16_rvv
-        gemm/test_gemm_f16_f16_f16_rvv.cpp)
+    torq_tile_add_test(test_gemm_f16_f16_rvv
+        gemm/test_gemm_f16_f16_rvv.cpp)
 endif()

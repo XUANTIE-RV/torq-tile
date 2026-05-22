@@ -10,6 +10,7 @@
 add_library(torq_tile_test_common STATIC
     common/data_generator.cpp
     common/reference_gemm.cpp
+    common/reference_conv.cpp
     common/verify.cpp
 )
 
@@ -63,6 +64,16 @@ if(TORQ_TILE_ENABLE_RVV)
     # by __riscv_zfh/__riscv_zvfh and __riscv_zvfbfwma feature macros.
     torq_tile_add_test(test_gemm_i8_i4_rvv
         gemm/test_gemm_i8_i4_rvv.cpp)
+    # --- Conv F32 RVV variants ---
+    torq_tile_add_test(test_conv_f32_f32_rvv
+        conv/test_conv_f32_f32_rvv.cpp)
+    torq_tile_add_test(test_igemm_f32_f32_rvv
+        conv/test_igemm_f32_f32_rvv.cpp)
+    # --- Conv INT8 RVV variants ---
+    torq_tile_add_test(test_conv_i8_i8_rvv
+        conv/test_conv_i8_i8_rvv.cpp)
+    torq_tile_add_test(test_igemm_i8_i8_rvv
+        conv/test_igemm_i8_i8_rvv.cpp)
 endif()
 
 if(TORQ_TILE_ENABLE_RVV_FP16)
@@ -72,6 +83,11 @@ if(TORQ_TILE_ENABLE_RVV_FP16)
     # --- Gemm W4A16 (F16_F16_I4 + F32_F16_I4) RVV variants ---
     torq_tile_add_test(test_gemm_f16_i4_rvv
         gemm/test_gemm_f16_i4_rvv.cpp)
+    # --- Conv F16 RVV variants ---
+    torq_tile_add_test(test_conv_f16_f16_rvv
+        conv/test_conv_f16_f16_rvv.cpp)
+    torq_tile_add_test(test_igemm_f16_f16_rvv
+        conv/test_igemm_f16_f16_rvv.cpp)
 endif()
 
 if(TORQ_TILE_ENABLE_RVV_BF16)

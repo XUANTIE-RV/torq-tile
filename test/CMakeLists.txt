@@ -52,13 +52,30 @@ endmacro()
 # RVV Tests (auto-detected via TORQ_TILE_ENABLE_RVV)
 # ============================================================================
 if(TORQ_TILE_ENABLE_RVV)
-    # --- F32 RVV variants ---
+    # --- Gemm F32 RVV variants ---
     torq_tile_add_test(test_gemm_f32_f32_rvv
         gemm/test_gemm_f32_f32_rvv.cpp)
+    # --- Gemm INT8 RVV variants ---
+    torq_tile_add_test(test_gemm_i8_i8_rvv
+        gemm/test_gemm_i8_i8_rvv.cpp)
+    # --- Gemm W4A8 (F32/F16/BF16_QAI8DX_QSI4CX) RVV variants ---
+    # F32 path is always compiled; F16/BF16 paths are gated inside the TU
+    # by __riscv_zfh/__riscv_zvfh and __riscv_zvfbfwma feature macros.
+    torq_tile_add_test(test_gemm_i8_i4_rvv
+        gemm/test_gemm_i8_i4_rvv.cpp)
 endif()
 
 if(TORQ_TILE_ENABLE_RVV_FP16)
-    # --- F16 RVV variants ---
+    # --- Gemm F16 RVV variants ---
     torq_tile_add_test(test_gemm_f16_f16_rvv
         gemm/test_gemm_f16_f16_rvv.cpp)
+    # --- Gemm W4A16 (F16_F16_I4 + F32_F16_I4) RVV variants ---
+    torq_tile_add_test(test_gemm_f16_i4_rvv
+        gemm/test_gemm_f16_i4_rvv.cpp)
+endif()
+
+if(TORQ_TILE_ENABLE_RVV_BF16)
+    # --- Gemm BF16 RVV variants ---
+    torq_tile_add_test(test_gemm_bf16_bf16_rvv
+        gemm/test_gemm_bf16_bf16_rvv.cpp)
 endif()

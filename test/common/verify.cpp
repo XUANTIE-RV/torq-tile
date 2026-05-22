@@ -109,6 +109,8 @@ template VerificationResult verify_gemm_result<float16_t>(const float16_t *, con
                                                           size_t, float, float);
 template VerificationResult verify_gemm_result<bfloat16_t>(const bfloat16_t *, const bfloat16_t *,
                                                            size_t, float, float);
+template VerificationResult verify_gemm_result<int32_t>(const int32_t *, const int32_t *, size_t,
+                                                        float, float);
 
 }  // namespace test
 }  // namespace torq_tile

@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <random>
+#include <type_traits>
 
 #include "src/common/tqt_common.h"
 
@@ -17,11 +18,41 @@ namespace torq_tile
 namespace test
 {
 
+namespace detail
+{
+
+/// Selects the appropriate distribution and parameter type based on T:
+/// - integral types  → uniform_int_distribution<T>, param type is T
+/// - floating-point types → uniform_real_distribution<float>, param type is float
+template <typename T, bool IsIntegral = std::is_integral<T>::value>
+struct DistributionTraits;
+
+template <typename T>
+struct DistributionTraits<T, /*IsIntegral=*/true>
+{
+    using DistType = std::uniform_int_distribution<T>;
+    using ParamType = T;
+};
+
+template <typename T>
+struct DistributionTraits<T, /*IsIntegral=*/false>
+{
+    using DistType = std::uniform_real_distribution<float>;
+    using ParamType = float;
+};
+
+}  // namespace detail
+
 template <typename T>
 class UniformRandomGenerator
 {
+    using Traits = detail::DistributionTraits<T>;
+    using DistType = typename Traits::DistType;
+    using ParamType = typename Traits::ParamType;
+
    public:
-    explicit UniformRandomGenerator(float low = -1.0f, float high = 1.0f, uint32_t seed = 42)
+    explicit UniformRandomGenerator(ParamType low = ParamType(-1), ParamType high = ParamType(1),
+                                    uint32_t seed = 42)
         : engine_(seed), dist_(low, high)
     {
     }
@@ -30,13 +61,15 @@ class UniformRandomGenerator
 
    private:
     std::mt19937 engine_;
-    std::uniform_real_distribution<float> dist_;
+    DistType dist_;
 };
 
 // Explicit instantiation declarations
 extern template class UniformRandomGenerator<float>;
 extern template class UniformRandomGenerator<float16_t>;
 extern template class UniformRandomGenerator<bfloat16_t>;
+extern template class UniformRandomGenerator<int8_t>;
+extern template class UniformRandomGenerator<int32_t>;
 
 }  // namespace test
 }  // namespace torq_tile

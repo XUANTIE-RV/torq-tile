@@ -105,6 +105,47 @@ struct PackedGemmFuncs
 };
 
 // ============================================================================
+// Function pointer types for B-only-packed variants
+// (A is in original layout, only B is packed)
+// ============================================================================
+
+template <typename ClampT>
+struct BOnlyPackedGemmFuncs
+{
+    using GetMStepFunc = size_t (*)(void);
+    using GetNStepFunc = size_t (*)(void);
+    using GetAOffsetFunc = size_t (*)(size_t m_idx, size_t k_idx, size_t lda);
+    using GetBPackedOffsetFunc = size_t (*)(size_t n_idx, size_t k_idx, size_t ldb,
+                                            size_t actual_n);
+    using GetCOffsetFunc = size_t (*)(size_t m_idx, size_t n_idx, size_t ldc);
+    using GetBiasOffsetFunc = size_t (*)(size_t idx);
+    using GetDOffsetFunc = size_t (*)(size_t m_idx, size_t n_idx, size_t ldd);
+    using GetDSizeFunc = size_t (*)(size_t m, size_t n);
+    using GetBPackedSizeFunc = size_t (*)(size_t n, size_t k);
+    using RunBPackFunc = void (*)(size_t n, size_t k, size_t ldb, size_t ldb_packed, size_t k_idx,
+                                  const void *B, void *B_packed);
+    using RunBtPackFunc = void (*)(size_t n, size_t k, size_t ldb, size_t ldb_packed, size_t k_idx,
+                                   const void *B, void *B_packed);
+    using RunGemmFunc = void (*)(size_t m, size_t n, size_t k, const void *A, size_t lda,
+                                 size_t k_idx_a, const void *B_packed, size_t ldb, size_t k_idx_b,
+                                 const void *C, size_t ldc, void *D, size_t ldd, const void *bias,
+                                 ClampT clamp_min, ClampT clamp_max);
+
+    GetMStepFunc get_m_step;
+    GetNStepFunc get_n_step;
+    GetAOffsetFunc get_a_offset;
+    GetBPackedOffsetFunc get_b_packed_offset;
+    GetCOffsetFunc get_c_offset;
+    GetBiasOffsetFunc get_bias_offset;
+    GetDOffsetFunc get_d_offset;
+    GetDSizeFunc get_d_size;
+    GetBPackedSizeFunc get_b_packed_size;
+    RunBPackFunc run_b_pack;
+    RunBtPackFunc run_bt_pack;
+    RunGemmFunc run_gemm;
+};
+
+// ============================================================================
 // Helper: resolve tile sizes (0 means use m_step/n_step/full-K)
 // ============================================================================
 
@@ -141,7 +182,7 @@ inline std::string validate_params(const GemmTestParams &params, size_t m_step, 
 
     // Validate chunk constraints
     auto check_chunk = [&](const ChunkConfig &chunk, const char *name, size_t tile_d0,
-                           size_t tile_d1, size_t step_d0, size_t step_d1) -> std::string {
+                           size_t tile_d1) -> std::string {
         if (chunk.dim0 == 0 && chunk.dim1 == 0)
             return "";
         if (chunk.dim0 != 0) {
@@ -160,16 +201,16 @@ inline std::string validate_params(const GemmTestParams &params, size_t m_step, 
     };
 
     std::string err;
-    err = check_chunk(params.a_chunk, "a_chunk", m_tile, k_tile, m_step, 1);
+    err = check_chunk(params.a_chunk, "a_chunk", m_tile, k_tile);
     if (!err.empty())
         return err;
-    err = check_chunk(params.b_chunk, "b_chunk", k_tile, n_tile, 1, n_step);
+    err = check_chunk(params.b_chunk, "b_chunk", k_tile, n_tile);
     if (!err.empty())
         return err;
-    err = check_chunk(params.c_chunk, "c_chunk", m_tile, n_tile, m_step, n_step);
+    err = check_chunk(params.c_chunk, "c_chunk", m_tile, n_tile);
     if (!err.empty())
         return err;
-    err = check_chunk(params.d_chunk, "d_chunk", m_tile, n_tile, m_step, n_step);
+    err = check_chunk(params.d_chunk, "d_chunk", m_tile, n_tile);
     if (!err.empty())
         return err;
 
@@ -260,9 +301,10 @@ inline void run_tiled_loop(size_t total_m, size_t total_n, size_t total_k, size_
 
 // ============================================================================
 // Non-packed GEMM test runner
+// (TA: A/B element type, TD: C/D/bias element type; for same-type GEMM use TA == TD)
 // ============================================================================
 
-template <typename T, BLayout kBLayout, BiasMode kBiasMode, typename ClampT>
+template <typename TA, typename TD, BLayout kBLayout, BiasMode kBiasMode, typename ClampT>
 void run_nonpacked_gemm_test(const GemmTestParams &params, const NonPackedGemmFuncs<ClampT> &funcs)
 {
     const size_t m = params.m;
@@ -281,68 +323,64 @@ void run_nonpacked_gemm_test(const GemmTestParams &params, const NonPackedGemmFu
         return;
     }
 
-    // Generate random data
-    UniformRandomGenerator<T> gen(-1.0f, 1.0f, 42);
-    std::vector<T> A(m * k);
-    gen.fill_matrix(A.data(), m, k);
+    UniformRandomGenerator<TA> gen_a(-1.0f, 1.0f, 42);
+    std::vector<TA> A(m * k);
+    gen_a.fill_matrix(A.data(), m, k);
 
-    std::vector<T> B_data;
+    std::vector<TA> B_data;
     size_t lda = k;
     size_t ldb;
     if (kBLayout == BLayout::kTransposed) {
         B_data.resize(n * k);
-        gen.fill_matrix(B_data.data(), n, k);
+        gen_a.fill_matrix(B_data.data(), n, k);
         ldb = k;
     } else {
         B_data.resize(k * n);
-        gen.fill_matrix(B_data.data(), k, n);
+        gen_a.fill_matrix(B_data.data(), k, n);
         ldb = n;
     }
 
     const size_t ldc = n;
     const size_t ldd = n;
 
-    // C matrix (optional)
-    std::vector<T> C_data;
-    const T *c_ptr_ref = nullptr;
+    UniformRandomGenerator<TD> gen_d(-1.0f, 1.0f, 43);
+
+    std::vector<TD> C_data;
+    const TD *c_ptr_ref = nullptr;
     if (params.has_c) {
         C_data.resize(m * n);
-        gen.fill_matrix(C_data.data(), m, n);
+        gen_d.fill_matrix(C_data.data(), m, n);
         c_ptr_ref = C_data.data();
     }
 
-    // Bias vector (optional)
-    std::vector<T> bias_data;
-    const T *bias_ptr_ref = nullptr;
+    std::vector<TD> bias_data;
+    const TD *bias_ptr_ref = nullptr;
     BiasMode ref_bias_mode = BiasMode::kNone;
     if (params.has_bias) {
         if (kBiasMode == BiasMode::kMx1) {
             bias_data.resize(m);
-            gen.fill_matrix(bias_data.data(), m, 1);
+            gen_d.fill_matrix(bias_data.data(), m, 1);
         } else {
             bias_data.resize(n);
-            gen.fill_matrix(bias_data.data(), 1, n);
+            gen_d.fill_matrix(bias_data.data(), 1, n);
         }
         bias_ptr_ref = bias_data.data();
         ref_bias_mode = kBiasMode;
     }
 
-    const T clamp_min = to_target_type<T>(params.clamp_min_f);
-    const T clamp_max = to_target_type<T>(params.clamp_max_f);
+    const TD clamp_min = to_target_type<TD>(params.clamp_min_f);
+    const TD clamp_max = to_target_type<TD>(params.clamp_max_f);
 
-    // Reference result
-    std::vector<T> ref_D(m * n);
-    reference_gemm<T>(m, n, k, A.data(), lda, B_data.data(), ldb, kBLayout, c_ptr_ref, ldc,
-                      ref_D.data(), ldd, bias_ptr_ref, ref_bias_mode, clamp_min, clamp_max);
+    std::vector<TD> ref_D(m * n);
+    reference_gemm<TA, TD>(m, n, k, A.data(), lda, B_data.data(), ldb, kBLayout, c_ptr_ref, ldc,
+                           ref_D.data(), ldd, bias_ptr_ref, ref_bias_mode, clamp_min, clamp_max);
 
-    // Actual result via micro-kernel with tiling
-    std::vector<T> act_D(m * n, to_target_type<T>(0.0f));
+    std::vector<TD> act_D(m * n, to_target_type<TD>(0.0f));
 
     run_tiled_loop(
         m, n, k, m_tile, n_tile, k_tile, params.loop_order,
         [&](size_t m_start, size_t n_start, size_t k_start, size_t actual_m, size_t actual_n,
             size_t actual_k, bool is_first_k) {
-            // Use get_xxx_offset to compute byte offsets
             const size_t a_offset = funcs.get_a_offset(m_start, k_start, lda);
             const size_t b_offset = funcs.get_b_offset(n_start, k_start, ldb);
             const size_t d_offset = funcs.get_d_offset(m_start, n_start, ldd);
@@ -351,11 +389,8 @@ void run_nonpacked_gemm_test(const GemmTestParams &params, const NonPackedGemmFu
             const void *b_ptr = reinterpret_cast<const uint8_t *>(B_data.data()) + b_offset;
             void *d_ptr = reinterpret_cast<uint8_t *>(act_D.data()) + d_offset;
 
-            // C pointer: on first K visit, use user-provided C (if any);
-            // on subsequent K visits, accumulate from D
             const void *c_ptr = nullptr;
             if (!is_first_k) {
-                // Accumulate from previous K iteration result
                 c_ptr = static_cast<const void *>(reinterpret_cast<const uint8_t *>(act_D.data()) +
                                                   d_offset);
             } else if (params.has_c) {
@@ -363,7 +398,6 @@ void run_nonpacked_gemm_test(const GemmTestParams &params, const NonPackedGemmFu
                 c_ptr = reinterpret_cast<const uint8_t *>(C_data.data()) + c_offset;
             }
 
-            // Post-processing: bias and clamp only on last K visit
             bool is_last_k = (k_start + actual_k >= k);
 
             const void *bias_ptr = nullptr;
@@ -373,8 +407,8 @@ void run_nonpacked_gemm_test(const GemmTestParams &params, const NonPackedGemmFu
                 bias_ptr = reinterpret_cast<const uint8_t *>(bias_data.data()) + bias_offset;
             }
 
-            ClampT effective_clamp_min = static_cast<ClampT>(to_target_type<T>(-FLT_MAX));
-            ClampT effective_clamp_max = static_cast<ClampT>(to_target_type<T>(FLT_MAX));
+            ClampT effective_clamp_min = static_cast<ClampT>(to_target_type<TD>(-FLT_MAX));
+            ClampT effective_clamp_max = static_cast<ClampT>(to_target_type<TD>(FLT_MAX));
             if (is_last_k) {
                 effective_clamp_min = static_cast<ClampT>(clamp_min);
                 effective_clamp_max = static_cast<ClampT>(clamp_max);
@@ -384,10 +418,9 @@ void run_nonpacked_gemm_test(const GemmTestParams &params, const NonPackedGemmFu
                            d_ptr, ldd, bias_ptr, effective_clamp_min, effective_clamp_max);
         });
 
-    // Verify
     auto result =
-        verify_gemm_result<T>(ref_D.data(), act_D.data(), m * n, DefaultThreshold<T>::abs_error,
-                              DefaultThreshold<T>::cosine_sim);
+        verify_gemm_result<TD>(ref_D.data(), act_D.data(), m * n, DefaultThreshold<TD>::abs_error,
+                               DefaultThreshold<TD>::cosine_sim);
     EXPECT_TRUE(result.passed) << result.error_message << "\n  Shape: M=" << m << " N=" << n
                                << " K=" << k << "\n  Config: " << params.name
                                << "\n  m_tile=" << m_tile << " n_tile=" << n_tile
@@ -398,9 +431,10 @@ void run_nonpacked_gemm_test(const GemmTestParams &params, const NonPackedGemmFu
 
 // ============================================================================
 // Packed GEMM test runner
+// (TA: A/B element type, TD: C/D/bias element type; for same-type GEMM use TA == TD)
 // ============================================================================
 
-template <typename T, BiasMode kBiasMode, typename ClampT>
+template <typename TA, typename TD, BiasMode kBiasMode, typename ClampT>
 void run_packed_gemm_test(const GemmTestParams &params, const PackedGemmFuncs<ClampT> &funcs)
 {
     const size_t m = params.m;
@@ -419,57 +453,53 @@ void run_packed_gemm_test(const GemmTestParams &params, const PackedGemmFuncs<Cl
         return;
     }
 
-    // Generate random data: A[m,k], B_orig[n,k] (transposed layout for pack input)
-    UniformRandomGenerator<T> gen(-1.0f, 1.0f, 42);
-    std::vector<T> A(m * k);
-    std::vector<T> B_orig(n * k);
-    gen.fill_matrix(A.data(), m, k);
-    gen.fill_matrix(B_orig.data(), n, k);
+    UniformRandomGenerator<TA> gen_a(-1.0f, 1.0f, 42);
+    std::vector<TA> A(m * k);
+    std::vector<TA> B_orig(n * k);
+    gen_a.fill_matrix(A.data(), m, k);
+    gen_a.fill_matrix(B_orig.data(), n, k);
 
     const size_t lda = k;
     const size_t ldb_orig = k;
     const size_t ldc = n;
     const size_t ldd = n;
 
-    // C matrix (optional)
-    std::vector<T> C_data;
-    const T *c_ptr_ref = nullptr;
+    UniformRandomGenerator<TD> gen_d(-1.0f, 1.0f, 43);
+
+    std::vector<TD> C_data;
+    const TD *c_ptr_ref = nullptr;
     if (params.has_c) {
         C_data.resize(m * n);
-        gen.fill_matrix(C_data.data(), m, n);
+        gen_d.fill_matrix(C_data.data(), m, n);
         c_ptr_ref = C_data.data();
     }
 
-    // Bias vector (optional)
-    std::vector<T> bias_data;
-    const T *bias_ptr_ref = nullptr;
+    std::vector<TD> bias_data;
+    const TD *bias_ptr_ref = nullptr;
     BiasMode ref_bias_mode = BiasMode::kNone;
     if (params.has_bias) {
         if (kBiasMode == BiasMode::kMx1) {
             bias_data.resize(m);
-            gen.fill_matrix(bias_data.data(), m, 1);
+            gen_d.fill_matrix(bias_data.data(), m, 1);
         } else {
             bias_data.resize(n);
-            gen.fill_matrix(bias_data.data(), 1, n);
+            gen_d.fill_matrix(bias_data.data(), 1, n);
         }
         bias_ptr_ref = bias_data.data();
         ref_bias_mode = kBiasMode;
     }
 
-    const T clamp_min = to_target_type<T>(params.clamp_min_f);
-    const T clamp_max = to_target_type<T>(params.clamp_max_f);
+    const TD clamp_min = to_target_type<TD>(params.clamp_min_f);
+    const TD clamp_max = to_target_type<TD>(params.clamp_max_f);
 
-    // Reference result (B is transposed: [N, K])
-    std::vector<T> ref_D(m * n);
-    reference_gemm<T>(m, n, k, A.data(), lda, B_orig.data(), ldb_orig, BLayout::kTransposed,
-                      c_ptr_ref, ldc, ref_D.data(), ldd, bias_ptr_ref, ref_bias_mode, clamp_min,
-                      clamp_max);
+    std::vector<TD> ref_D(m * n);
+    reference_gemm<TA, TD>(m, n, k, A.data(), lda, B_orig.data(), ldb_orig, BLayout::kTransposed,
+                           c_ptr_ref, ldc, ref_D.data(), ldd, bias_ptr_ref, ref_bias_mode,
+                           clamp_min, clamp_max);
 
-    // Actual result via micro-kernel with tiling
-    std::vector<T> act_D(m * n, to_target_type<T>(0.0f));
+    std::vector<TD> act_D(m * n, to_target_type<TD>(0.0f));
 
     if (k_tile == k) {
-        // No K-tiling: pack full A and B, then tile over M and N
         const size_t a_packed_size = funcs.get_a_packed_size(m, k);
         const size_t b_packed_size = funcs.get_b_packed_size(n, k);
         std::vector<uint8_t> A_packed(a_packed_size);
@@ -484,8 +514,6 @@ void run_packed_gemm_test(const GemmTestParams &params, const PackedGemmFuncs<Cl
             m, n, k, m_tile, n_tile, k_tile, params.loop_order,
             [&](size_t m_start, size_t n_start, size_t k_start, size_t actual_m, size_t actual_n,
                 size_t actual_k, bool is_first_k) {
-                // actual_m/actual_n for offset: use full m/n since we packed
-                // the entire matrix
                 const size_t a_packed_offset = funcs.get_a_packed_offset(m_start, 0, lda, m);
                 const size_t b_packed_offset = funcs.get_b_packed_offset(n_start, 0, ldb_orig, n);
                 const size_t d_offset = funcs.get_d_offset(m_start, n_start, ldd);
@@ -494,14 +522,12 @@ void run_packed_gemm_test(const GemmTestParams &params, const PackedGemmFuncs<Cl
                 const void *b_ptr = B_packed.data() + b_packed_offset;
                 void *d_ptr = reinterpret_cast<uint8_t *>(act_D.data()) + d_offset;
 
-                // C pointer
                 const void *c_ptr = nullptr;
                 if (params.has_c) {
                     const size_t c_offset = funcs.get_c_offset(m_start, n_start, ldc);
                     c_ptr = reinterpret_cast<const uint8_t *>(C_data.data()) + c_offset;
                 }
 
-                // Bias
                 const void *bias_ptr = nullptr;
                 if (params.has_bias) {
                     size_t bias_idx = (kBiasMode == BiasMode::kMx1) ? m_start : n_start;
@@ -514,28 +540,24 @@ void run_packed_gemm_test(const GemmTestParams &params, const PackedGemmFuncs<Cl
                                static_cast<ClampT>(clamp_max));
             });
     } else {
-        // K-tiling: pack sub-blocks for each K chunk
         run_tiled_loop(
             m, n, k, m_tile, n_tile, k_tile, params.loop_order,
             [&](size_t m_start, size_t n_start, size_t k_start, size_t actual_m, size_t actual_n,
                 size_t actual_k, bool is_first_k) {
-                // Extract A sub-block [actual_m, actual_k]
-                std::vector<T> A_block(actual_m * actual_k);
+                std::vector<TA> A_block(actual_m * actual_k);
                 for (size_t i = 0; i < actual_m; ++i) {
                     for (size_t j = 0; j < actual_k; ++j) {
                         A_block[i * actual_k + j] = A[(m_start + i) * lda + k_start + j];
                     }
                 }
 
-                // Extract B sub-block [actual_n, actual_k] (transposed)
-                std::vector<T> B_block(actual_n * actual_k);
+                std::vector<TA> B_block(actual_n * actual_k);
                 for (size_t i = 0; i < actual_n; ++i) {
                     for (size_t j = 0; j < actual_k; ++j) {
                         B_block[i * actual_k + j] = B_orig[(n_start + i) * ldb_orig + k_start + j];
                     }
                 }
 
-                // Pack sub-blocks
                 const size_t a_packed_size = funcs.get_a_packed_size(actual_m, actual_k);
                 const size_t b_packed_size = funcs.get_b_packed_size(actual_n, actual_k);
                 std::vector<uint8_t> A_packed(a_packed_size);
@@ -551,7 +573,6 @@ void run_packed_gemm_test(const GemmTestParams &params, const PackedGemmFuncs<Cl
                 const size_t d_offset = funcs.get_d_offset(m_start, n_start, ldd);
                 void *d_ptr = reinterpret_cast<uint8_t *>(act_D.data()) + d_offset;
 
-                // C pointer: accumulate from D on subsequent K visits
                 const void *c_ptr = nullptr;
                 if (!is_first_k) {
                     c_ptr = static_cast<const void *>(
@@ -561,7 +582,6 @@ void run_packed_gemm_test(const GemmTestParams &params, const PackedGemmFuncs<Cl
                     c_ptr = reinterpret_cast<const uint8_t *>(C_data.data()) + c_offset;
                 }
 
-                // Post-processing: bias and clamp only on last K visit
                 bool is_last_k = (k_start + actual_k >= k);
 
                 const void *bias_ptr = nullptr;
@@ -571,8 +591,8 @@ void run_packed_gemm_test(const GemmTestParams &params, const PackedGemmFuncs<Cl
                     bias_ptr = reinterpret_cast<const uint8_t *>(bias_data.data()) + bias_offset;
                 }
 
-                ClampT effective_clamp_min = static_cast<ClampT>(to_target_type<T>(-FLT_MAX));
-                ClampT effective_clamp_max = static_cast<ClampT>(to_target_type<T>(FLT_MAX));
+                ClampT effective_clamp_min = static_cast<ClampT>(to_target_type<TD>(-FLT_MAX));
+                ClampT effective_clamp_max = static_cast<ClampT>(to_target_type<TD>(FLT_MAX));
                 if (is_last_k) {
                     effective_clamp_min = static_cast<ClampT>(clamp_min);
                     effective_clamp_max = static_cast<ClampT>(clamp_max);
@@ -585,10 +605,183 @@ void run_packed_gemm_test(const GemmTestParams &params, const PackedGemmFuncs<Cl
             });
     }
 
-    // Verify
     auto result =
-        verify_gemm_result<T>(ref_D.data(), act_D.data(), m * n, DefaultThreshold<T>::abs_error,
-                              DefaultThreshold<T>::cosine_sim);
+        verify_gemm_result<TD>(ref_D.data(), act_D.data(), m * n, DefaultThreshold<TD>::abs_error,
+                               DefaultThreshold<TD>::cosine_sim);
+    EXPECT_TRUE(result.passed) << result.error_message << "\n  Shape: M=" << m << " N=" << n
+                               << " K=" << k << "\n  Config: " << params.name
+                               << "\n  m_tile=" << m_tile << " n_tile=" << n_tile
+                               << " k_tile=" << k_tile
+                               << "\n  Max abs error: " << result.max_abs_error
+                               << "\n  Cosine similarity: " << result.cosine_similarity;
+}
+
+// ============================================================================
+// B-only-packed GEMM test runner (A is in original layout, only B is packed)
+// (TA: A/B element type, TD: C/D/bias element type; for same-type GEMM use TA == TD)
+// ============================================================================
+
+template <typename TA, typename TD, BiasMode kBiasMode, typename ClampT>
+void run_b_only_packed_gemm_test(const GemmTestParams &params,
+                                 const BOnlyPackedGemmFuncs<ClampT> &funcs)
+{
+    const size_t m = params.m;
+    const size_t n = params.n;
+    const size_t k = params.k;
+
+    const size_t m_step = funcs.get_m_step();
+    const size_t n_step = funcs.get_n_step();
+
+    size_t m_tile, n_tile, k_tile;
+    resolve_tile_sizes(params, m_step, n_step, m_tile, n_tile, k_tile);
+
+    std::string validation_err = validate_params(params, m_step, n_step, m_tile, n_tile, k_tile);
+    if (!validation_err.empty()) {
+        GTEST_SKIP() << "Skipping: " << validation_err;
+        return;
+    }
+
+    UniformRandomGenerator<TA> gen_a(-1.0f, 1.0f, 42);
+    std::vector<TA> A(m * k);
+    std::vector<TA> B_orig(n * k);
+    gen_a.fill_matrix(A.data(), m, k);
+    gen_a.fill_matrix(B_orig.data(), n, k);
+
+    const size_t lda = k;
+    const size_t ldb_orig = k;
+    const size_t ldc = n;
+    const size_t ldd = n;
+
+    UniformRandomGenerator<TD> gen_d(-1.0f, 1.0f, 43);
+
+    std::vector<TD> C_data;
+    const TD *c_ptr_ref = nullptr;
+    if (params.has_c) {
+        C_data.resize(m * n);
+        gen_d.fill_matrix(C_data.data(), m, n);
+        c_ptr_ref = C_data.data();
+    }
+
+    std::vector<TD> bias_data;
+    const TD *bias_ptr_ref = nullptr;
+    BiasMode ref_bias_mode = BiasMode::kNone;
+    if (params.has_bias) {
+        if (kBiasMode == BiasMode::kMx1) {
+            bias_data.resize(m);
+            gen_d.fill_matrix(bias_data.data(), m, 1);
+        } else {
+            bias_data.resize(n);
+            gen_d.fill_matrix(bias_data.data(), 1, n);
+        }
+        bias_ptr_ref = bias_data.data();
+        ref_bias_mode = kBiasMode;
+    }
+
+    const TD clamp_min = to_target_type<TD>(params.clamp_min_f);
+    const TD clamp_max = to_target_type<TD>(params.clamp_max_f);
+
+    std::vector<TD> ref_D(m * n);
+    reference_gemm<TA, TD>(m, n, k, A.data(), lda, B_orig.data(), ldb_orig, BLayout::kTransposed,
+                           c_ptr_ref, ldc, ref_D.data(), ldd, bias_ptr_ref, ref_bias_mode,
+                           clamp_min, clamp_max);
+
+    std::vector<TD> act_D(m * n, to_target_type<TD>(0.0f));
+
+    if (k_tile == k) {
+        const size_t b_packed_size = funcs.get_b_packed_size(n, k);
+        std::vector<uint8_t> B_packed(b_packed_size);
+
+        funcs.run_bt_pack(n, k, ldb_orig, k, 0, static_cast<const void *>(B_orig.data()),
+                          static_cast<void *>(B_packed.data()));
+
+        run_tiled_loop(
+            m, n, k, m_tile, n_tile, k_tile, params.loop_order,
+            [&](size_t m_start, size_t n_start, size_t k_start, size_t actual_m, size_t actual_n,
+                size_t actual_k, bool is_first_k) {
+                const size_t a_offset = funcs.get_a_offset(m_start, 0, lda);
+                const size_t b_packed_offset = funcs.get_b_packed_offset(n_start, 0, ldb_orig, n);
+                const size_t d_offset = funcs.get_d_offset(m_start, n_start, ldd);
+
+                const void *a_ptr = reinterpret_cast<const uint8_t *>(A.data()) + a_offset;
+                const void *b_ptr = B_packed.data() + b_packed_offset;
+                void *d_ptr = reinterpret_cast<uint8_t *>(act_D.data()) + d_offset;
+
+                const void *c_ptr = nullptr;
+                if (params.has_c) {
+                    const size_t c_offset = funcs.get_c_offset(m_start, n_start, ldc);
+                    c_ptr = reinterpret_cast<const uint8_t *>(C_data.data()) + c_offset;
+                }
+
+                const void *bias_ptr = nullptr;
+                if (params.has_bias) {
+                    size_t bias_idx = (kBiasMode == BiasMode::kMx1) ? m_start : n_start;
+                    const size_t bias_offset = funcs.get_bias_offset(bias_idx);
+                    bias_ptr = reinterpret_cast<const uint8_t *>(bias_data.data()) + bias_offset;
+                }
+
+                funcs.run_gemm(actual_m, actual_n, actual_k, a_ptr, lda, 0, b_ptr, ldb_orig, 0,
+                               c_ptr, ldc, d_ptr, ldd, bias_ptr, static_cast<ClampT>(clamp_min),
+                               static_cast<ClampT>(clamp_max));
+            });
+    } else {
+        run_tiled_loop(
+            m, n, k, m_tile, n_tile, k_tile, params.loop_order,
+            [&](size_t m_start, size_t n_start, size_t k_start, size_t actual_m, size_t actual_n,
+                size_t actual_k, bool is_first_k) {
+                std::vector<TA> B_block(actual_n * actual_k);
+                for (size_t i = 0; i < actual_n; ++i) {
+                    for (size_t j = 0; j < actual_k; ++j) {
+                        B_block[i * actual_k + j] = B_orig[(n_start + i) * ldb_orig + k_start + j];
+                    }
+                }
+
+                const size_t b_packed_size = funcs.get_b_packed_size(actual_n, actual_k);
+                std::vector<uint8_t> B_packed(b_packed_size);
+
+                funcs.run_bt_pack(actual_n, actual_k, actual_k, actual_k, 0,
+                                  static_cast<const void *>(B_block.data()),
+                                  static_cast<void *>(B_packed.data()));
+
+                const size_t a_offset = funcs.get_a_offset(m_start, k_start, lda);
+                const size_t d_offset = funcs.get_d_offset(m_start, n_start, ldd);
+
+                const void *a_ptr = reinterpret_cast<const uint8_t *>(A.data()) + a_offset;
+                void *d_ptr = reinterpret_cast<uint8_t *>(act_D.data()) + d_offset;
+
+                const void *c_ptr = nullptr;
+                if (!is_first_k) {
+                    c_ptr = static_cast<const void *>(
+                        reinterpret_cast<const uint8_t *>(act_D.data()) + d_offset);
+                } else if (params.has_c) {
+                    const size_t c_offset = funcs.get_c_offset(m_start, n_start, ldc);
+                    c_ptr = reinterpret_cast<const uint8_t *>(C_data.data()) + c_offset;
+                }
+
+                bool is_last_k = (k_start + actual_k >= k);
+
+                const void *bias_ptr = nullptr;
+                if (params.has_bias && is_last_k) {
+                    size_t bias_idx = (kBiasMode == BiasMode::kMx1) ? m_start : n_start;
+                    const size_t bias_offset = funcs.get_bias_offset(bias_idx);
+                    bias_ptr = reinterpret_cast<const uint8_t *>(bias_data.data()) + bias_offset;
+                }
+
+                ClampT effective_clamp_min = static_cast<ClampT>(to_target_type<TD>(-FLT_MAX));
+                ClampT effective_clamp_max = static_cast<ClampT>(to_target_type<TD>(FLT_MAX));
+                if (is_last_k) {
+                    effective_clamp_min = static_cast<ClampT>(clamp_min);
+                    effective_clamp_max = static_cast<ClampT>(clamp_max);
+                }
+
+                funcs.run_gemm(actual_m, actual_n, actual_k, a_ptr, lda, 0,
+                               static_cast<const void *>(B_packed.data()), actual_k, 0, c_ptr, ldc,
+                               d_ptr, ldd, bias_ptr, effective_clamp_min, effective_clamp_max);
+            });
+    }
+
+    auto result =
+        verify_gemm_result<TD>(ref_D.data(), act_D.data(), m * n, DefaultThreshold<TD>::abs_error,
+                               DefaultThreshold<TD>::cosine_sim);
     EXPECT_TRUE(result.passed) << result.error_message << "\n  Shape: M=" << m << " N=" << n
                                << " K=" << k << "\n  Config: " << params.name
                                << "\n  m_tile=" << m_tile << " n_tile=" << n_tile
@@ -622,6 +815,9 @@ struct GemmTestParamNameGenerator
     {
         const auto &p = info.param;
         std::string test_name = format_shape_string(p.m, p.n, p.k);
+        if (p.bl > 0) {
+            test_name += "_BL" + std::to_string(p.bl);
+        }
         if (!p.name.empty()) {
             test_name += "_" + p.name;
         }

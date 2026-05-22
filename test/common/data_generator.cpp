@@ -23,6 +23,8 @@ void UniformRandomGenerator<T>::fill_matrix(T *data, size_t rows, size_t cols)
 template class UniformRandomGenerator<float>;
 template class UniformRandomGenerator<float16_t>;
 template class UniformRandomGenerator<bfloat16_t>;
+template class UniformRandomGenerator<int8_t>;
+template class UniformRandomGenerator<int32_t>;
 
 }  // namespace test
 }  // namespace torq_tile

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -64,6 +65,13 @@ struct DefaultThreshold<bfloat16_t>
     static constexpr float cosine_sim = 0.9999f;
 };
 
+template <>
+struct DefaultThreshold<int32_t>
+{
+    static constexpr float abs_error = 0.0f;
+    static constexpr float cosine_sim = 1.0f;
+};
+
 // ============================================================================
 // Loop Dimension Enumeration (for configurable loop order)
 // ============================================================================
@@ -119,6 +127,9 @@ struct GemmTestParams
     ChunkConfig b_chunk;  // B non-transposed: (chunk_k, chunk_n); BT: (chunk_n, chunk_k)
     ChunkConfig c_chunk;  // (chunk_m, chunk_n)
     ChunkConfig d_chunk;  // (chunk_m, chunk_n)
+
+    // Optional: block length for quantized-weight GEMM (0 = not applicable)
+    size_t bl = 0;
 
     // Test case name (for GTest output)
     std::string name;
@@ -180,6 +191,11 @@ struct GemmTestParams
         d_chunk = {d0, d1};
         return *this;
     }
+    GemmTestParams &set_bl(size_t bl_)
+    {
+        bl = bl_;
+        return *this;
+    }
     GemmTestParams &set_name(std::string n)
     {
         name = std::move(n);
@@ -205,6 +221,72 @@ template <typename T>
 inline float to_float(T value)
 {
     return static_cast<float>(value);
+}
+
+// ============================================================================
+// Quantization Utilities for int8/int32
+// ============================================================================
+
+/// Quantize a single float value to int8
+/// result = clamp(round(val / scale) + zp, -128, 127)
+inline int8_t quantize_i8(float val, float scale, int32_t zp)
+{
+    float q = std::nearbyintf(val / scale) + static_cast<float>(zp);
+    if (q > 127.0f)
+        q = 127.0f;
+    if (q < -128.0f)
+        q = -128.0f;
+    return static_cast<int8_t>(q);
+}
+
+/// Dequantize a single int8 value to float
+/// result = (val - zp) * scale
+inline float dequantize_i8(int8_t val, float scale, int32_t zp)
+{
+    return (static_cast<float>(val) - static_cast<float>(zp)) * scale;
+}
+
+/// Quantize an array of float values to int8
+inline void quantize_matrix_i8(const float *src, int8_t *dst, size_t count, float scale, int32_t zp)
+{
+    for (size_t i = 0; i < count; ++i) {
+        dst[i] = quantize_i8(src[i], scale, zp);
+    }
+}
+
+/// Dequantize an array of int8 values to float
+inline void dequantize_matrix_i8(const int8_t *src, float *dst, size_t count, float scale,
+                                 int32_t zp)
+{
+    for (size_t i = 0; i < count; ++i) {
+        dst[i] = dequantize_i8(src[i], scale, zp);
+    }
+}
+
+/// Quantize a single float bias value to int32
+/// result = round(val / input_scale)
+inline int32_t quantize_bias_i32(float val, float input_scale)
+{
+    float q = std::nearbyintf(val / input_scale);
+    if (q > 2147483647.0f)
+        q = 2147483647.0f;
+    if (q < -2147483648.0f)
+        q = -2147483648.0f;
+    return static_cast<int32_t>(q);
+}
+
+/// Fuse zero-point into bias for int8 GEMM
+/// fused[ch] = bias[ch] - zp * sum(data[ch * channel_size ... (ch+1) * channel_size - 1])
+inline void fuse_zp_to_bias(int32_t *fused, const int32_t *bias, const int8_t *data, int32_t zp,
+                            size_t channels, size_t channel_size)
+{
+    for (size_t ch = 0; ch < channels; ++ch) {
+        int32_t data_sum = 0;
+        for (size_t i = 0; i < channel_size; ++i) {
+            data_sum += static_cast<int32_t>(data[ch * channel_size + i]);
+        }
+        fused[ch] = bias[ch] - zp * data_sum;
+    }
 }
 
 }  // namespace test

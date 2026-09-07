@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "src/gemm/gemm_i8_i4/tqt_params_i8_i4.h"
 #include "src/gemm/gemm_i8_i8/tqt_params_i8_i8.h"
 #include "test/common/data_generator.h"
 #include "test/common/gemm_test_runner.h"
@@ -1530,5 +1531,1136 @@ inline void run_packed_1xnbias_clamp_fp_qai8dxp_qsi8cxp_gemm_test(
                                << "\n  Cosine similarity: " << result.cosine_similarity;
 }
 
+// ============================================================================
+// W4A8 quantization helpers (shared by per-channel and block-quantized tests)
+// ----------------------------------------------------------------------------
+// quantize_a_qai8dx  : per-row asymmetric int8 (no block dimension)
+// quantize_a_qsi8d2  : per-row block-quantized symmetric int8 (block size bl)
+// quantize_b_qsi4c2  : per-block symmetric int4   (signed [-8, 7], stored ZP=8)
+// quantize_b_qai4c2  : per-block asymmetric int4  (unsigned [0, 15] + fp zp)
+//
+// Setting bl == k reduces qsi8d2 to per-row symmetric (degenerate single block)
+// and reduces qsi4c2 to per-channel symmetric (legacy W4A8 per-channel path).
+// ============================================================================
+
+/// Per-row asymmetric int8 quantization for matrix A [m, k] (qai8dx).
+/// scale_a is [m] fp32, zp_a is [m] int32.
+inline void quantize_a_qai8dx(const float *A_fp32, size_t m, size_t k, int8_t *A_i8, float *scale_a,
+                              int32_t *zp_a)
+{
+    for (size_t row = 0; row < m; ++row) {
+        const float *row_ptr = A_fp32 + row * k;
+        float fmin = FLT_MAX;
+        float fmax = -FLT_MAX;
+        for (size_t i = 0; i < k; ++i) {
+            if (row_ptr[i] < fmin)
+                fmin = row_ptr[i];
+            if (row_ptr[i] > fmax)
+                fmax = row_ptr[i];
+        }
+        fmax = fmax > 0.0f ? fmax : 0.0f;
+        fmin = fmin < 0.0f ? fmin : 0.0f;
+
+        float s = (fmax - fmin) / 255.0f;
+        if (s == 0.0f) {
+            scale_a[row] = 1.0f;
+            zp_a[row] = 0;
+            for (size_t i = 0; i < k; ++i) {
+                A_i8[row * k + i] = 0;
+            }
+            continue;
+        }
+        float zp_tmp = -128.0f - fmin / s;
+        int32_t zp = static_cast<int32_t>(std::nearbyintf(zp_tmp));
+        if (zp < -128)
+            zp = -128;
+        if (zp > 127)
+            zp = 127;
+        scale_a[row] = s;
+        zp_a[row] = zp;
+        for (size_t i = 0; i < k; ++i) {
+            A_i8[row * k + i] = quantize_i8(row_ptr[i], s, zp);
+        }
+    }
+}
+
+/// Per-row block-quantized symmetric int8 for matrix A [m, k] (qsi8d2).
+/// scale_a is [m, k/bl] fp32 row-major (ldsa = k/bl). No zero point.
+inline void quantize_a_qsi8d2(const float *A_fp32, size_t m, size_t k, size_t bl, int8_t *A_i8,
+                              float *scale_a, size_t ldsa)
+{
+    const size_t num_blocks = k / bl;
+    for (size_t row = 0; row < m; ++row) {
+        for (size_t blk = 0; blk < num_blocks; ++blk) {
+            const float *blk_ptr = A_fp32 + row * k + blk * bl;
+            float abs_max = 0.0f;
+            for (size_t i = 0; i < bl; ++i) {
+                float v = std::fabsf(blk_ptr[i]);
+                if (v > abs_max)
+                    abs_max = v;
+            }
+            // Symmetric int8 in [-127, 127]; scale = abs_max / 127.
+            float s = abs_max / 127.0f;
+            if (s == 0.0f)
+                s = 1.0f;
+            scale_a[row * ldsa + blk] = s;
+            for (size_t i = 0; i < bl; ++i) {
+                float q = std::nearbyintf(blk_ptr[i] / s);
+                if (q > 127.0f)
+                    q = 127.0f;
+                if (q < -127.0f)
+                    q = -127.0f;
+                A_i8[row * k + blk * bl + i] = static_cast<int8_t>(q);
+            }
+        }
+    }
+}
+
+/// Per-block symmetric int4 for transposed B [n, k] (qsi4c2t).
+/// scale_b is [n, k/bl] fp32 row-major (ldsb = k/bl).
+/// Nibbles stored ZP=8 unsigned [0, 15] in [n, k/2] uint8 buffer.
+/// Caller must zero-initialize B_packed (the routine writes nibbles in-place).
+inline void quantize_b_qsi4c2(const float *B_fp32, size_t n, size_t k, size_t bl, uint8_t *B_packed,
+                              float *scale_b, size_t ldsb)
+{
+    const size_t num_blocks = k / bl;
+    for (size_t row = 0; row < n; ++row) {
+        for (size_t blk = 0; blk < num_blocks; ++blk) {
+            const float *blk_ptr = B_fp32 + row * k + blk * bl;
+            float abs_max = 0.0f;
+            for (size_t i = 0; i < bl; ++i) {
+                float v = std::fabsf(blk_ptr[i]);
+                if (v > abs_max)
+                    abs_max = v;
+            }
+            // Symmetric int4 in [-8, 7]; scale = abs_max / 8 (W4A16 convention).
+            float s = abs_max / 8.0f;
+            if (s == 0.0f)
+                s = 1.0f;
+            scale_b[row * ldsb + blk] = s;
+            for (size_t i = 0; i < bl; ++i) {
+                float q = std::nearbyintf(blk_ptr[i] / s);
+                if (q > 7.0f)
+                    q = 7.0f;
+                if (q < -8.0f)
+                    q = -8.0f;
+                int32_t qi = static_cast<int32_t>(q);
+                const size_t kidx = blk * bl + i;
+                const size_t byte_idx = row * (k / 2) + kidx / 2;
+                uint8_t nib = static_cast<uint8_t>(qi + 8);
+                if ((kidx & 1) == 0) {
+                    B_packed[byte_idx] = (B_packed[byte_idx] & 0xf0) | (nib & 0x0f);
+                } else {
+                    B_packed[byte_idx] = (B_packed[byte_idx] & 0x0f) | ((nib & 0x0f) << 4);
+                }
+            }
+        }
+    }
+}
+
+/// Per-block ASYMMETRIC int4 for transposed B [n, k] (qai4c2t).
+/// scale_b is [n, k/bl] fp32 (ldsb), zp_b is [n, k/bl] fp32 (ldzpb).
+/// Nibbles stored ZP=0 unsigned [0, 15]; dequant: (q - zp_b[n, blk]) * scale_b[n, blk].
+/// Caller must zero-initialize B_packed (the routine writes nibbles in-place).
+inline void quantize_b_qai4c2(const float *B_fp32, size_t n, size_t k, size_t bl, uint8_t *B_packed,
+                              float *scale_b, float *zp_b, size_t ldsb, size_t ldzpb)
+{
+    const size_t num_blocks = k / bl;
+    for (size_t row = 0; row < n; ++row) {
+        for (size_t blk = 0; blk < num_blocks; ++blk) {
+            const float *blk_ptr = B_fp32 + row * k + blk * bl;
+            float fmin = FLT_MAX;
+            float fmax = -FLT_MAX;
+            for (size_t i = 0; i < bl; ++i) {
+                if (blk_ptr[i] < fmin)
+                    fmin = blk_ptr[i];
+                if (blk_ptr[i] > fmax)
+                    fmax = blk_ptr[i];
+            }
+            // qmax = 15, qmin = 0. Asym: s = (fmax - fmin) / (qmax - qmin); zp = -fmin / s.
+            float s = (fmax - fmin) / 15.0f;
+            if (s == 0.0f) {
+                scale_b[row * ldsb + blk] = 1.0f;
+                zp_b[row * ldzpb + blk] = 0.0f;
+                for (size_t i = 0; i < bl; ++i) {
+                    const size_t kidx = blk * bl + i;
+                    const size_t byte_idx = row * (k / 2) + kidx / 2;
+                    if ((kidx & 1) == 0) {
+                        B_packed[byte_idx] = (B_packed[byte_idx] & 0xf0);
+                    } else {
+                        B_packed[byte_idx] = (B_packed[byte_idx] & 0x0f);
+                    }
+                }
+                continue;
+            }
+            float zp_f = -fmin / s;
+            // Clamp zp to [0, 15] in fp domain; the kernel uses it verbatim as fp.
+            if (zp_f < 0.0f)
+                zp_f = 0.0f;
+            if (zp_f > 15.0f)
+                zp_f = 15.0f;
+            scale_b[row * ldsb + blk] = s;
+            zp_b[row * ldzpb + blk] = zp_f;
+            for (size_t i = 0; i < bl; ++i) {
+                float q = std::nearbyintf(blk_ptr[i] / s + zp_f);
+                if (q > 15.0f)
+                    q = 15.0f;
+                if (q < 0.0f)
+                    q = 0.0f;
+                uint8_t qb = static_cast<uint8_t>(q);
+                const size_t kidx = blk * bl + i;
+                const size_t byte_idx = row * (k / 2) + kidx / 2;
+                if ((kidx & 1) == 0) {
+                    B_packed[byte_idx] = (B_packed[byte_idx] & 0xf0) | (qb & 0x0f);
+                } else {
+                    B_packed[byte_idx] = (B_packed[byte_idx] & 0x0f) | ((qb & 0x0f) << 4);
+                }
+            }
+        }
+    }
+}
+
+// ============================================================================
+// W4A8 reference fp32 implementations (block-quantized; bl=k recovers per-channel)
+// ----------------------------------------------------------------------------
+// ref_qai8dx_qsi4c2 : Class 1 — A per-row asym, B per-block sym
+// ref_qsi8d2_qsi4c2 : Class 2 — A per-block sym,  B per-block sym
+// ref_qsi8d2_qai4c2 : Class 3 — A per-block sym,  B per-block asym
+// ============================================================================
+
+/// Class 1: qai8dx × qsi4c2t (scale_a per-row, scale_b per-block).
+/// acc = scale_a[m] * sum_blk(scale_b[n, blk]
+///         * sum_{k in blk}((qa[m, k] - zp_a[m]) * qb_signed[n, k]))
+inline void ref_qai8dx_qsi4c2(size_t m, size_t n, size_t k, size_t bl, const int8_t *A_i8,
+                              const uint8_t *B_packed, const float *scale_a, const int32_t *zp_a,
+                              const float *scale_b, size_t ldsb, const float *C, const float *bias,
+                              float *D, float clamp_min, float clamp_max)
+{
+    const size_t num_blocks = k / bl;
+    for (size_t mi = 0; mi < m; ++mi) {
+        for (size_t ni = 0; ni < n; ++ni) {
+            float acc = 0.0f;
+            for (size_t blk = 0; blk < num_blocks; ++blk) {
+                int32_t blk_acc = 0;
+                for (size_t kk = 0; kk < bl; ++kk) {
+                    size_t kidx = blk * bl + kk;
+                    uint8_t byte = B_packed[ni * (k / 2) + kidx / 2];
+                    int32_t qb =
+                        (kidx & 1) ? ((int32_t)(byte >> 4) - 8) : ((int32_t)(byte & 0xf) - 8);
+                    int32_t qa = (int32_t)A_i8[mi * k + kidx];
+                    blk_acc += (qa - zp_a[mi]) * qb;
+                }
+                acc += scale_b[ni * ldsb + blk] * (float)blk_acc;
+            }
+            acc *= scale_a[mi];
+            float result = acc;
+            if (C)
+                result += C[mi * n + ni];
+            if (bias)
+                result += bias[ni];
+            if (result < clamp_min)
+                result = clamp_min;
+            if (result > clamp_max)
+                result = clamp_max;
+            D[mi * n + ni] = result;
+        }
+    }
+}
+
+/// Class 2: qsi8d2 × qsi4c2t (per-block on both sides).
+/// acc = sum_blk(scale_a[m, blk] * scale_b[n, blk]
+///         * sum_{k in blk}(qa[m, k] * qb_signed[n, k]))
+inline void ref_qsi8d2_qsi4c2(size_t m, size_t n, size_t k, size_t bl, const int8_t *A_i8,
+                              const uint8_t *B_packed, const float *scale_a, size_t ldsa,
+                              const float *scale_b, size_t ldsb, const float *C, const float *bias,
+                              float *D, float clamp_min, float clamp_max)
+{
+    const size_t num_blocks = k / bl;
+    for (size_t mi = 0; mi < m; ++mi) {
+        for (size_t ni = 0; ni < n; ++ni) {
+            float acc = 0.0f;
+            for (size_t blk = 0; blk < num_blocks; ++blk) {
+                int32_t blk_acc = 0;
+                for (size_t kk = 0; kk < bl; ++kk) {
+                    size_t kidx = blk * bl + kk;
+                    uint8_t byte = B_packed[ni * (k / 2) + kidx / 2];
+                    int32_t qb =
+                        (kidx & 1) ? ((int32_t)(byte >> 4) - 8) : ((int32_t)(byte & 0xf) - 8);
+                    int32_t qa = (int32_t)A_i8[mi * k + kidx];
+                    blk_acc += qa * qb;
+                }
+                acc += scale_a[mi * ldsa + blk] * scale_b[ni * ldsb + blk] * (float)blk_acc;
+            }
+            float result = acc;
+            if (C)
+                result += C[mi * n + ni];
+            if (bias)
+                result += bias[ni];
+            if (result < clamp_min)
+                result = clamp_min;
+            if (result > clamp_max)
+                result = clamp_max;
+            D[mi * n + ni] = result;
+        }
+    }
+}
+
+/// Class 3: qsi8d2 × qai4c2t (per-block on both sides + ASYM B with fp zp).
+/// acc = sum_blk(scale_a[m, blk] * scale_b[n, blk]
+///         * sum_{k in blk}(qa[m, k] * (qb_unsigned[n, k] - zp_b[n, blk])))
+inline void ref_qsi8d2_qai4c2(size_t m, size_t n, size_t k, size_t bl, const int8_t *A_i8,
+                              const uint8_t *B_packed, const float *scale_a, size_t ldsa,
+                              const float *scale_b, size_t ldsb, const float *zp_b, size_t ldzpb,
+                              const float *C, const float *bias, float *D, float clamp_min,
+                              float clamp_max)
+{
+    const size_t num_blocks = k / bl;
+    for (size_t mi = 0; mi < m; ++mi) {
+        for (size_t ni = 0; ni < n; ++ni) {
+            float acc = 0.0f;
+            for (size_t blk = 0; blk < num_blocks; ++blk) {
+                float zpb = zp_b[ni * ldzpb + blk];
+                float blk_acc = 0.0f;
+                for (size_t kk = 0; kk < bl; ++kk) {
+                    size_t kidx = blk * bl + kk;
+                    uint8_t byte = B_packed[ni * (k / 2) + kidx / 2];
+                    float qb = (kidx & 1) ? (float)(byte >> 4) : (float)(byte & 0xf);
+                    float qa = (float)A_i8[mi * k + kidx];
+                    blk_acc += qa * (qb - zpb);
+                }
+                acc += scale_a[mi * ldsa + blk] * scale_b[ni * ldsb + blk] * blk_acc;
+            }
+            float result = acc;
+            if (C)
+                result += C[mi * n + ni];
+            if (bias)
+                result += bias[ni];
+            if (result < clamp_min)
+                result = clamp_min;
+            if (result > clamp_max)
+                result = clamp_max;
+            D[mi * n + ni] = result;
+        }
+    }
+}
+
+// ============================================================================
+// W4A8 per-channel (qai8dx × qsi4cxt): Funcs templates + runners
+// ----------------------------------------------------------------------------
+// Reuses the BQ helpers with bl == k and ldsb == 1 (single block per row).
+// Output type TD ∈ {float, float16_t, bfloat16_t}; the qparams struct is
+// tqt_qai8dx_qsi4cx_params (scale_a[m], zp_a[m], scale_b[n]).
+// ============================================================================
+
+template <typename TD>
+struct W4A8GemmFuncs
+{
+    using GetMStepFunc = size_t (*)(void);
+    using GetNStepFunc = size_t (*)(void);
+    using RunGemmFunc = void (*)(size_t m, size_t n, size_t k, const void *A, size_t lda,
+                                 size_t k_idx_a, const void *B, size_t ldb, size_t k_idx_b,
+                                 const void *C, size_t ldc, void *D, size_t ldd, const void *bias,
+                                 TD clamp_min, TD clamp_max,
+                                 const struct tqt_qai8dx_qsi4cx_params *params);
+
+    GetMStepFunc get_m_step;
+    GetNStepFunc get_n_step;
+    RunGemmFunc run_gemm;
+};
+
+template <typename TD>
+struct W4A8PackedGemmFuncs
+{
+    using GetMStepFunc = size_t (*)(void);
+    using GetNStepFunc = size_t (*)(void);
+    using GetAPackedSizeFunc = size_t (*)(size_t m, size_t k);
+    using GetBPackedSizeFunc = size_t (*)(size_t n, size_t k);
+    using RunAPackFunc = void (*)(size_t m, size_t k, size_t lda, size_t lda_packed, size_t k_idx,
+                                  const void *A, void *A_packed);
+    using RunBtPackFunc = void (*)(size_t n, size_t k, size_t ldb, size_t ldb_packed, size_t k_idx,
+                                   const void *B, void *B_packed);
+    using RunGemmFunc = void (*)(size_t m, size_t n, size_t k, const void *A_packed, size_t lda,
+                                 size_t k_idx_a, const void *B_packed, size_t ldb, size_t k_idx_b,
+                                 const void *C, size_t ldc, void *D, size_t ldd, const void *bias,
+                                 TD clamp_min, TD clamp_max,
+                                 const struct tqt_qai8dx_qsi4cx_params *params);
+
+    GetMStepFunc get_m_step;
+    GetNStepFunc get_n_step;
+    GetAPackedSizeFunc get_a_packed_size;
+    GetBPackedSizeFunc get_b_packed_size;
+    RunAPackFunc run_a_pack;
+    RunBtPackFunc run_bt_pack;
+    RunGemmFunc run_gemm;
+};
+
+template <typename TD>
+inline void run_w4a8_gemm_test(const GemmTestParams &params, const W4A8GemmFuncs<TD> &funcs)
+{
+    const size_t m = params.m;
+    const size_t n = params.n;
+    const size_t k = params.k;
+    const size_t lda = k;
+    const size_t ldb = k;
+    const size_t ldc = n;
+    const size_t ldd = n;
+
+    UniformRandomGenerator<float> gen(-1.0f, 1.0f, 42);
+    std::vector<float> A_fp32(m * k);
+    std::vector<float> B_fp32(n * k);
+    gen.fill_matrix(A_fp32.data(), m, k);
+    gen.fill_matrix(B_fp32.data(), n, k);
+
+    std::vector<int8_t> A_i8(m * k);
+    std::vector<float> scale_a(m);
+    std::vector<int32_t> zp_a(m);
+    quantize_a_qai8dx(A_fp32.data(), m, k, A_i8.data(), scale_a.data(), zp_a.data());
+
+    // Per-channel int4 is the bl == k, ldsb == 1 special case of qsi4c2.
+    std::vector<uint8_t> B_packed(n * (k / 2), 0);
+    std::vector<float> scale_b(n);
+    quantize_b_qsi4c2(B_fp32.data(), n, k, k, B_packed.data(), scale_b.data(), 1);
+
+    std::vector<TD> C_data;
+    if (params.has_c) {
+        C_data.resize(m * n);
+        UniformRandomGenerator<TD> c_gen(-2.0f, 2.0f, 42);
+        c_gen.fill_matrix(C_data.data(), m, n);
+    }
+    std::vector<TD> bias_data;
+    if (params.has_bias) {
+        bias_data.resize(n);
+        UniformRandomGenerator<TD> bias_gen(-0.5f, 0.5f, 7);
+        bias_gen.fill_matrix(bias_data.data(), 1, n);
+    }
+
+    const float clamp_min_f = params.clamp_min_f;
+    const float clamp_max_f = params.clamp_max_f;
+    const TD clamp_min_td = to_target_type<TD>(clamp_min_f);
+    const TD clamp_max_td = to_target_type<TD>(clamp_max_f);
+
+    std::vector<float> C_fp32;
+    std::vector<float> bias_fp32;
+    if (params.has_c) {
+        C_fp32.resize(m * n);
+        for (size_t i = 0; i < m * n; ++i) {
+            C_fp32[i] = to_float(C_data[i]);
+        }
+    }
+    if (params.has_bias) {
+        bias_fp32.resize(n);
+        for (size_t i = 0; i < n; ++i) {
+            bias_fp32[i] = to_float(bias_data[i]);
+        }
+    }
+
+    std::vector<float> D_ref_fp32(m * n);
+    ref_qai8dx_qsi4c2(m, n, k, k, A_i8.data(), B_packed.data(), scale_a.data(), zp_a.data(),
+                      scale_b.data(), 1, params.has_c ? C_fp32.data() : nullptr,
+                      params.has_bias ? bias_fp32.data() : nullptr, D_ref_fp32.data(), clamp_min_f,
+                      clamp_max_f);
+    std::vector<TD> D_ref(m * n);
+    for (size_t i = 0; i < m * n; ++i) {
+        D_ref[i] = to_target_type<TD>(D_ref_fp32[i]);
+    }
+
+    struct tqt_qai8dx_qsi4cx_params qparams;
+    qparams.scale_a = scale_a.data();
+    qparams.zero_point_a = zp_a.data();
+    qparams.scale_b = scale_b.data();
+
+    std::vector<TD> D_act(m * n, to_target_type<TD>(0.0f));
+    funcs.run_gemm(m, n, k, A_i8.data(), lda, 0, B_packed.data(), ldb, 0,
+                   params.has_c ? C_data.data() : nullptr, ldc, D_act.data(), ldd,
+                   params.has_bias ? bias_data.data() : nullptr, clamp_min_td, clamp_max_td,
+                   &qparams);
+
+    auto result =
+        verify_gemm_result<TD>(D_ref.data(), D_act.data(), m * n, DefaultThreshold<TD>::abs_error,
+                               DefaultThreshold<TD>::cosine_sim);
+    EXPECT_TRUE(result.passed) << result.error_message << "\n  Shape: M=" << m << " N=" << n
+                               << " K=" << k << "\n  Config: " << params.name
+                               << "\n  Max abs error: " << result.max_abs_error
+                               << "\n  Cosine similarity: " << result.cosine_similarity;
+}
+
+template <typename TD>
+inline void run_w4a8_packed_gemm_test(const GemmTestParams &params,
+                                      const W4A8PackedGemmFuncs<TD> &funcs)
+{
+    const size_t m = params.m;
+    const size_t n = params.n;
+    const size_t k = params.k;
+    const size_t lda = k;
+    const size_t ldb = k;
+    const size_t ldc = n;
+    const size_t ldd = n;
+
+    UniformRandomGenerator<float> gen(-1.0f, 1.0f, 42);
+    std::vector<float> A_fp32(m * k);
+    std::vector<float> B_fp32(n * k);
+    gen.fill_matrix(A_fp32.data(), m, k);
+    gen.fill_matrix(B_fp32.data(), n, k);
+
+    std::vector<int8_t> A_i8(m * k);
+    std::vector<float> scale_a(m);
+    std::vector<int32_t> zp_a(m);
+    quantize_a_qai8dx(A_fp32.data(), m, k, A_i8.data(), scale_a.data(), zp_a.data());
+
+    std::vector<uint8_t> B_int4(n * (k / 2), 0);
+    std::vector<float> scale_b(n);
+    quantize_b_qsi4c2(B_fp32.data(), n, k, k, B_int4.data(), scale_b.data(), 1);
+
+    std::vector<TD> C_data;
+    if (params.has_c) {
+        C_data.resize(m * n);
+        UniformRandomGenerator<TD> c_gen(-2.0f, 2.0f, 42);
+        c_gen.fill_matrix(C_data.data(), m, n);
+    }
+    std::vector<TD> bias_data;
+    if (params.has_bias) {
+        bias_data.resize(n);
+        UniformRandomGenerator<TD> bias_gen(-0.5f, 0.5f, 7);
+        bias_gen.fill_matrix(bias_data.data(), 1, n);
+    }
+
+    const float clamp_min_f = params.clamp_min_f;
+    const float clamp_max_f = params.clamp_max_f;
+    const TD clamp_min_td = to_target_type<TD>(clamp_min_f);
+    const TD clamp_max_td = to_target_type<TD>(clamp_max_f);
+
+    std::vector<float> C_fp32;
+    std::vector<float> bias_fp32;
+    if (params.has_c) {
+        C_fp32.resize(m * n);
+        for (size_t i = 0; i < m * n; ++i) {
+            C_fp32[i] = to_float(C_data[i]);
+        }
+    }
+    if (params.has_bias) {
+        bias_fp32.resize(n);
+        for (size_t i = 0; i < n; ++i) {
+            bias_fp32[i] = to_float(bias_data[i]);
+        }
+    }
+
+    std::vector<float> D_ref_fp32(m * n);
+    ref_qai8dx_qsi4c2(m, n, k, k, A_i8.data(), B_int4.data(), scale_a.data(), zp_a.data(),
+                      scale_b.data(), 1, params.has_c ? C_fp32.data() : nullptr,
+                      params.has_bias ? bias_fp32.data() : nullptr, D_ref_fp32.data(), clamp_min_f,
+                      clamp_max_f);
+    std::vector<TD> D_ref(m * n);
+    for (size_t i = 0; i < m * n; ++i) {
+        D_ref[i] = to_target_type<TD>(D_ref_fp32[i]);
+    }
+
+    struct tqt_qai8dx_qsi4cx_params qparams;
+    qparams.scale_a = scale_a.data();
+    qparams.zero_point_a = zp_a.data();
+    qparams.scale_b = scale_b.data();
+
+    const size_t a_packed_size = funcs.get_a_packed_size(m, k);
+    const size_t b_packed_size = funcs.get_b_packed_size(n, k);
+    std::vector<uint8_t> A_packed(a_packed_size);
+    std::vector<uint8_t> B_packed(b_packed_size);
+
+    funcs.run_a_pack(m, k, lda, k, 0, A_i8.data(), A_packed.data());
+    funcs.run_bt_pack(n, k, ldb, k, 0, B_int4.data(), B_packed.data());
+
+    std::vector<TD> D_act(m * n, to_target_type<TD>(0.0f));
+    funcs.run_gemm(m, n, k, A_packed.data(), lda, 0, B_packed.data(), ldb, 0,
+                   params.has_c ? C_data.data() : nullptr, ldc, D_act.data(), ldd,
+                   params.has_bias ? bias_data.data() : nullptr, clamp_min_td, clamp_max_td,
+                   &qparams);
+
+    auto result =
+        verify_gemm_result<TD>(D_ref.data(), D_act.data(), m * n, DefaultThreshold<TD>::abs_error,
+                               DefaultThreshold<TD>::cosine_sim);
+    EXPECT_TRUE(result.passed) << result.error_message << "\n  Shape: M=" << m << " N=" << n
+                               << " K=" << k << "\n  Config: " << params.name
+                               << "\n  Max abs error: " << result.max_abs_error
+                               << "\n  Cosine similarity: " << result.cosine_similarity;
+}
+
+// ============================================================================
+// W4A8 block-quantized: Funcs templates
+// ----------------------------------------------------------------------------
+// 3 input categories × {unpacked, packed} = 6 Funcs structs.
+// Class 1 (qai8dx × qsi4c2): tqt_qai8dx_qsi4c2_params
+// Class 2 (qsi8d2 × qsi4c2): tqt_qsi8d2_qsi4c2_params
+// Class 3 (qsi8d2 × qai4c2): tqt_qsi8d2_qai4c2_params
+// ============================================================================
+
+// ---------- Class 1: qai8dx × qsi4c2t (unpacked) ----------
+template <typename TD>
+struct W4A8BQ_Qai8dx_Qsi4c2_Funcs
+{
+    using GetMStepFunc = size_t (*)(void);
+    using GetNStepFunc = size_t (*)(void);
+    using RunGemmFunc = void (*)(size_t m, size_t n, size_t k, size_t bl, const void *A, size_t lda,
+                                 size_t k_idx_a, const void *B, size_t ldb, size_t k_idx_b,
+                                 const void *C, size_t ldc, void *D, size_t ldd, const void *bias,
+                                 TD clamp_min, TD clamp_max,
+                                 const struct tqt_qai8dx_qsi4c2_params *params);
+    GetMStepFunc get_m_step;
+    GetNStepFunc get_n_step;
+    RunGemmFunc run_gemm;
+};
+
+// ---------- Class 1: qai8dxp × qsi4c2p (packed) ----------
+template <typename TD>
+struct W4A8BQ_Qai8dx_Qsi4c2_PackedFuncs
+{
+    using GetMStepFunc = size_t (*)(void);
+    using GetNStepFunc = size_t (*)(void);
+    using GetAPackedSizeFunc = size_t (*)(size_t m, size_t k);
+    using GetBPackedSizeFunc = size_t (*)(size_t n, size_t k);
+    using RunAPackFunc = void (*)(size_t m, size_t k, size_t lda, size_t lda_packed, size_t k_idx,
+                                  const void *A, void *A_packed);
+    using RunBtPackFunc = void (*)(size_t n, size_t k, size_t ldb, size_t ldb_packed, size_t k_idx,
+                                   const void *B, void *B_packed);
+    using RunGemmFunc = void (*)(size_t m, size_t n, size_t k, size_t bl, const void *A_packed,
+                                 size_t lda, size_t k_idx_a, const void *B_packed, size_t ldb,
+                                 size_t k_idx_b, const void *C, size_t ldc, void *D, size_t ldd,
+                                 const void *bias, TD clamp_min, TD clamp_max,
+                                 const struct tqt_qai8dx_qsi4c2_params *params);
+    GetMStepFunc get_m_step;
+    GetNStepFunc get_n_step;
+    GetAPackedSizeFunc get_a_packed_size;
+    GetBPackedSizeFunc get_b_packed_size;
+    RunAPackFunc run_a_pack;
+    RunBtPackFunc run_bt_pack;
+    RunGemmFunc run_gemm;
+};
+
+// ---------- Class 2: qsi8d2 × qsi4c2t (unpacked) ----------
+template <typename TD>
+struct W4A8BQ_Qsi8d2_Qsi4c2_Funcs
+{
+    using GetMStepFunc = size_t (*)(void);
+    using GetNStepFunc = size_t (*)(void);
+    using RunGemmFunc = void (*)(size_t m, size_t n, size_t k, size_t bl, const void *A, size_t lda,
+                                 size_t k_idx_a, const void *B, size_t ldb, size_t k_idx_b,
+                                 const void *C, size_t ldc, void *D, size_t ldd, const void *bias,
+                                 TD clamp_min, TD clamp_max,
+                                 const struct tqt_qsi8d2_qsi4c2_params *params);
+    GetMStepFunc get_m_step;
+    GetNStepFunc get_n_step;
+    RunGemmFunc run_gemm;
+};
+
+// ---------- Class 2: qsi8d2p × qsi4c2p (packed) ----------
+template <typename TD>
+struct W4A8BQ_Qsi8d2_Qsi4c2_PackedFuncs
+{
+    using GetMStepFunc = size_t (*)(void);
+    using GetNStepFunc = size_t (*)(void);
+    using GetAPackedSizeFunc = size_t (*)(size_t m, size_t k);
+    using GetBPackedSizeFunc = size_t (*)(size_t n, size_t k);
+    using RunAPackFunc = void (*)(size_t m, size_t k, size_t lda, size_t lda_packed, size_t k_idx,
+                                  const void *A, void *A_packed);
+    using RunBtPackFunc = void (*)(size_t n, size_t k, size_t ldb, size_t ldb_packed, size_t k_idx,
+                                   const void *B, void *B_packed);
+    using RunGemmFunc = void (*)(size_t m, size_t n, size_t k, size_t bl, const void *A_packed,
+                                 size_t lda, size_t k_idx_a, const void *B_packed, size_t ldb,
+                                 size_t k_idx_b, const void *C, size_t ldc, void *D, size_t ldd,
+                                 const void *bias, TD clamp_min, TD clamp_max,
+                                 const struct tqt_qsi8d2_qsi4c2_params *params);
+    GetMStepFunc get_m_step;
+    GetNStepFunc get_n_step;
+    GetAPackedSizeFunc get_a_packed_size;
+    GetBPackedSizeFunc get_b_packed_size;
+    RunAPackFunc run_a_pack;
+    RunBtPackFunc run_bt_pack;
+    RunGemmFunc run_gemm;
+};
+
+// ---------- Class 3: qsi8d2 × qai4c2t (unpacked) ----------
+template <typename TD>
+struct W4A8BQ_Qsi8d2_Qai4c2_Funcs
+{
+    using GetMStepFunc = size_t (*)(void);
+    using GetNStepFunc = size_t (*)(void);
+    using RunGemmFunc = void (*)(size_t m, size_t n, size_t k, size_t bl, const void *A, size_t lda,
+                                 size_t k_idx_a, const void *B, size_t ldb, size_t k_idx_b,
+                                 const void *C, size_t ldc, void *D, size_t ldd, const void *bias,
+                                 TD clamp_min, TD clamp_max,
+                                 const struct tqt_qsi8d2_qai4c2_params *params);
+    GetMStepFunc get_m_step;
+    GetNStepFunc get_n_step;
+    RunGemmFunc run_gemm;
+};
+
+// ---------- Class 3: qsi8d2p × qai4c2p (packed) ----------
+template <typename TD>
+struct W4A8BQ_Qsi8d2_Qai4c2_PackedFuncs
+{
+    using GetMStepFunc = size_t (*)(void);
+    using GetNStepFunc = size_t (*)(void);
+    using GetAPackedSizeFunc = size_t (*)(size_t m, size_t k);
+    using GetBPackedSizeFunc = size_t (*)(size_t n, size_t k);
+    using RunAPackFunc = void (*)(size_t m, size_t k, size_t lda, size_t lda_packed, size_t k_idx,
+                                  const void *A, void *A_packed);
+    using RunBtPackFunc = void (*)(size_t n, size_t k, size_t ldb, size_t ldb_packed, size_t k_idx,
+                                   const void *B, void *B_packed);
+    using RunGemmFunc = void (*)(size_t m, size_t n, size_t k, size_t bl, const void *A_packed,
+                                 size_t lda, size_t k_idx_a, const void *B_packed, size_t ldb,
+                                 size_t k_idx_b, const void *C, size_t ldc, void *D, size_t ldd,
+                                 const void *bias, TD clamp_min, TD clamp_max,
+                                 const struct tqt_qsi8d2_qai4c2_params *params);
+    GetMStepFunc get_m_step;
+    GetNStepFunc get_n_step;
+    GetAPackedSizeFunc get_a_packed_size;
+    GetBPackedSizeFunc get_b_packed_size;
+    RunAPackFunc run_a_pack;
+    RunBtPackFunc run_bt_pack;
+    RunGemmFunc run_gemm;
+};
+
+// ============================================================================
+// W4A8 block-quantized: shared setup helpers
+// ----------------------------------------------------------------------------
+// W4A8BQInputs<TD>          : random fp32 inputs + optional TD C / bias
+// make_w4a8_bq_inputs<TD>   : populate the above from GemmTestParams
+// verify_w4a8_bq_result<TD> : verify_gemm_result wrapper with rich EXPECT message
+// round_through_td<TD>      : convert std::vector<float> to std::vector<TD>
+// ============================================================================
+
+template <typename TD>
+struct W4A8BQInputs
+{
+    size_t m;
+    size_t n;
+    size_t k;
+    size_t bl;
+    size_t ldsa;  // = k/bl
+    size_t ldsb;  // = k/bl
+    std::vector<float> A_fp32;
+    std::vector<float> B_fp32;
+    std::vector<TD> C_data;
+    std::vector<TD> bias_data;
+    std::vector<float> C_fp32;
+    std::vector<float> bias_fp32;
+    bool has_c;
+    bool has_bias;
+    float clamp_min_f;
+    float clamp_max_f;
+    TD clamp_min_td;
+    TD clamp_max_td;
+};
+
+template <typename TD>
+inline W4A8BQInputs<TD> make_w4a8_bq_inputs(const GemmTestParams &params)
+{
+    W4A8BQInputs<TD> in;
+    in.m = params.m;
+    in.n = params.n;
+    in.k = params.k;
+    in.bl = params.bl;
+    in.ldsa = params.k / params.bl;
+    in.ldsb = params.k / params.bl;
+    in.has_c = params.has_c;
+    in.has_bias = params.has_bias;
+    in.clamp_min_f = params.clamp_min_f;
+    in.clamp_max_f = params.clamp_max_f;
+    in.clamp_min_td = to_target_type<TD>(params.clamp_min_f);
+    in.clamp_max_td = to_target_type<TD>(params.clamp_max_f);
+
+    UniformRandomGenerator<float> gen(-1.0f, 1.0f, 42);
+    in.A_fp32.resize(in.m * in.k);
+    in.B_fp32.resize(in.n * in.k);
+    gen.fill_matrix(in.A_fp32.data(), in.m, in.k);
+    gen.fill_matrix(in.B_fp32.data(), in.n, in.k);
+
+    if (in.has_c) {
+        in.C_data.resize(in.m * in.n);
+        UniformRandomGenerator<TD> c_gen(-2.0f, 2.0f, 42);
+        c_gen.fill_matrix(in.C_data.data(), in.m, in.n);
+        in.C_fp32.resize(in.m * in.n);
+        for (size_t i = 0; i < in.m * in.n; ++i) {
+            in.C_fp32[i] = to_float(in.C_data[i]);
+        }
+    }
+    if (in.has_bias) {
+        in.bias_data.resize(in.n);
+        UniformRandomGenerator<TD> bias_gen(-0.5f, 0.5f, 7);
+        bias_gen.fill_matrix(in.bias_data.data(), 1, in.n);
+        in.bias_fp32.resize(in.n);
+        for (size_t i = 0; i < in.n; ++i) {
+            in.bias_fp32[i] = to_float(in.bias_data[i]);
+        }
+    }
+    return in;
+}
+
+template <typename TD>
+inline void verify_w4a8_bq_result(const std::vector<TD> &D_ref, const std::vector<TD> &D_act,
+                                  const GemmTestParams &params)
+{
+    auto result =
+        verify_gemm_result<TD>(D_ref.data(), D_act.data(), D_ref.size(),
+                               DefaultThreshold<TD>::abs_error, DefaultThreshold<TD>::cosine_sim);
+    EXPECT_TRUE(result.passed) << result.error_message << "\n  Shape: M=" << params.m
+                               << " N=" << params.n << " K=" << params.k << " BL=" << params.bl
+                               << "\n  Config: " << params.name
+                               << "\n  Max abs error: " << result.max_abs_error
+                               << "\n  Cosine similarity: " << result.cosine_similarity;
+}
+
+template <typename TD>
+inline std::vector<TD> round_through_td(const std::vector<float> &src)
+{
+    std::vector<TD> dst(src.size());
+    for (size_t i = 0; i < src.size(); ++i) {
+        dst[i] = to_target_type<TD>(src[i]);
+    }
+    return dst;
+}
+
+// ============================================================================
+// W4A8 block-quantized: runners (6 — 3 categories × {unpacked, packed})
+// ============================================================================
+
+// ---------- Class 1 unpacked: qai8dx × qsi4c2t ----------
+template <typename TD>
+inline void run_w4a8_bq_qai8dx_qsi4c2t_test(const GemmTestParams &params,
+                                            const W4A8BQ_Qai8dx_Qsi4c2_Funcs<TD> &funcs)
+{
+    auto in = make_w4a8_bq_inputs<TD>(params);
+    const size_t lda = in.k;
+    const size_t ldb = in.k;
+    const size_t ldc = in.n;
+    const size_t ldd = in.n;
+
+    std::vector<int8_t> A_i8(in.m * in.k);
+    std::vector<float> scale_a(in.m);
+    std::vector<int32_t> zp_a(in.m);
+    quantize_a_qai8dx(in.A_fp32.data(), in.m, in.k, A_i8.data(), scale_a.data(), zp_a.data());
+
+    std::vector<uint8_t> B_int4(in.n * (in.k / 2), 0);
+    std::vector<float> scale_b(in.n * in.ldsb);
+    quantize_b_qsi4c2(in.B_fp32.data(), in.n, in.k, in.bl, B_int4.data(), scale_b.data(), in.ldsb);
+
+    std::vector<float> D_ref_fp32(in.m * in.n);
+    ref_qai8dx_qsi4c2(in.m, in.n, in.k, in.bl, A_i8.data(), B_int4.data(), scale_a.data(),
+                      zp_a.data(), scale_b.data(), in.ldsb, in.has_c ? in.C_fp32.data() : nullptr,
+                      in.has_bias ? in.bias_fp32.data() : nullptr, D_ref_fp32.data(),
+                      in.clamp_min_f, in.clamp_max_f);
+    auto D_ref = round_through_td<TD>(D_ref_fp32);
+
+    struct tqt_qai8dx_qsi4c2_params qparams;
+    qparams.scale_a = scale_a.data();
+    qparams.zero_point_a = zp_a.data();
+    qparams.scale_b = scale_b.data();
+    qparams.ldsb = in.ldsb;
+
+    std::vector<TD> D_act(in.m * in.n, to_target_type<TD>(0.0f));
+    funcs.run_gemm(in.m, in.n, in.k, in.bl, A_i8.data(), lda, 0, B_int4.data(), ldb, 0,
+                   in.has_c ? in.C_data.data() : nullptr, ldc, D_act.data(), ldd,
+                   in.has_bias ? in.bias_data.data() : nullptr, in.clamp_min_td, in.clamp_max_td,
+                   &qparams);
+
+    verify_w4a8_bq_result(D_ref, D_act, params);
+}
+
+// ---------- Class 1 packed: qai8dxp × qsi4c2p ----------
+template <typename TD>
+inline void run_w4a8_bq_qai8dxp_qsi4c2p_test(const GemmTestParams &params,
+                                             const W4A8BQ_Qai8dx_Qsi4c2_PackedFuncs<TD> &funcs)
+{
+    auto in = make_w4a8_bq_inputs<TD>(params);
+    const size_t lda = in.k;
+    const size_t ldb = in.k;
+    const size_t ldc = in.n;
+    const size_t ldd = in.n;
+
+    std::vector<int8_t> A_i8(in.m * in.k);
+    std::vector<float> scale_a(in.m);
+    std::vector<int32_t> zp_a(in.m);
+    quantize_a_qai8dx(in.A_fp32.data(), in.m, in.k, A_i8.data(), scale_a.data(), zp_a.data());
+
+    std::vector<uint8_t> B_int4(in.n * (in.k / 2), 0);
+    std::vector<float> scale_b(in.n * in.ldsb);
+    quantize_b_qsi4c2(in.B_fp32.data(), in.n, in.k, in.bl, B_int4.data(), scale_b.data(), in.ldsb);
+
+    std::vector<float> D_ref_fp32(in.m * in.n);
+    ref_qai8dx_qsi4c2(in.m, in.n, in.k, in.bl, A_i8.data(), B_int4.data(), scale_a.data(),
+                      zp_a.data(), scale_b.data(), in.ldsb, in.has_c ? in.C_fp32.data() : nullptr,
+                      in.has_bias ? in.bias_fp32.data() : nullptr, D_ref_fp32.data(),
+                      in.clamp_min_f, in.clamp_max_f);
+    auto D_ref = round_through_td<TD>(D_ref_fp32);
+
+    struct tqt_qai8dx_qsi4c2_params qparams;
+    qparams.scale_a = scale_a.data();
+    qparams.zero_point_a = zp_a.data();
+    qparams.scale_b = scale_b.data();
+    qparams.ldsb = in.ldsb;
+
+    const size_t a_packed_size = funcs.get_a_packed_size(in.m, in.k);
+    const size_t b_packed_size = funcs.get_b_packed_size(in.n, in.k);
+    std::vector<uint8_t> A_packed(a_packed_size);
+    std::vector<uint8_t> B_packed(b_packed_size);
+    funcs.run_a_pack(in.m, in.k, lda, in.k, 0, A_i8.data(), A_packed.data());
+    funcs.run_bt_pack(in.n, in.k, ldb, in.k, 0, B_int4.data(), B_packed.data());
+
+    std::vector<TD> D_act(in.m * in.n, to_target_type<TD>(0.0f));
+    funcs.run_gemm(in.m, in.n, in.k, in.bl, A_packed.data(), lda, 0, B_packed.data(), ldb, 0,
+                   in.has_c ? in.C_data.data() : nullptr, ldc, D_act.data(), ldd,
+                   in.has_bias ? in.bias_data.data() : nullptr, in.clamp_min_td, in.clamp_max_td,
+                   &qparams);
+
+    verify_w4a8_bq_result(D_ref, D_act, params);
+}
+
+// ---------- Class 2 unpacked: qsi8d2 × qsi4c2t ----------
+template <typename TD>
+inline void run_w4a8_bq_qsi8d2_qsi4c2t_test(const GemmTestParams &params,
+                                            const W4A8BQ_Qsi8d2_Qsi4c2_Funcs<TD> &funcs)
+{
+    auto in = make_w4a8_bq_inputs<TD>(params);
+    const size_t lda = in.k;
+    const size_t ldb = in.k;
+    const size_t ldc = in.n;
+    const size_t ldd = in.n;
+
+    std::vector<int8_t> A_i8(in.m * in.k);
+    std::vector<float> scale_a(in.m * in.ldsa);
+    quantize_a_qsi8d2(in.A_fp32.data(), in.m, in.k, in.bl, A_i8.data(), scale_a.data(), in.ldsa);
+
+    std::vector<uint8_t> B_int4(in.n * (in.k / 2), 0);
+    std::vector<float> scale_b(in.n * in.ldsb);
+    quantize_b_qsi4c2(in.B_fp32.data(), in.n, in.k, in.bl, B_int4.data(), scale_b.data(), in.ldsb);
+
+    std::vector<float> D_ref_fp32(in.m * in.n);
+    ref_qsi8d2_qsi4c2(in.m, in.n, in.k, in.bl, A_i8.data(), B_int4.data(), scale_a.data(), in.ldsa,
+                      scale_b.data(), in.ldsb, in.has_c ? in.C_fp32.data() : nullptr,
+                      in.has_bias ? in.bias_fp32.data() : nullptr, D_ref_fp32.data(),
+                      in.clamp_min_f, in.clamp_max_f);
+    auto D_ref = round_through_td<TD>(D_ref_fp32);
+
+    struct tqt_qsi8d2_qsi4c2_params qparams;
+    qparams.scale_a = scale_a.data();
+    qparams.ldsa = in.ldsa;
+    qparams.scale_b = scale_b.data();
+    qparams.ldsb = in.ldsb;
+
+    std::vector<TD> D_act(in.m * in.n, to_target_type<TD>(0.0f));
+    funcs.run_gemm(in.m, in.n, in.k, in.bl, A_i8.data(), lda, 0, B_int4.data(), ldb, 0,
+                   in.has_c ? in.C_data.data() : nullptr, ldc, D_act.data(), ldd,
+                   in.has_bias ? in.bias_data.data() : nullptr, in.clamp_min_td, in.clamp_max_td,
+                   &qparams);
+
+    verify_w4a8_bq_result(D_ref, D_act, params);
+}
+
+// ---------- Class 2 packed: qsi8d2p × qsi4c2p ----------
+template <typename TD>
+inline void run_w4a8_bq_qsi8d2p_qsi4c2p_test(const GemmTestParams &params,
+                                             const W4A8BQ_Qsi8d2_Qsi4c2_PackedFuncs<TD> &funcs)
+{
+    auto in = make_w4a8_bq_inputs<TD>(params);
+    const size_t lda = in.k;
+    const size_t ldb = in.k;
+    const size_t ldc = in.n;
+    const size_t ldd = in.n;
+
+    std::vector<int8_t> A_i8(in.m * in.k);
+    std::vector<float> scale_a(in.m * in.ldsa);
+    quantize_a_qsi8d2(in.A_fp32.data(), in.m, in.k, in.bl, A_i8.data(), scale_a.data(), in.ldsa);
+
+    std::vector<uint8_t> B_int4(in.n * (in.k / 2), 0);
+    std::vector<float> scale_b(in.n * in.ldsb);
+    quantize_b_qsi4c2(in.B_fp32.data(), in.n, in.k, in.bl, B_int4.data(), scale_b.data(), in.ldsb);
+
+    std::vector<float> D_ref_fp32(in.m * in.n);
+    ref_qsi8d2_qsi4c2(in.m, in.n, in.k, in.bl, A_i8.data(), B_int4.data(), scale_a.data(), in.ldsa,
+                      scale_b.data(), in.ldsb, in.has_c ? in.C_fp32.data() : nullptr,
+                      in.has_bias ? in.bias_fp32.data() : nullptr, D_ref_fp32.data(),
+                      in.clamp_min_f, in.clamp_max_f);
+    auto D_ref = round_through_td<TD>(D_ref_fp32);
+
+    struct tqt_qsi8d2_qsi4c2_params qparams;
+    qparams.scale_a = scale_a.data();
+    qparams.ldsa = in.ldsa;
+    qparams.scale_b = scale_b.data();
+    qparams.ldsb = in.ldsb;
+
+    const size_t a_packed_size = funcs.get_a_packed_size(in.m, in.k);
+    const size_t b_packed_size = funcs.get_b_packed_size(in.n, in.k);
+    std::vector<uint8_t> A_packed(a_packed_size);
+    std::vector<uint8_t> B_packed(b_packed_size);
+    funcs.run_a_pack(in.m, in.k, lda, in.k, 0, A_i8.data(), A_packed.data());
+    funcs.run_bt_pack(in.n, in.k, ldb, in.k, 0, B_int4.data(), B_packed.data());
+
+    std::vector<TD> D_act(in.m * in.n, to_target_type<TD>(0.0f));
+    funcs.run_gemm(in.m, in.n, in.k, in.bl, A_packed.data(), lda, 0, B_packed.data(), ldb, 0,
+                   in.has_c ? in.C_data.data() : nullptr, ldc, D_act.data(), ldd,
+                   in.has_bias ? in.bias_data.data() : nullptr, in.clamp_min_td, in.clamp_max_td,
+                   &qparams);
+
+    verify_w4a8_bq_result(D_ref, D_act, params);
+}
+
+// ---------- Class 3 unpacked: qsi8d2 × qai4c2t ----------
+template <typename TD>
+inline void run_w4a8_bq_qsi8d2_qai4c2t_test(const GemmTestParams &params,
+                                            const W4A8BQ_Qsi8d2_Qai4c2_Funcs<TD> &funcs)
+{
+    auto in = make_w4a8_bq_inputs<TD>(params);
+    const size_t lda = in.k;
+    const size_t ldb = in.k;
+    const size_t ldc = in.n;
+    const size_t ldd = in.n;
+    const size_t ldzpb = in.ldsb;
+
+    std::vector<int8_t> A_i8(in.m * in.k);
+    std::vector<float> scale_a(in.m * in.ldsa);
+    quantize_a_qsi8d2(in.A_fp32.data(), in.m, in.k, in.bl, A_i8.data(), scale_a.data(), in.ldsa);
+
+    std::vector<uint8_t> B_int4(in.n * (in.k / 2), 0);
+    std::vector<float> scale_b(in.n * in.ldsb);
+    std::vector<float> zp_b(in.n * ldzpb);
+    quantize_b_qai4c2(in.B_fp32.data(), in.n, in.k, in.bl, B_int4.data(), scale_b.data(),
+                      zp_b.data(), in.ldsb, ldzpb);
+
+    std::vector<float> D_ref_fp32(in.m * in.n);
+    ref_qsi8d2_qai4c2(in.m, in.n, in.k, in.bl, A_i8.data(), B_int4.data(), scale_a.data(), in.ldsa,
+                      scale_b.data(), in.ldsb, zp_b.data(), ldzpb,
+                      in.has_c ? in.C_fp32.data() : nullptr,
+                      in.has_bias ? in.bias_fp32.data() : nullptr, D_ref_fp32.data(),
+                      in.clamp_min_f, in.clamp_max_f);
+    auto D_ref = round_through_td<TD>(D_ref_fp32);
+
+    struct tqt_qsi8d2_qai4c2_params qparams;
+    qparams.scale_a = scale_a.data();
+    qparams.ldsa = in.ldsa;
+    qparams.scale_b = scale_b.data();
+    qparams.ldsb = in.ldsb;
+    qparams.zp_b = zp_b.data();
+    qparams.ldzpb = ldzpb;
+
+    std::vector<TD> D_act(in.m * in.n, to_target_type<TD>(0.0f));
+    funcs.run_gemm(in.m, in.n, in.k, in.bl, A_i8.data(), lda, 0, B_int4.data(), ldb, 0,
+                   in.has_c ? in.C_data.data() : nullptr, ldc, D_act.data(), ldd,
+                   in.has_bias ? in.bias_data.data() : nullptr, in.clamp_min_td, in.clamp_max_td,
+                   &qparams);
+
+    verify_w4a8_bq_result(D_ref, D_act, params);
+}
+
+// ---------- Class 3 packed: qsi8d2p × qai4c2p ----------
+template <typename TD>
+inline void run_w4a8_bq_qsi8d2p_qai4c2p_test(const GemmTestParams &params,
+                                             const W4A8BQ_Qsi8d2_Qai4c2_PackedFuncs<TD> &funcs)
+{
+    auto in = make_w4a8_bq_inputs<TD>(params);
+    const size_t lda = in.k;
+    const size_t ldb = in.k;
+    const size_t ldc = in.n;
+    const size_t ldd = in.n;
+    const size_t ldzpb = in.ldsb;
+
+    std::vector<int8_t> A_i8(in.m * in.k);
+    std::vector<float> scale_a(in.m * in.ldsa);
+    quantize_a_qsi8d2(in.A_fp32.data(), in.m, in.k, in.bl, A_i8.data(), scale_a.data(), in.ldsa);
+
+    std::vector<uint8_t> B_int4(in.n * (in.k / 2), 0);
+    std::vector<float> scale_b(in.n * in.ldsb);
+    std::vector<float> zp_b(in.n * ldzpb);
+    quantize_b_qai4c2(in.B_fp32.data(), in.n, in.k, in.bl, B_int4.data(), scale_b.data(),
+                      zp_b.data(), in.ldsb, ldzpb);
+
+    std::vector<float> D_ref_fp32(in.m * in.n);
+    ref_qsi8d2_qai4c2(in.m, in.n, in.k, in.bl, A_i8.data(), B_int4.data(), scale_a.data(), in.ldsa,
+                      scale_b.data(), in.ldsb, zp_b.data(), ldzpb,
+                      in.has_c ? in.C_fp32.data() : nullptr,
+                      in.has_bias ? in.bias_fp32.data() : nullptr, D_ref_fp32.data(),
+                      in.clamp_min_f, in.clamp_max_f);
+    auto D_ref = round_through_td<TD>(D_ref_fp32);
+
+    struct tqt_qsi8d2_qai4c2_params qparams;
+    qparams.scale_a = scale_a.data();
+    qparams.ldsa = in.ldsa;
+    qparams.scale_b = scale_b.data();
+    qparams.ldsb = in.ldsb;
+    qparams.zp_b = zp_b.data();
+    qparams.ldzpb = ldzpb;
+
+    const size_t a_packed_size = funcs.get_a_packed_size(in.m, in.k);
+    const size_t b_packed_size = funcs.get_b_packed_size(in.n, in.k);
+    std::vector<uint8_t> A_packed(a_packed_size);
+    std::vector<uint8_t> B_packed(b_packed_size);
+    funcs.run_a_pack(in.m, in.k, lda, in.k, 0, A_i8.data(), A_packed.data());
+    funcs.run_bt_pack(in.n, in.k, ldb, in.k, 0, B_int4.data(), B_packed.data());
+
+    std::vector<TD> D_act(in.m * in.n, to_target_type<TD>(0.0f));
+    funcs.run_gemm(in.m, in.n, in.k, in.bl, A_packed.data(), lda, 0, B_packed.data(), ldb, 0,
+                   in.has_c ? in.C_data.data() : nullptr, ldc, D_act.data(), ldd,
+                   in.has_bias ? in.bias_data.data() : nullptr, in.clamp_min_td, in.clamp_max_td,
+                   &qparams);
+
+    verify_w4a8_bq_result(D_ref, D_act, params);
+}
+
 }  // namespace test
 }  // namespace torq_tile
+
+// ============================================================================
+// W4A8 block-quantized TEST_P boilerplate macros
+// ----------------------------------------------------------------------------
+// Placed OUTSIDE the namespace so the token-pasted kernel function names
+// (e.g. tqt_run_gemm_<KBASE>_4x1vl_rvv) resolve at global / extern "C" scope.
+// KBASE is the part AFTER "gemm_" (e.g. "1xnbias_clamp_f32_qai8dx_qsi4c2t").
+// Consumer TUs must:
+//   1. `using namespace torq_tile::test;` (or qualified references) so the
+//      Funcs templates and runner names are visible at macro expansion.
+//   2. Define a static `common_w4a8_bq_test_values()` returning a
+//      `testing::Values(...)` of GemmTestParams in the TU before invoking
+//      the macros (the macros reference this name verbatim).
+// ============================================================================
+
+// Unpacked test: kernel base + TD + runner + funcs typename.
+#define W4A8_BQ_DEFINE_UNPACKED_TEST(KBASE, TD, RUNNER, FUNCS_TYPE)                     \
+    static FUNCS_TYPE<TD> make_gemm_##KBASE##_funcs()                                   \
+    {                                                                                   \
+        FUNCS_TYPE<TD> funcs;                                                           \
+        funcs.get_m_step = tqt_get_m_step_gemm_##KBASE##_4x1vl_rvv;                     \
+        funcs.get_n_step = tqt_get_n_step_gemm_##KBASE##_4x1vl_rvv;                     \
+        funcs.run_gemm = tqt_run_gemm_##KBASE##_4x1vl_rvv;                              \
+        return funcs;                                                                   \
+    }                                                                                   \
+    class Test_gemm_##KBASE##_4x1vl_rvv : public testing::TestWithParam<GemmTestParams> \
+    {                                                                                   \
+    };                                                                                  \
+    TEST_P(Test_gemm_##KBASE##_4x1vl_rvv, Correctness)                                  \
+    {                                                                                   \
+        auto funcs = make_gemm_##KBASE##_funcs();                                       \
+        RUNNER<TD>(GetParam(), funcs);                                                  \
+    }                                                                                   \
+    INSTANTIATE_TEST_SUITE_P(GemmTests, Test_gemm_##KBASE##_4x1vl_rvv,                  \
+                             common_w4a8_bq_test_values(), GemmTestParamNameGenerator())
+
+// Packed test: kernel base + TD + runner + funcs typename.
+#define W4A8_BQ_DEFINE_PACKED_TEST(KBASE, TD, RUNNER, FUNCS_TYPE)                       \
+    static FUNCS_TYPE<TD> make_gemm_##KBASE##_funcs()                                   \
+    {                                                                                   \
+        FUNCS_TYPE<TD> funcs;                                                           \
+        funcs.get_m_step = tqt_get_m_step_gemm_##KBASE##_4x1vl_rvv;                     \
+        funcs.get_n_step = tqt_get_n_step_gemm_##KBASE##_4x1vl_rvv;                     \
+        funcs.get_a_packed_size = tqt_get_a_packed_size_gemm_##KBASE##_4x1vl_rvv;       \
+        funcs.get_b_packed_size = tqt_get_b_packed_size_gemm_##KBASE##_4x1vl_rvv;       \
+        funcs.run_a_pack = tqt_run_a_pack_gemm_##KBASE##_4x1vl_rvv;                     \
+        funcs.run_bt_pack = tqt_run_bt_pack_gemm_##KBASE##_4x1vl_rvv;                   \
+        funcs.run_gemm = tqt_run_gemm_##KBASE##_4x1vl_rvv;                              \
+        return funcs;                                                                   \
+    }                                                                                   \
+    class Test_gemm_##KBASE##_4x1vl_rvv : public testing::TestWithParam<GemmTestParams> \
+    {                                                                                   \
+    };                                                                                  \
+    TEST_P(Test_gemm_##KBASE##_4x1vl_rvv, Correctness)                                  \
+    {                                                                                   \
+        auto funcs = make_gemm_##KBASE##_funcs();                                       \
+        RUNNER<TD>(GetParam(), funcs);                                                  \
+    }                                                                                   \
+    INSTANTIATE_TEST_SUITE_P(GemmTests, Test_gemm_##KBASE##_4x1vl_rvv,                  \
+                             common_w4a8_bq_test_values(), GemmTestParamNameGenerator())

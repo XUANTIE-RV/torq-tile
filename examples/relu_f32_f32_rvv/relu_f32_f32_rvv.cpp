@@ -1,0 +1,172 @@
+//
+// SPDX-FileCopyrightText: Copyright 2024-2026 C-SKY Microsystems Co., Ltd.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+
+#if !defined(__riscv) || !defined(__riscv_v)
+#error This file must be compiled for riscv, riscv_vector.
+#endif  // Architectural features check.
+
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+
+#include "src/common/tqt_common.h"
+
+// Include micro-kernel variants
+#include "tqt_relu_f32_f32_1x8vl_rvv.h"
+#include "tqt_relu_f32_f32_interface.h"
+
+namespace
+{
+/// Micro-kernel interface
+const tqt_relu_f32_f32_ukernel ukernel{tqt_get_m_step_relu_f32_f32_1x8vl_rvv,
+                                       tqt_get_n_step_relu_f32_f32_1x8vl_rvv,
+                                       tqt_run_relu_f32_f32_1x8vl_rvv};
+
+// Fill buffer with random values
+void fill_random(size_t n, float *vec, float min_val, float max_val)
+{
+    for (size_t i = 0; i < n; ++i) {
+        vec[i] = min_val + (max_val - min_val) * ((float)rand() / (float)RAND_MAX);
+    }
+}
+
+// Reference implementation: c[i, j] = max(a[i, j], 0), honouring both leading dimensions
+void run_relu_ref(size_t m, size_t n, const float *a, size_t lda, float *c, size_t ldc)
+{
+    for (size_t i = 0; i < m; ++i) {
+        for (size_t j = 0; j < n; ++j) {
+            const float x = a[i * lda + j];
+            c[i * ldc + j] = x > 0.0f ? x : 0.0f;
+        }
+    }
+}
+
+// Verify results element-wise over the [m, n] window
+bool verify_results(size_t m, size_t n, size_t ldc, float tolerance, const float *ref,
+                    const float *act)
+{
+    bool passed = true;
+    float max_diff = 0.0f;
+
+    for (size_t i = 0; i < m; ++i) {
+        for (size_t j = 0; j < n; ++j) {
+            const float r = ref[i * ldc + j];
+            const float v = act[i * ldc + j];
+            const float diff = fabsf(r - v);
+
+            if (diff > max_diff) {
+                max_diff = diff;
+            }
+
+            // Use relative tolerance for large values
+            const float ref_abs = fabsf(r);
+            const float tol = (ref_abs > 1.0f) ? tolerance * ref_abs : tolerance;
+            if (diff > tol) {
+#ifdef TQT_DEBUG
+                printf("[%zu, %zu]: ref=%.6f vs act=%.6f (diff=%.6f) [FAIL]\n", i, j, r, v, diff);
+#endif
+                passed = false;
+            }
+        }
+    }
+
+#ifdef TQT_DEBUG
+    printf("Max difference: %.6f\n", max_diff);
+#endif
+
+    return passed;
+}
+
+// Calculate cosine similarity over the [m, n] window
+float calculate_cosine_similarity(size_t m, size_t n, size_t ldc, const float *ref,
+                                  const float *act)
+{
+    double dot_product = 0.0;
+    double ref_norm = 0.0;
+    double act_norm = 0.0;
+
+    for (size_t i = 0; i < m; ++i) {
+        for (size_t j = 0; j < n; ++j) {
+            const double r = (double)ref[i * ldc + j];
+            const double v = (double)act[i * ldc + j];
+            dot_product += r * v;
+            ref_norm += r * r;
+            act_norm += v * v;
+        }
+    }
+
+    ref_norm = sqrt(ref_norm);
+    act_norm = sqrt(act_norm);
+
+    if (ref_norm > 0.0 && act_norm > 0.0) {
+        return (float)(dot_product / (ref_norm * act_norm));
+    }
+
+    return 0.0f;
+}
+
+}  // namespace
+
+int main()
+{
+    const size_t M = 16;
+    const size_t N = 100;
+
+    // Independent input / output leading dimensions. The padding is what makes the
+    // strided traversal the one under test, which is the point of this contract.
+    const size_t lda = N + 4;
+    const size_t ldc = N + 3;
+
+    printf("TEST[relu_f32_f32]\n");
+    printf("- ukernel: relu_f32_f32_1x8vl_rvv\n");
+    printf("- m_step: %zu, n_step: %zu\n", ukernel.get_m_step(), ukernel.get_n_step());
+    printf("- shape: M=%zu N=%zu lda=%zu ldc=%zu\n", M, N, lda, ldc);
+
+    // Allocate memory
+    float *a = (float *)malloc(M * lda * sizeof(float));
+    float *c_ref = (float *)malloc(M * ldc * sizeof(float));
+    float *c_actual = (float *)malloc(M * ldc * sizeof(float));
+
+    if (!a || !c_ref || !c_actual) {
+        fprintf(stderr, "Memory allocation failed\n");
+        free(a);
+        free(c_ref);
+        free(c_actual);
+        return 1;
+    }
+
+    // Initialize the whole input extent, padding included
+    fill_random(M * lda, a, -8.0f, 8.0f);
+
+    // Initialize both output buffers, including row padding
+    for (size_t i = 0; i < M * ldc; ++i) {
+        c_ref[i] = 0.0f;
+        c_actual[i] = 0.0f;
+    }
+
+    // Run reference implementation
+    run_relu_ref(M, N, a, lda, c_ref, ldc);
+
+    // Run micro-kernel implementation
+    ukernel.run_relu(M, N, a, lda, c_actual, ldc);
+
+    // Verify results
+    const float tolerance = 1e-6f;
+    const bool exact = verify_results(M, N, ldc, tolerance, c_ref, c_actual);
+
+    // Calculate cosine similarity
+    const float cosine_sim = calculate_cosine_similarity(M, N, ldc, c_ref, c_actual);
+    const bool passed = exact && cosine_sim > 0.9999f;
+
+    printf("- Cosine Similarity: %f\n", cosine_sim);
+    printf("- Status: %s\n", passed ? "PASSED" : "FAILED");
+
+    free(a);
+    free(c_ref);
+    free(c_actual);
+
+    return passed ? 0 : 1;
+}

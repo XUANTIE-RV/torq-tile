@@ -51,6 +51,9 @@ void register_mul_f32_f32_rvv_benchmarks();
 void register_div_f32_f32_rvv_benchmarks();
 void register_sum_f32_f32_rvv_benchmarks();
 void register_mean_f32_f32_rvv_benchmarks();
+void register_relu_f32_f32_rvv_benchmarks();
+void register_gelu_f32_f32_rvv_benchmarks();
+void register_silu_f32_f32_rvv_benchmarks();
 #endif
 
 #ifdef TORQ_TILE_ENABLE_RVV_FP16
@@ -67,6 +70,9 @@ void register_mul_f16_f16_rvv_benchmarks();
 void register_div_f16_f16_rvv_benchmarks();
 void register_sum_f16_f16_rvv_benchmarks();
 void register_mean_f16_f16_rvv_benchmarks();
+void register_relu_f16_f16_rvv_benchmarks();
+void register_gelu_f16_f16_rvv_benchmarks();
+void register_silu_f16_f16_rvv_benchmarks();
 #endif
 
 #ifdef TORQ_TILE_ENABLE_RVV_BF16
@@ -156,6 +162,20 @@ inline void register_reduction_benchmarks()
 #ifdef TORQ_TILE_ENABLE_RVV_FP16
     register_sum_f16_f16_rvv_benchmarks();
     register_mean_f16_f16_rvv_benchmarks();
+#endif
+}
+
+inline void register_activation_benchmarks()
+{
+#ifdef TORQ_TILE_ENABLE_RVV
+    register_relu_f32_f32_rvv_benchmarks();
+    register_gelu_f32_f32_rvv_benchmarks();
+    register_silu_f32_f32_rvv_benchmarks();
+#endif
+#ifdef TORQ_TILE_ENABLE_RVV_FP16
+    register_relu_f16_f16_rvv_benchmarks();
+    register_gelu_f16_f16_rvv_benchmarks();
+    register_silu_f16_f16_rvv_benchmarks();
 #endif
 }
 
@@ -255,6 +275,7 @@ int main(int argc, char **argv)
     torq_tile::benchmark::register_conv_benchmarks();
     torq_tile::benchmark::register_elementwise_benchmarks();
     torq_tile::benchmark::register_reduction_benchmarks();
+    torq_tile::benchmark::register_activation_benchmarks();
 
     // Initialize and run Google Benchmark
     ::benchmark::Initialize(&argc, argv);

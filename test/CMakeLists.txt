@@ -15,6 +15,7 @@ add_library(torq_tile_test_common STATIC
     common/reference_dwconv.cpp
     common/reference_elementwise.cpp
     common/reference_reduction.cpp
+    common/reference_activation.cpp
     common/verify.cpp
 )
 
@@ -118,6 +119,14 @@ if(TORQ_TILE_ENABLE_RVV)
         reduction/test_sum_f32_f32_rvv.cpp)
     torq_tile_add_test(test_mean_f32_f32_rvv
         reduction/test_mean_f32_f32_rvv.cpp)
+
+    # --- Activation F32 RVV variants ---
+    torq_tile_add_test(test_relu_f32_f32_rvv
+        activation/test_relu_f32_f32_rvv.cpp)
+    torq_tile_add_test(test_gelu_f32_f32_rvv
+        activation/test_gelu_f32_f32_rvv.cpp)
+    torq_tile_add_test(test_silu_f32_f32_rvv
+        activation/test_silu_f32_f32_rvv.cpp)
 endif()
 
 if(TORQ_TILE_ENABLE_RVV_F64)
@@ -155,6 +164,14 @@ if(TORQ_TILE_ENABLE_RVV_FP16)
         reduction/test_sum_f16_f16_rvv.cpp)
     torq_tile_add_test(test_mean_f16_f16_rvv
         reduction/test_mean_f16_f16_rvv.cpp)
+
+    # --- Activation F16 RVV variants ---
+    torq_tile_add_test(test_relu_f16_f16_rvv
+        activation/test_relu_f16_f16_rvv.cpp)
+    torq_tile_add_test(test_gelu_f16_f16_rvv
+        activation/test_gelu_f16_f16_rvv.cpp)
+    torq_tile_add_test(test_silu_f16_f16_rvv
+        activation/test_silu_f16_f16_rvv.cpp)
 endif()
 
 if(TORQ_TILE_ENABLE_RVV_BF16)

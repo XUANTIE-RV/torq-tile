@@ -118,6 +118,10 @@ set(TORQ_TILE_RVV_SOURCES
     src/reduction/sum_f32_f32/sumcol_f32_f32/tqt_sumcol_f32_f32_2x8vl_rvv.cpp
     src/reduction/mean_f32_f32/meanrow_f32_f32/tqt_meanrow_f32_f32_4x4vl_rvv.cpp
     src/reduction/mean_f32_f32/meancol_f32_f32/tqt_meancol_f32_f32_2x8vl_rvv.cpp
+    # Activation F32 RVV
+    src/activation/relu_f32_f32/relu_f32_f32/tqt_relu_f32_f32_1x8vl_rvv.cpp
+    src/activation/gelu_f32_f32/gelu_f32_f32/tqt_gelu_f32_f32_1x4vl_rvv.cpp
+    src/activation/silu_f32_f32/silu_f32_f32/tqt_silu_f32_f32_1x4vl_rvv.cpp
     # INT8 RVV
     src/gemm/gemm_i8_i8/gemm_clamp_i32_i8_i8/tqt_gemm_clamp_i32_i8_i8_4x1vl_rvv.cpp
     src/gemm/gemm_i8_i8/gemm_clamp_i32_i8p_i8p/tqt_gemm_clamp_i32_i8p_i8p_4x1vl_rvv.cpp
@@ -238,6 +242,10 @@ set(TORQ_TILE_RVV_FP16_SOURCES
     src/reduction/sum_f16_f16/sumcol_f16_f16/tqt_sumcol_f16_f16_2x4vl_rvv.cpp
     src/reduction/mean_f16_f16/meanrow_f16_f16/tqt_meanrow_f16_f16_4x2vl_rvv.cpp
     src/reduction/mean_f16_f16/meancol_f16_f16/tqt_meancol_f16_f16_2x4vl_rvv.cpp
+    # Activation F16 RVV
+    src/activation/relu_f16_f16/relu_f16_f16/tqt_relu_f16_f16_1x8vl_rvv.cpp
+    src/activation/gelu_f16_f16/gelu_f16_f16/tqt_gelu_f16_f16_1x2vl_rvv.cpp
+    src/activation/silu_f16_f16/silu_f16_f16/tqt_silu_f16_f16_1x2vl_rvv.cpp
 )
 
 # RVV BF16 (RISC-V Vector + Zvfbfwma) kernel files

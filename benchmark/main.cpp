@@ -50,6 +50,7 @@ void register_dwconv_f16_f16_rvv_benchmarks();
 
 #ifdef TORQ_TILE_ENABLE_RVV_BF16
 void register_gemm_bf16_bf16_rvv_benchmarks();
+void register_conv_bf16_bf16_rvv_benchmarks();
 #endif
 
 #ifdef TORQ_TILE_ENABLE_RVV_F64
@@ -92,6 +93,9 @@ inline void register_conv_benchmarks()
     register_igemmcf_f16_f16_rvv_benchmarks();
     register_igemmcl_f16_f16_rvv_benchmarks();
     register_dwconv_f16_f16_rvv_benchmarks();
+#endif
+#ifdef TORQ_TILE_ENABLE_RVV_BF16
+    register_conv_bf16_bf16_rvv_benchmarks();
 #endif
 }
 

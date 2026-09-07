@@ -15,6 +15,8 @@
 #include "src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f32_bf16_bf16/tqt_gemm_1xnbias_clamp_f32_bf16_bf16_8x1vl_rvv.h"
 #include "src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f32_bf16_bf16t/tqt_gemm_1xnbias_clamp_f32_bf16_bf16t_8x1vl_rvv.h"
 #include "src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f32_bf16p_bf16p/tqt_gemm_1xnbias_clamp_f32_bf16p_bf16p_8x1vl_rvv.h"
+#include "src/gemm/gemm_bf16_bf16/gemm_mx1bias_clamp_bf16_bf16_bf16/tqt_gemm_mx1bias_clamp_bf16_bf16_bf16_8x1vl_rvv.h"
+#include "src/gemm/gemm_bf16_bf16/gemm_mx1bias_clamp_bf16_bf16p_bf16p/tqt_gemm_mx1bias_clamp_bf16_bf16p_bf16p_8x1vl_rvv.h"
 
 namespace torq_tile
 {
@@ -196,6 +198,42 @@ static PackedGemmFuncs<float> make_packed_1xnbias_f32_bf16p_bf16p_8x1vl_rvv()
 }
 
 // ============================================================================
+// NonPacked, B RowMajor, Mx1 bias: gemm_mx1bias_clamp_bf16_bf16_bf16_8x1vl_rvv
+// ============================================================================
+
+static NonPackedGemmFuncs<bfloat16_t> make_nonpacked_mx1bias_bf16_bf16_bf16_8x1vl_rvv()
+{
+    return {
+        tqt_get_m_step_gemm_mx1bias_clamp_bf16_bf16_bf16_8x1vl_rvv,
+        tqt_get_n_step_gemm_mx1bias_clamp_bf16_bf16_bf16_8x1vl_rvv,
+        tqt_get_a_offset_gemm_mx1bias_clamp_bf16_bf16_bf16_8x1vl_rvv,
+        tqt_get_b_offset_gemm_mx1bias_clamp_bf16_bf16_bf16_8x1vl_rvv,
+        tqt_get_d_offset_gemm_mx1bias_clamp_bf16_bf16_bf16_8x1vl_rvv,
+        tqt_run_gemm_mx1bias_clamp_bf16_bf16_bf16_8x1vl_rvv,
+    };
+}
+
+// ============================================================================
+// Packed, Mx1 bias: gemm_mx1bias_clamp_bf16_bf16p_bf16p_8x1vl_rvv
+// ============================================================================
+
+static PackedGemmFuncs<bfloat16_t> make_packed_mx1bias_bf16_bf16p_bf16p_8x1vl_rvv()
+{
+    return {
+        tqt_get_m_step_gemm_mx1bias_clamp_bf16_bf16p_bf16p_8x1vl_rvv,
+        tqt_get_n_step_gemm_mx1bias_clamp_bf16_bf16p_bf16p_8x1vl_rvv,
+        tqt_get_a_packed_offset_gemm_mx1bias_clamp_bf16_bf16p_bf16p_8x1vl_rvv,
+        tqt_get_b_packed_offset_gemm_mx1bias_clamp_bf16_bf16p_bf16p_8x1vl_rvv,
+        tqt_get_d_offset_gemm_mx1bias_clamp_bf16_bf16p_bf16p_8x1vl_rvv,
+        tqt_get_a_packed_size_gemm_mx1bias_clamp_bf16_bf16p_bf16p_8x1vl_rvv,
+        tqt_get_b_packed_size_gemm_mx1bias_clamp_bf16_bf16p_bf16p_8x1vl_rvv,
+        tqt_run_a_pack_gemm_mx1bias_clamp_bf16_bf16p_bf16p_8x1vl_rvv,
+        tqt_run_bt_pack_gemm_mx1bias_clamp_bf16_bf16p_bf16p_8x1vl_rvv,
+        tqt_run_gemm_mx1bias_clamp_bf16_bf16p_bf16p_8x1vl_rvv,
+    };
+}
+
+// ============================================================================
 // Registration
 // ============================================================================
 
@@ -238,6 +276,14 @@ void register_gemm_bf16_bf16_rvv_benchmarks()
     register_packed_gemm_benchmark<bfloat16_t, float>(
         "tqt_gemm_1xnbias_clamp_f32_bf16p_bf16p_8x1vl_rvv",
         make_packed_1xnbias_f32_bf16p_bf16p_8x1vl_rvv());
+
+    register_nonpacked_gemm_benchmark<bfloat16_t, bfloat16_t, BLayout::kRowMajor>(
+        "tqt_gemm_mx1bias_clamp_bf16_bf16_bf16_8x1vl_rvv",
+        make_nonpacked_mx1bias_bf16_bf16_bf16_8x1vl_rvv());
+
+    register_packed_gemm_benchmark<bfloat16_t, bfloat16_t>(
+        "tqt_gemm_mx1bias_clamp_bf16_bf16p_bf16p_8x1vl_rvv",
+        make_packed_mx1bias_bf16_bf16p_bf16p_8x1vl_rvv());
 }
 
 }  // namespace benchmark

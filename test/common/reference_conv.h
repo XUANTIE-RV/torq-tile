@@ -47,6 +47,10 @@ extern template void reference_conv<float16_t>(size_t, const float16_t *, const 
                                                const float16_t *, float16_t *,
                                                const tqt_conv_params *, ConvLayout, float16_t,
                                                float16_t);
+extern template void reference_conv<bfloat16_t>(size_t, const bfloat16_t *, const bfloat16_t *,
+                                                const bfloat16_t *, bfloat16_t *,
+                                                const tqt_conv_params *, ConvLayout, bfloat16_t,
+                                                bfloat16_t);
 
 }  // namespace test
 }  // namespace torq_tile

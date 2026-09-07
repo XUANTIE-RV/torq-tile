@@ -205,6 +205,13 @@ set(TORQ_TILE_RVV_BF16_SOURCES
     src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f32_bf16_bf16/tqt_gemm_1xnbias_clamp_f32_bf16_bf16_8x1vl_rvv.cpp
     src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f32_bf16_bf16t/tqt_gemm_1xnbias_clamp_f32_bf16_bf16t_8x1vl_rvv.cpp
     src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f32_bf16p_bf16p/tqt_gemm_1xnbias_clamp_f32_bf16p_bf16p_8x1vl_rvv.cpp
+    src/gemm/gemm_bf16_bf16/gemm_mx1bias_clamp_bf16_bf16_bf16/tqt_gemm_mx1bias_clamp_bf16_bf16_bf16_8x1vl_rvv.cpp
+    src/gemm/gemm_bf16_bf16/gemm_mx1bias_clamp_bf16_bf16p_bf16p/tqt_gemm_mx1bias_clamp_bf16_bf16p_bf16p_8x1vl_rvv.cpp
+    # BF16 convolution
+    src/conv/conv_bf16_bf16/convcf_mx1bias_clamp_bf16_bf16_bf16/tqt_convcf_mx1bias_clamp_bf16_bf16_bf16_8x1vl_rvv.cpp
+    src/conv/conv_bf16_bf16/convcf_mx1bias_clamp_bf16_bf16p_bf16p/tqt_convcf_mx1bias_clamp_bf16_bf16p_bf16p_8x1vl_rvv.cpp
+    src/conv/conv_bf16_bf16/convcl_1xnbias_clamp_bf16_bf16_bf16t/tqt_convcl_1xnbias_clamp_bf16_bf16_bf16t_8x1vl_rvv.cpp
+    src/conv/conv_bf16_bf16/convcl_1xnbias_clamp_bf16_bf16p_bf16p/tqt_convcl_1xnbias_clamp_bf16_bf16p_bf16p_8x1vl_rvv.cpp
     src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_bf16_qai8dx_qsi4cxt/tqt_gemm_1xnbias_clamp_bf16_qai8dx_qsi4cxt_4x1vl_rvv.cpp
     src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_bf16_qai8dxp_qsi4cxp/tqt_gemm_1xnbias_clamp_bf16_qai8dxp_qsi4cxp_4x1vl_rvv.cpp
     src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_bf16_qsi8d2_qsi4c2t/tqt_gemm_1xnbias_clamp_bf16_qsi8d2_qsi4c2t_4x1vl_rvv.cpp

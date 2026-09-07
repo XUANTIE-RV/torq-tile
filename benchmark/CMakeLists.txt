@@ -48,6 +48,7 @@ endif()
 if(TORQ_TILE_ENABLE_RVV_BF16)
     list(APPEND TORQ_TILE_BENCHMARK_SOURCES
         gemm/bench_gemm_bf16_bf16_rvv.cpp
+        conv/bench_conv_bf16_bf16_rvv.cpp
     )
 endif()
 

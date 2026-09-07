@@ -207,6 +207,92 @@ static inline void tqt_add_1xnbias_kernel_gemm_bf16_bf16_8x1vl_rvv(size_t vl,
         asm volatile("vfadd.vv v22, v22, v0" : : : "v22");
 }
 
+/// Add Mx1 bias to fp32 registers (per-row bf16 scalar, broadcast across columns).
+/// Each bias value is widened bf16 -> fp32 by shifting the 16-bit pattern into the
+/// high half of an fp32 word (bf16 is the upper 16 bits of fp32), then broadcast-added
+/// to that row's accumulator via vfadd.vf.
+template <size_t MR>
+static inline void tqt_add_mx1bias_kernel_gemm_bf16_bf16_8x1vl_rvv(size_t vl,
+                                                                   const bfloat16_t *BIAS)
+{
+    static_assert(MR >= 1 && MR <= 8, "MR must be in range [1, 8]");
+
+    asm volatile("vsetvli zero, %0, e32, m2, ta, ma" : : "r"(vl) :);
+
+    if constexpr (MR >= 1)
+        asm volatile(
+            "lhu      t0, 0(%0)\n\t"
+            "slli     t0, t0, 16\n\t"
+            "fmv.w.x  ft0, t0\n\t"
+            "vfadd.vf v8, v8, ft0\n\t"
+            :
+            : "r"(BIAS + 0)
+            : "t0", "ft0", "v8", "memory");
+    if constexpr (MR >= 2)
+        asm volatile(
+            "lhu      t0, 0(%0)\n\t"
+            "slli     t0, t0, 16\n\t"
+            "fmv.w.x  ft1, t0\n\t"
+            "vfadd.vf v10, v10, ft1\n\t"
+            :
+            : "r"(BIAS + 1)
+            : "t0", "ft1", "v10", "memory");
+    if constexpr (MR >= 3)
+        asm volatile(
+            "lhu      t0, 0(%0)\n\t"
+            "slli     t0, t0, 16\n\t"
+            "fmv.w.x  ft2, t0\n\t"
+            "vfadd.vf v12, v12, ft2\n\t"
+            :
+            : "r"(BIAS + 2)
+            : "t0", "ft2", "v12", "memory");
+    if constexpr (MR >= 4)
+        asm volatile(
+            "lhu      t0, 0(%0)\n\t"
+            "slli     t0, t0, 16\n\t"
+            "fmv.w.x  ft3, t0\n\t"
+            "vfadd.vf v14, v14, ft3\n\t"
+            :
+            : "r"(BIAS + 3)
+            : "t0", "ft3", "v14", "memory");
+    if constexpr (MR >= 5)
+        asm volatile(
+            "lhu      t0, 0(%0)\n\t"
+            "slli     t0, t0, 16\n\t"
+            "fmv.w.x  ft4, t0\n\t"
+            "vfadd.vf v16, v16, ft4\n\t"
+            :
+            : "r"(BIAS + 4)
+            : "t0", "ft4", "v16", "memory");
+    if constexpr (MR >= 6)
+        asm volatile(
+            "lhu      t0, 0(%0)\n\t"
+            "slli     t0, t0, 16\n\t"
+            "fmv.w.x  ft5, t0\n\t"
+            "vfadd.vf v18, v18, ft5\n\t"
+            :
+            : "r"(BIAS + 5)
+            : "t0", "ft5", "v18", "memory");
+    if constexpr (MR >= 7)
+        asm volatile(
+            "lhu      t0, 0(%0)\n\t"
+            "slli     t0, t0, 16\n\t"
+            "fmv.w.x  ft6, t0\n\t"
+            "vfadd.vf v20, v20, ft6\n\t"
+            :
+            : "r"(BIAS + 6)
+            : "t0", "ft6", "v20", "memory");
+    if constexpr (MR >= 8)
+        asm volatile(
+            "lhu      t0, 0(%0)\n\t"
+            "slli     t0, t0, 16\n\t"
+            "fmv.w.x  ft7, t0\n\t"
+            "vfadd.vf v22, v22, ft7\n\t"
+            :
+            : "r"(BIAS + 7)
+            : "t0", "ft7", "v22", "memory");
+}
+
 /// Apply clamp (min/max) to fp32 registers
 template <size_t MR>
 static inline void tqt_clamp_kernel_gemm_bf16_bf16_8x1vl_rvv(size_t vl, bfloat16_t min,
@@ -216,12 +302,19 @@ static inline void tqt_clamp_kernel_gemm_bf16_bf16_8x1vl_rvv(size_t vl, bfloat16
 
     asm volatile("vsetvli zero, %0, e32, m2, ta, ma" : : "r"(vl) :);
 
+    // Widen bf16 min/max to fp32 scalars (bf16 is the upper 16 bits of fp32) before
+    // applying them to the fp32 accumulators. A plain flh would NaN-box the value as
+    // an IEEE half and corrupt the e32 vfmax/vfmin.
     asm volatile(
-        "flh ft8, 0(%0)\n\t"
-        "flh ft9, 0(%1)\n\t"
+        "lhu     t0, 0(%0)\n\t"
+        "slli    t0, t0, 16\n\t"
+        "fmv.w.x ft8, t0\n\t"
+        "lhu     t1, 0(%1)\n\t"
+        "slli    t1, t1, 16\n\t"
+        "fmv.w.x ft9, t1\n\t"
         :
         : "r"(&min), "r"(&max)
-        : "ft8", "ft9", "memory");
+        : "t0", "t1", "ft8", "ft9", "memory");
 
     if constexpr (MR >= 1) {
         asm volatile("vfmax.vf v8, v8, ft8" : : : "v8");

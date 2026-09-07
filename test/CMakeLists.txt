@@ -113,4 +113,6 @@ if(TORQ_TILE_ENABLE_RVV_BF16)
     # --- Gemm BF16 RVV variants ---
     torq_tile_add_test(test_gemm_bf16_bf16_rvv
         gemm/test_gemm_bf16_bf16_rvv.cpp)
+    torq_tile_add_test(test_conv_bf16_bf16_rvv
+        conv/test_conv_bf16_bf16_rvv.cpp)
 endif()

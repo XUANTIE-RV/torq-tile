@@ -26,3 +26,7 @@ set(TORQ_TILE_SOURCES
 add_executable(${TARGET_NAME} ${TARGET_NAME}.cpp ${TORQ_TILE_SOURCES})
 target_link_options(${TARGET_NAME} PRIVATE -static)
 target_link_libraries(${TARGET_NAME} m)
+
+target_compile_definitions(${TARGET_NAME}
+    PRIVATE $<$<CONFIG:Debug>:TQT_DEBUG>
+)

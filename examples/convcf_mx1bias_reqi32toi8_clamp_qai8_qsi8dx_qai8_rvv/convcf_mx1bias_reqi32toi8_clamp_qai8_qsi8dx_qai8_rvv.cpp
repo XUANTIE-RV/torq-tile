@@ -352,13 +352,26 @@ int main()
     ukernel.run_im2col(0, activation_i8, im2col_buf, &conv_params);
 
     // Run conv: A=weight[M,K], B=im2col[K,N]
-    ukernel.run_conv(M, N, K, weight_i8, K, 0, im2col_buf, N, 0, NULL, N, D_i8, N, bias_fused,
+    ukernel.run_conv(M, N, K, weight_i8, K, 0, im2col_buf, N, 0, nullptr, N, D_i8, N, bias_fused,
                      clamp_min, clamp_max, &qparams);
 
     // Dequantize kernel output and compare with fp32 reference
     dequantize_i8_to_fp32(D_i8, D_deq, M * N, scale_d, zp_d);
 
     // Calculate cosine similarity
+#ifdef TQT_DEBUG
+    for (size_t dbg_i = 0; dbg_i < M * N; ++dbg_i) {
+        float dbg_ref = (float)D_ref_fp32[dbg_i];
+        float dbg_act = (float)D_deq[dbg_i];
+        float dbg_diff = fabsf(dbg_ref - dbg_act);
+        if (dbg_diff > 1.0f)
+            printf("[%zu]: ref=%.6f vs act=%.6f (diff=%.6f) [FAIL]\n", dbg_i, dbg_ref, dbg_act,
+                   dbg_diff);
+        else
+            printf("[%zu]: ref=%.6f vs act=%.6f (diff=%.6f)\n", dbg_i, dbg_ref, dbg_act, dbg_diff);
+    }
+#endif
+
     const float cosine_sim = calculate_cosine_similarity(M * N, D_ref_fp32, D_deq);
     const bool passed = cosine_sim > 0.999f;
 

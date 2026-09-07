@@ -347,13 +347,26 @@ int main()
     memset(D_i8, 0, M * N * sizeof(int8_t));
 
     // Run igemm micro-kernel (no im2col needed - input fetched on-the-fly)
-    ukernel.run_igemm(M, N, K, activation_i8, 0, 0, 0, weight_i8, K, 0, NULL, N, D_i8, N,
+    ukernel.run_igemm(M, N, K, activation_i8, 0, 0, 0, weight_i8, K, 0, nullptr, N, D_i8, N,
                       bias_fused, clamp_min, clamp_max, &conv_params, &qparams);
 
     // Dequantize kernel output and compare with fp32 reference
     dequantize_i8_to_fp32(D_i8, D_deq, M * N, scale_d, zp_d);
 
     // Calculate cosine similarity
+#ifdef TQT_DEBUG
+    for (size_t dbg_i = 0; dbg_i < M * N; ++dbg_i) {
+        float dbg_ref = (float)D_ref_fp32[dbg_i];
+        float dbg_act = (float)D_deq[dbg_i];
+        float dbg_diff = fabsf(dbg_ref - dbg_act);
+        if (dbg_diff > 1.0f)
+            printf("[%zu]: ref=%.6f vs act=%.6f (diff=%.6f) [FAIL]\n", dbg_i, dbg_ref, dbg_act,
+                   dbg_diff);
+        else
+            printf("[%zu]: ref=%.6f vs act=%.6f (diff=%.6f)\n", dbg_i, dbg_ref, dbg_act, dbg_diff);
+    }
+#endif
+
     const float cosine_sim = calculate_cosine_similarity(M * N, D_ref_fp32, D_deq);
     const bool passed = cosine_sim > 0.999f;
 

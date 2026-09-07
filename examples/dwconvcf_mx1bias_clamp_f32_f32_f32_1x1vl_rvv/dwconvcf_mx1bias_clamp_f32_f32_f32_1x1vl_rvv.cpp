@@ -35,7 +35,7 @@ void fill_random(float *data, size_t count, unsigned seed)
     }
 }
 
-// Naive reference dwconv (NCDHW). Caller-supplied bias may be NULL.
+// Naive reference dwconv (NCDHW). Caller-supplied bias may be nullptr.
 void reference_dwconv_cf(const float *input, const float *weight, const float *bias, float *output,
                          const tqt_conv_params *p, float cmin, float cmax)
 {
@@ -165,6 +165,19 @@ int main(void)
         return 1;
     }
     ukernel.run_dwconv(input, weight, bias, out_actual, &p, cmin, cmax);
+
+#ifdef TQT_DEBUG
+    for (size_t dbg_i = 0; dbg_i < out_count; ++dbg_i) {
+        float dbg_ref = (float)out_ref[dbg_i];
+        float dbg_act = (float)out_actual[dbg_i];
+        float dbg_diff = fabsf(dbg_ref - dbg_act);
+        if (dbg_diff > 1e-5f)
+            printf("[%zu]: ref=%.6f vs act=%.6f (diff=%.6f) [FAIL]\n", dbg_i, dbg_ref, dbg_act,
+                   dbg_diff);
+        else
+            printf("[%zu]: ref=%.6f vs act=%.6f (diff=%.6f)\n", dbg_i, dbg_ref, dbg_act, dbg_diff);
+    }
+#endif
 
     const float cosine_sim = calculate_cosine_similarity(out_count, out_ref, out_actual);
     const bool passed = cosine_sim > 0.9999f;

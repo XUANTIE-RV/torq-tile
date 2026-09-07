@@ -135,18 +135,31 @@ int main(void)
     fill_random(bias, OC, 44);
     reference_dwconv_cl(input, weight, bias, out_ref, &p, 0.0f, FLT_MAX);
 
-    void *p_in = std::malloc(ukernel.get_packed_input_size(&p));
-    void *p_wt = std::malloc(ukernel.get_packed_weight_size(&p));
-    void *p_out = std::malloc(ukernel.get_output_size(&p));
-    ukernel.run_pack_input(input, p_in, &p);
-    ukernel.run_pack_weight(weight, p_wt, &p);
+    void *packed_in = std::malloc(ukernel.get_packed_input_size(&p));
+    void *packed_wt = std::malloc(ukernel.get_packed_weight_size(&p));
+    void *packed_out = std::malloc(ukernel.get_output_size(&p));
+    ukernel.run_pack_input(input, packed_in, &p);
+    ukernel.run_pack_weight(weight, packed_wt, &p);
     const size_t oh_step = ukernel.get_oh_step();
     const size_t OH = p.output_shape[1];
     for (size_t oh = 0; oh < OH; oh += oh_step) {
         const size_t oh_end = (oh + oh_step < OH) ? (oh + oh_step) : OH;
-        ukernel.run_dwconv(oh, oh_end, p_in, p_wt, bias, p_out, &p, 0.0f, FLT_MAX);
+        ukernel.run_dwconv(oh, oh_end, packed_in, packed_wt, bias, packed_out, &p, 0.0f, FLT_MAX);
     }
-    ukernel.run_unpack_output(p_out, out_actual, &p);
+    ukernel.run_unpack_output(packed_out, out_actual, &p);
+
+#ifdef TQT_DEBUG
+    for (size_t dbg_i = 0; dbg_i < out_count; ++dbg_i) {
+        float dbg_ref = (float)out_ref[dbg_i];
+        float dbg_act = (float)out_actual[dbg_i];
+        float dbg_diff = fabsf(dbg_ref - dbg_act);
+        if (dbg_diff > 1e-5f)
+            printf("[%zu]: ref=%.6f vs act=%.6f (diff=%.6f) [FAIL]\n", dbg_i, dbg_ref, dbg_act,
+                   dbg_diff);
+        else
+            printf("[%zu]: ref=%.6f vs act=%.6f (diff=%.6f)\n", dbg_i, dbg_ref, dbg_act, dbg_diff);
+    }
+#endif
 
     const float cosine_sim = calculate_cosine_similarity(out_count, out_ref, out_actual);
     const bool passed = cosine_sim > 0.9999f;
@@ -155,9 +168,9 @@ int main(void)
     std::free(bias);
     std::free(out_ref);
     std::free(out_actual);
-    std::free(p_in);
-    std::free(p_wt);
-    std::free(p_out);
+    std::free(packed_in);
+    std::free(packed_wt);
+    std::free(packed_out);
     std::printf("TEST[dwconvcl3x3s2_1xnbias_clamp_f32p_f32p_f32p]\n");
     std::printf("- ukernel: dwconvcl3x3s2_1xnbias_clamp_f32p_f32p_f32p_2x1x1vl_rvv\n");
     std::printf("- Cosine Similarity: %f\n", cosine_sim);

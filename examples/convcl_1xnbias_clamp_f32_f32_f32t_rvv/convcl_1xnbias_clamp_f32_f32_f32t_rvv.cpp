@@ -189,10 +189,23 @@ int main()
     ukernel.run_im2col(0, activation, im2col_buf, &params);
 
     // run conv: A=im2col[M,K], B=weight[N,K] (transposed)
-    ukernel.run_conv(M, N, K, im2col_buf, K, 0, weight, K, 0, NULL, N, act_output, N, bias,
+    ukernel.run_conv(M, N, K, im2col_buf, K, 0, weight, K, 0, nullptr, N, act_output, N, bias,
                      -FLT_MAX, FLT_MAX);
 
     // Calculate cosine similarity
+#ifdef TQT_DEBUG
+    for (size_t dbg_i = 0; dbg_i < M * N; ++dbg_i) {
+        float dbg_ref = (float)ref_output[dbg_i];
+        float dbg_act = (float)act_output[dbg_i];
+        float dbg_diff = fabsf(dbg_ref - dbg_act);
+        if (dbg_diff > 1e-5f)
+            printf("[%zu]: ref=%.6f vs act=%.6f (diff=%.6f) [FAIL]\n", dbg_i, dbg_ref, dbg_act,
+                   dbg_diff);
+        else
+            printf("[%zu]: ref=%.6f vs act=%.6f (diff=%.6f)\n", dbg_i, dbg_ref, dbg_act, dbg_diff);
+    }
+#endif
+
     const float cosine_sim = calculate_cosine_similarity(M * N, ref_output, act_output);
     const bool passed = cosine_sim > 0.9999f;
 

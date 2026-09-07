@@ -200,10 +200,23 @@ int main()
     void *B_packed = malloc(b_packed_size);
     ukernel.run_bt_pack(N, K, K, K, 0, weight, B_packed);
 
-    ukernel.run_conv(M, N, K, A_packed, K, 0, B_packed, K, 0, NULL, N, act_output, N, bias, cmin,
+    ukernel.run_conv(M, N, K, A_packed, K, 0, B_packed, K, 0, nullptr, N, act_output, N, bias, cmin,
                      cmax);
 
     // Calculate cosine similarity
+#ifdef TQT_DEBUG
+    for (size_t dbg_i = 0; dbg_i < M * N; ++dbg_i) {
+        float dbg_ref = (float)ref_output[dbg_i];
+        float dbg_act = (float)act_output[dbg_i];
+        float dbg_diff = fabsf(dbg_ref - dbg_act);
+        if (dbg_diff > 1.0f)
+            printf("[%zu]: ref=%.6f vs act=%.6f (diff=%.6f) [FAIL]\n", dbg_i, dbg_ref, dbg_act,
+                   dbg_diff);
+        else
+            printf("[%zu]: ref=%.6f vs act=%.6f (diff=%.6f)\n", dbg_i, dbg_ref, dbg_act, dbg_diff);
+    }
+#endif
+
     const float cosine_sim = calculate_cosine_similarity(M * N, ref_output, act_output);
     const bool passed = cosine_sim > 0.9999f;
 

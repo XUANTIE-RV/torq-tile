@@ -33,7 +33,7 @@ void fill_random(float16_t *data, size_t count, unsigned seed)
         data[i] = ((float)rand() / RAND_MAX) * 2.0f - 1.0f;
 }
 
-// Reference dwconv (NDHWC). bias may be NULL.
+// Reference dwconv (NDHWC). bias may be nullptr.
 void reference_dwconv_cl(const float16_t *input, const float16_t *weight, const float16_t *bias,
                          float16_t *output, const tqt_conv_params *p, float16_t cmin,
                          float16_t cmax)
@@ -139,6 +139,19 @@ int main(void)
     fill_random(bias, OC, 44);
     reference_dwconv_cl(input, weight, bias, out_ref, &p, (float16_t)0.0f, FLT_MAX);
     ukernel.run_dwconv(input, weight, bias, out_actual, &p, (float16_t)0.0f, FLT_MAX);
+#ifdef TQT_DEBUG
+    for (size_t dbg_i = 0; dbg_i < out_count; ++dbg_i) {
+        float dbg_ref = (float)out_ref[dbg_i];
+        float dbg_act = (float)out_actual[dbg_i];
+        float dbg_diff = fabsf(dbg_ref - dbg_act);
+        if (dbg_diff > 1.0f)
+            printf("[%zu]: ref=%.6f vs act=%.6f (diff=%.6f) [FAIL]\n", dbg_i, dbg_ref, dbg_act,
+                   dbg_diff);
+        else
+            printf("[%zu]: ref=%.6f vs act=%.6f (diff=%.6f)\n", dbg_i, dbg_ref, dbg_act, dbg_diff);
+    }
+#endif
+
     const float16_t cosine_sim = calculate_cosine_similarity(out_count, out_ref, out_actual);
     const bool passed = cosine_sim > 0.9999f;
     std::free(input);

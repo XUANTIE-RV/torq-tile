@@ -42,6 +42,7 @@ endif()
 # RVV FP16 benchmarks (auto-detected via TORQ_TILE_ENABLE_RVV_FP16)
 if(TORQ_TILE_ENABLE_RVV_FP16)
     list(APPEND TORQ_TILE_BENCHMARK_SOURCES
+        gemm/bench_gemm_f32_f16_rvv.cpp
         gemm/bench_gemm_f16_f16_rvv.cpp
         gemm/bench_gemm_f16_i4_rvv.cpp
         conv/bench_conv_f16_f16_rvv.cpp
@@ -59,6 +60,7 @@ endif()
 # RVV BF16 benchmarks (auto-detected via TORQ_TILE_ENABLE_RVV_BF16)
 if(TORQ_TILE_ENABLE_RVV_BF16)
     list(APPEND TORQ_TILE_BENCHMARK_SOURCES
+        gemm/bench_gemm_f32_bf16_rvv.cpp
         gemm/bench_gemm_bf16_bf16_rvv.cpp
         conv/bench_conv_bf16_bf16_rvv.cpp
     )

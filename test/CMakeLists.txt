@@ -109,6 +109,8 @@ if(TORQ_TILE_ENABLE_RVV_F64)
 endif()
 
 if(TORQ_TILE_ENABLE_RVV_FP16)
+    torq_tile_add_test(test_gemm_f32_f16_rvv
+        gemm/test_gemm_f32_f16_rvv.cpp)
     # --- Gemm F16 RVV variants ---
     torq_tile_add_test(test_gemm_f16_f16_rvv
         gemm/test_gemm_f16_f16_rvv.cpp)
@@ -139,6 +141,8 @@ if(TORQ_TILE_ENABLE_RVV_FP16)
 endif()
 
 if(TORQ_TILE_ENABLE_RVV_BF16)
+    torq_tile_add_test(test_gemm_f32_bf16_rvv
+        gemm/test_gemm_f32_bf16_rvv.cpp)
     # --- Gemm BF16 RVV variants ---
     torq_tile_add_test(test_gemm_bf16_bf16_rvv
         gemm/test_gemm_bf16_bf16_rvv.cpp)

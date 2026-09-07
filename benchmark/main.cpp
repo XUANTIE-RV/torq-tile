@@ -46,6 +46,7 @@ void register_mean_f32_f32_rvv_benchmarks();
 #endif
 
 #ifdef TORQ_TILE_ENABLE_RVV_FP16
+void register_gemm_f32_f16_rvv_benchmarks();
 void register_gemm_f16_f16_rvv_benchmarks();
 void register_gemm_f16_i4_rvv_benchmarks();
 void register_conv_f16_f16_rvv_benchmarks();
@@ -61,6 +62,7 @@ void register_mean_f16_f16_rvv_benchmarks();
 #endif
 
 #ifdef TORQ_TILE_ENABLE_RVV_BF16
+void register_gemm_f32_bf16_rvv_benchmarks();
 void register_gemm_bf16_bf16_rvv_benchmarks();
 void register_conv_bf16_bf16_rvv_benchmarks();
 #endif
@@ -79,10 +81,12 @@ inline void register_gemm_benchmarks()
     register_gemm_u8_u8_rvv_benchmarks();
 #endif
 #ifdef TORQ_TILE_ENABLE_RVV_FP16
+    register_gemm_f32_f16_rvv_benchmarks();
     register_gemm_f16_f16_rvv_benchmarks();
     register_gemm_f16_i4_rvv_benchmarks();
 #endif
 #ifdef TORQ_TILE_ENABLE_RVV_BF16
+    register_gemm_f32_bf16_rvv_benchmarks();
     register_gemm_bf16_bf16_rvv_benchmarks();
 #endif
 #ifdef TORQ_TILE_ENABLE_RVV_F64

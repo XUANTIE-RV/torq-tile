@@ -20,14 +20,14 @@ namespace test
 /// Reference GEMM implementation with FP32 accumulation.
 ///
 /// Computes: D = clamp(A * B + C + bias, clamp_min, clamp_max)
-/// where A, B are TA and C, D, bias are TD. For same-type GEMM use TA == TD.
+/// where A is TA, B is TB, and C, D, bias are TD. TB defaults to TA.
 ///
 /// @param m       Number of rows in A and D
 /// @param n       Number of columns in D
 /// @param k       Common dimension (columns of A, rows/columns of B depending on layout)
 /// @param A       Input matrix A [m, k] TA, row-major, lda >= k
 /// @param lda     Leading dimension of A
-/// @param B       Input matrix B TA, layout depends on b_layout parameter
+/// @param B       Input matrix B TB, layout depends on b_layout parameter
 /// @param ldb     Leading dimension of B
 /// @param b_layout  BLayout::kRowMajor: B is [K, N]; BLayout::kTransposed: B is [N, K]
 /// @param C       Residual matrix C [m, n] TD (can be nullptr)
@@ -38,8 +38,8 @@ namespace test
 /// @param bias_mode  BiasMode::kNone, k1xN (bias[1,N]), or kMx1 (bias[M,1])
 /// @param clamp_min  Minimum clamp value (as TD)
 /// @param clamp_max  Maximum clamp value (as TD)
-template <typename TA, typename TD>
-void reference_gemm(size_t m, size_t n, size_t k, const TA *A, size_t lda, const TA *B, size_t ldb,
+template <typename TA, typename TD, typename TB = TA>
+void reference_gemm(size_t m, size_t n, size_t k, const TA *A, size_t lda, const TB *B, size_t ldb,
                     BLayout b_layout, const TD *C, size_t ldc, TD *D, size_t ldd, const TD *bias,
                     BiasMode bias_mode, TD clamp_min, TD clamp_max);
 
@@ -67,6 +67,17 @@ extern template void reference_gemm<bfloat16_t, float16_t>(size_t, size_t, size_
                                                            const float16_t *, size_t, float16_t *,
                                                            size_t, const float16_t *, BiasMode,
                                                            float16_t, float16_t);
+
+extern template void reference_gemm<float, float, float16_t>(size_t, size_t, size_t, const float *,
+                                                             size_t, const float16_t *, size_t,
+                                                             BLayout, const float *, size_t,
+                                                             float *, size_t, const float *,
+                                                             BiasMode, float, float);
+extern template void reference_gemm<float, float, bfloat16_t>(size_t, size_t, size_t, const float *,
+                                                              size_t, const bfloat16_t *, size_t,
+                                                              BLayout, const float *, size_t,
+                                                              float *, size_t, const float *,
+                                                              BiasMode, float, float);
 
 /// Reference GEMM: int8 inputs, int32 output with clamp
 ///

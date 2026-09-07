@@ -14,8 +14,8 @@ namespace torq_tile
 namespace test
 {
 
-template <typename TA, typename TD>
-void reference_gemm(size_t m, size_t n, size_t k, const TA *A, size_t lda, const TA *B, size_t ldb,
+template <typename TA, typename TD, typename TB>
+void reference_gemm(size_t m, size_t n, size_t k, const TA *A, size_t lda, const TB *B, size_t ldb,
                     BLayout b_layout, const TD *C, size_t ldc, TD *D, size_t ldd, const TD *bias,
                     BiasMode bias_mode, TD clamp_min, TD clamp_max)
 {
@@ -88,6 +88,14 @@ template void reference_gemm<bfloat16_t, float16_t>(size_t, size_t, size_t, cons
                                                     const float16_t *, size_t, float16_t *, size_t,
                                                     const float16_t *, BiasMode, float16_t,
                                                     float16_t);
+template void reference_gemm<float, float, float16_t>(size_t, size_t, size_t, const float *, size_t,
+                                                      const float16_t *, size_t, BLayout,
+                                                      const float *, size_t, float *, size_t,
+                                                      const float *, BiasMode, float, float);
+template void reference_gemm<float, float, bfloat16_t>(size_t, size_t, size_t, const float *,
+                                                       size_t, const bfloat16_t *, size_t, BLayout,
+                                                       const float *, size_t, float *, size_t,
+                                                       const float *, BiasMode, float, float);
 
 void reference_gemm_i32_i8(size_t m, size_t n, size_t k, const int8_t *A, size_t lda,
                            const int8_t *B, size_t ldb, BLayout b_layout, const int32_t *C,

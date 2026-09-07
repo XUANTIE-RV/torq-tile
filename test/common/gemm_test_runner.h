@@ -145,6 +145,34 @@ struct BOnlyPackedGemmFuncs
     RunGemmFunc run_gemm;
 };
 
+/// Verify the family-specific K=0 contract with null A/B and in-place C == D.
+template <typename TD, typename ClampT, typename GemmFuncs>
+void run_gemm_zero_k_test(size_t m, size_t n, const GemmFuncs &funcs)
+{
+    UniformRandomGenerator<TD> gen(-2.0f, 2.0f, 61);
+    std::vector<TD> D(m * n);
+    std::vector<TD> bias(n);
+    gen.fill_matrix(D.data(), m, n);
+    gen.fill_matrix(bias.data(), 1, n);
+    std::vector<TD> expected = D;
+    const TD clamp_min = to_target_type<TD>(-1.0f);
+    const TD clamp_max = to_target_type<TD>(1.0f);
+    for (size_t i = 0; i < m; ++i) {
+        for (size_t j = 0; j < n; ++j) {
+            float value = static_cast<float>(expected[i * n + j]) + static_cast<float>(bias[j]);
+            value = std::max(value, static_cast<float>(clamp_min));
+            value = std::min(value, static_cast<float>(clamp_max));
+            expected[i * n + j] = static_cast<TD>(value);
+        }
+    }
+
+    funcs.run_gemm(m, n, 0, nullptr, 0, 0, nullptr, 0, 0, D.data(), n, D.data(), n, bias.data(),
+                   static_cast<ClampT>(clamp_min), static_cast<ClampT>(clamp_max));
+
+    auto result = verify_gemm_result<TD>(expected.data(), D.data(), m * n, 0.0f, 0.999999f);
+    EXPECT_TRUE(result.passed) << result.error_message;
+}
+
 // ============================================================================
 // Helper: resolve tile sizes (0 means use m_step/n_step/full-K)
 // ============================================================================
@@ -301,11 +329,15 @@ inline void run_tiled_loop(size_t total_m, size_t total_n, size_t total_k, size_
 
 // ============================================================================
 // Non-packed GEMM test runner
-// (TA: A/B element type, TD: C/D/bias element type; for same-type GEMM use TA == TD)
+// (TA: A type, TB: B type, TD: C/D/bias type; TB defaults to TA)
 // ============================================================================
 
-template <typename TA, typename TD, BLayout kBLayout, BiasMode kBiasMode, typename ClampT>
-void run_nonpacked_gemm_test(const GemmTestParams &params, const NonPackedGemmFuncs<ClampT> &funcs)
+template <typename TA, typename TD, BLayout kBLayout, BiasMode kBiasMode, typename ClampT,
+          typename TB = TA>
+void run_nonpacked_gemm_test(const GemmTestParams &params, const NonPackedGemmFuncs<ClampT> &funcs,
+                             float abs_error_threshold = DefaultThreshold<TD>::abs_error,
+                             float cosine_sim_threshold = DefaultThreshold<TD>::cosine_sim,
+                             bool narrow_a_to_b_type = false)
 {
     const size_t m = params.m;
     const size_t n = params.n;
@@ -324,19 +356,26 @@ void run_nonpacked_gemm_test(const GemmTestParams &params, const NonPackedGemmFu
     }
 
     UniformRandomGenerator<TA> gen_a(-1.0f, 1.0f, 42);
+    UniformRandomGenerator<TB> gen_b(-1.0f, 1.0f, 44);
     std::vector<TA> A(m * k);
     gen_a.fill_matrix(A.data(), m, k);
+    std::vector<TA> A_ref = A;
+    if (narrow_a_to_b_type) {
+        for (TA &value : A_ref) {
+            value = static_cast<TA>(static_cast<TB>(value));
+        }
+    }
 
-    std::vector<TA> B_data;
+    std::vector<TB> B_data;
     size_t lda = k;
     size_t ldb;
     if (kBLayout == BLayout::kTransposed) {
         B_data.resize(n * k);
-        gen_a.fill_matrix(B_data.data(), n, k);
+        gen_b.fill_matrix(B_data.data(), n, k);
         ldb = k;
     } else {
         B_data.resize(k * n);
-        gen_a.fill_matrix(B_data.data(), k, n);
+        gen_b.fill_matrix(B_data.data(), k, n);
         ldb = n;
     }
 
@@ -372,8 +411,9 @@ void run_nonpacked_gemm_test(const GemmTestParams &params, const NonPackedGemmFu
     const TD clamp_max = to_target_type<TD>(params.clamp_max_f);
 
     std::vector<TD> ref_D(m * n);
-    reference_gemm<TA, TD>(m, n, k, A.data(), lda, B_data.data(), ldb, kBLayout, c_ptr_ref, ldc,
-                           ref_D.data(), ldd, bias_ptr_ref, ref_bias_mode, clamp_min, clamp_max);
+    reference_gemm<TA, TD, TB>(m, n, k, A_ref.data(), lda, B_data.data(), ldb, kBLayout, c_ptr_ref,
+                               ldc, ref_D.data(), ldd, bias_ptr_ref, ref_bias_mode, clamp_min,
+                               clamp_max);
 
     std::vector<TD> act_D(m * n, to_target_type<TD>(0.0f));
 
@@ -414,13 +454,13 @@ void run_nonpacked_gemm_test(const GemmTestParams &params, const NonPackedGemmFu
                 effective_clamp_max = static_cast<ClampT>(clamp_max);
             }
 
-            funcs.run_gemm(actual_m, actual_n, actual_k, a_ptr, lda, 0, b_ptr, ldb, 0, c_ptr, ldc,
-                           d_ptr, ldd, bias_ptr, effective_clamp_min, effective_clamp_max);
+            funcs.run_gemm(actual_m, actual_n, actual_k, a_ptr, lda, k_start, b_ptr, ldb, k_start,
+                           c_ptr, ldc, d_ptr, ldd, bias_ptr, effective_clamp_min,
+                           effective_clamp_max);
         });
 
-    auto result =
-        verify_gemm_result<TD>(ref_D.data(), act_D.data(), m * n, DefaultThreshold<TD>::abs_error,
-                               DefaultThreshold<TD>::cosine_sim);
+    auto result = verify_gemm_result<TD>(ref_D.data(), act_D.data(), m * n, abs_error_threshold,
+                                         cosine_sim_threshold);
     EXPECT_TRUE(result.passed) << result.error_message << "\n  Shape: M=" << m << " N=" << n
                                << " K=" << k << "\n  Config: " << params.name
                                << "\n  m_tile=" << m_tile << " n_tile=" << n_tile
@@ -431,11 +471,14 @@ void run_nonpacked_gemm_test(const GemmTestParams &params, const NonPackedGemmFu
 
 // ============================================================================
 // Packed GEMM test runner
-// (TA: A/B element type, TD: C/D/bias element type; for same-type GEMM use TA == TD)
+// (TA: A type, TB: B type, TD: C/D/bias type; TB defaults to TA)
 // ============================================================================
 
-template <typename TA, typename TD, BiasMode kBiasMode, typename ClampT>
-void run_packed_gemm_test(const GemmTestParams &params, const PackedGemmFuncs<ClampT> &funcs)
+template <typename TA, typename TD, BiasMode kBiasMode, typename ClampT, typename TB = TA>
+void run_packed_gemm_test(const GemmTestParams &params, const PackedGemmFuncs<ClampT> &funcs,
+                          float abs_error_threshold = DefaultThreshold<TD>::abs_error,
+                          float cosine_sim_threshold = DefaultThreshold<TD>::cosine_sim,
+                          bool narrow_a_to_b_type = false)
 {
     const size_t m = params.m;
     const size_t n = params.n;
@@ -454,10 +497,17 @@ void run_packed_gemm_test(const GemmTestParams &params, const PackedGemmFuncs<Cl
     }
 
     UniformRandomGenerator<TA> gen_a(-1.0f, 1.0f, 42);
+    UniformRandomGenerator<TB> gen_b(-1.0f, 1.0f, 44);
     std::vector<TA> A(m * k);
-    std::vector<TA> B_orig(n * k);
+    std::vector<TB> B_orig(n * k);
     gen_a.fill_matrix(A.data(), m, k);
-    gen_a.fill_matrix(B_orig.data(), n, k);
+    gen_b.fill_matrix(B_orig.data(), n, k);
+    std::vector<TA> A_ref = A;
+    if (narrow_a_to_b_type) {
+        for (TA &value : A_ref) {
+            value = static_cast<TA>(static_cast<TB>(value));
+        }
+    }
 
     const size_t lda = k;
     const size_t ldb_orig = k;
@@ -493,9 +543,9 @@ void run_packed_gemm_test(const GemmTestParams &params, const PackedGemmFuncs<Cl
     const TD clamp_max = to_target_type<TD>(params.clamp_max_f);
 
     std::vector<TD> ref_D(m * n);
-    reference_gemm<TA, TD>(m, n, k, A.data(), lda, B_orig.data(), ldb_orig, BLayout::kTransposed,
-                           c_ptr_ref, ldc, ref_D.data(), ldd, bias_ptr_ref, ref_bias_mode,
-                           clamp_min, clamp_max);
+    reference_gemm<TA, TD, TB>(m, n, k, A_ref.data(), lda, B_orig.data(), ldb_orig,
+                               BLayout::kTransposed, c_ptr_ref, ldc, ref_D.data(), ldd,
+                               bias_ptr_ref, ref_bias_mode, clamp_min, clamp_max);
 
     std::vector<TD> act_D(m * n, to_target_type<TD>(0.0f));
 
@@ -540,37 +590,33 @@ void run_packed_gemm_test(const GemmTestParams &params, const PackedGemmFuncs<Cl
                                static_cast<ClampT>(clamp_max));
             });
     } else {
+        const size_t a_packed_size = funcs.get_a_packed_size(m, k);
+        const size_t b_packed_size = funcs.get_b_packed_size(n, k);
+        std::vector<uint8_t> A_packed(a_packed_size);
+        std::vector<uint8_t> B_packed(b_packed_size);
+
+        for (size_t k_start = 0; k_start < k; k_start += k_tile) {
+            const size_t actual_k = TQT_MIN(k - k_start, k_tile);
+            const size_t a_packed_offset = funcs.get_a_packed_offset(0, k_start, lda, m);
+            const size_t b_packed_offset = funcs.get_b_packed_offset(0, k_start, ldb_orig, n);
+            funcs.run_a_pack(m, actual_k, lda, lda, k_start,
+                             static_cast<const void *>(A.data() + k_start),
+                             static_cast<void *>(A_packed.data() + a_packed_offset));
+            funcs.run_bt_pack(n, actual_k, ldb_orig, ldb_orig, k_start,
+                              static_cast<const void *>(B_orig.data() + k_start),
+                              static_cast<void *>(B_packed.data() + b_packed_offset));
+        }
         run_tiled_loop(
             m, n, k, m_tile, n_tile, k_tile, params.loop_order,
             [&](size_t m_start, size_t n_start, size_t k_start, size_t actual_m, size_t actual_n,
                 size_t actual_k, bool is_first_k) {
-                std::vector<TA> A_block(actual_m * actual_k);
-                for (size_t i = 0; i < actual_m; ++i) {
-                    for (size_t j = 0; j < actual_k; ++j) {
-                        A_block[i * actual_k + j] = A[(m_start + i) * lda + k_start + j];
-                    }
-                }
-
-                std::vector<TA> B_block(actual_n * actual_k);
-                for (size_t i = 0; i < actual_n; ++i) {
-                    for (size_t j = 0; j < actual_k; ++j) {
-                        B_block[i * actual_k + j] = B_orig[(n_start + i) * ldb_orig + k_start + j];
-                    }
-                }
-
-                const size_t a_packed_size = funcs.get_a_packed_size(actual_m, actual_k);
-                const size_t b_packed_size = funcs.get_b_packed_size(actual_n, actual_k);
-                std::vector<uint8_t> A_packed(a_packed_size);
-                std::vector<uint8_t> B_packed(b_packed_size);
-
-                funcs.run_a_pack(actual_m, actual_k, actual_k, actual_k, 0,
-                                 static_cast<const void *>(A_block.data()),
-                                 static_cast<void *>(A_packed.data()));
-                funcs.run_bt_pack(actual_n, actual_k, actual_k, actual_k, 0,
-                                  static_cast<const void *>(B_block.data()),
-                                  static_cast<void *>(B_packed.data()));
-
+                const size_t a_packed_offset =
+                    funcs.get_a_packed_offset(m_start, k_start, lda, actual_m);
+                const size_t b_packed_offset =
+                    funcs.get_b_packed_offset(n_start, k_start, ldb_orig, actual_n);
                 const size_t d_offset = funcs.get_d_offset(m_start, n_start, ldd);
+                const void *a_ptr = A_packed.data() + a_packed_offset;
+                const void *b_ptr = B_packed.data() + b_packed_offset;
                 void *d_ptr = reinterpret_cast<uint8_t *>(act_D.data()) + d_offset;
 
                 const void *c_ptr = nullptr;
@@ -598,20 +644,113 @@ void run_packed_gemm_test(const GemmTestParams &params, const PackedGemmFuncs<Cl
                     effective_clamp_max = static_cast<ClampT>(clamp_max);
                 }
 
-                funcs.run_gemm(actual_m, actual_n, actual_k,
-                               static_cast<const void *>(A_packed.data()), actual_k, 0,
-                               static_cast<const void *>(B_packed.data()), actual_k, 0, c_ptr, ldc,
-                               d_ptr, ldd, bias_ptr, effective_clamp_min, effective_clamp_max);
+                funcs.run_gemm(actual_m, actual_n, actual_k, a_ptr, lda, k_start, b_ptr, ldb_orig,
+                               k_start, c_ptr, ldc, d_ptr, ldd, bias_ptr, effective_clamp_min,
+                               effective_clamp_max);
             });
     }
 
-    auto result =
-        verify_gemm_result<TD>(ref_D.data(), act_D.data(), m * n, DefaultThreshold<TD>::abs_error,
-                               DefaultThreshold<TD>::cosine_sim);
+    auto result = verify_gemm_result<TD>(ref_D.data(), act_D.data(), m * n, abs_error_threshold,
+                                         cosine_sim_threshold);
     EXPECT_TRUE(result.passed) << result.error_message << "\n  Shape: M=" << m << " N=" << n
                                << " K=" << k << "\n  Config: " << params.name
                                << "\n  m_tile=" << m_tile << " n_tile=" << n_tile
                                << " k_tile=" << k_tile
+                               << "\n  Max abs error: " << result.max_abs_error
+                               << "\n  Cosine similarity: " << result.cosine_similarity;
+}
+
+// ============================================================================
+// Packed GEMM full-buffer split-K harness
+// ============================================================================
+
+template <typename TA, typename TD, BiasMode kBiasMode, typename ClampT, typename TB = TA>
+void run_packed_gemm_full_buffer_split_k_test(
+    size_t m, size_t n, size_t k, size_t k_split, const PackedGemmFuncs<ClampT> &funcs,
+    float abs_error_threshold = DefaultThreshold<TD>::abs_error,
+    float cosine_sim_threshold = DefaultThreshold<TD>::cosine_sim, bool narrow_a_to_b_type = false)
+{
+    ASSERT_GT(k_split, 0U);
+    ASSERT_LT(k_split, k);
+
+    const size_t lda = k;
+    const size_t ldb = k;
+    const size_t ldc = n;
+    const size_t ldd = n;
+    const size_t m_step = funcs.get_m_step();
+    const size_t n_step = funcs.get_n_step();
+
+    UniformRandomGenerator<TA> gen_a(-1.0f, 1.0f, 51);
+    UniformRandomGenerator<TB> gen_b(-1.0f, 1.0f, 52);
+    UniformRandomGenerator<TD> gen_d(-1.0f, 1.0f, 53);
+    std::vector<TA> A(m * k);
+    std::vector<TB> B(n * k);
+    std::vector<TD> C(m * n);
+    std::vector<TD> bias(n);
+    gen_a.fill_matrix(A.data(), m, k);
+    gen_b.fill_matrix(B.data(), n, k);
+    gen_d.fill_matrix(C.data(), m, n);
+    gen_d.fill_matrix(bias.data(), 1, n);
+
+    std::vector<TA> A_ref = A;
+    if (narrow_a_to_b_type) {
+        for (TA &value : A_ref) {
+            value = static_cast<TA>(static_cast<TB>(value));
+        }
+    }
+
+    const TD clamp_min = to_target_type<TD>(-10.0f);
+    const TD clamp_max = to_target_type<TD>(10.0f);
+    std::vector<TD> ref_D(m * n);
+    reference_gemm<TA, TD, TB>(m, n, k, A_ref.data(), lda, B.data(), ldb, BLayout::kTransposed,
+                               C.data(), ldc, ref_D.data(), ldd, bias.data(), kBiasMode, clamp_min,
+                               clamp_max);
+
+    std::vector<uint8_t> A_packed(funcs.get_a_packed_size(m, k));
+    std::vector<uint8_t> B_packed(funcs.get_b_packed_size(n, k));
+    funcs.run_a_pack(m, k_split, lda, lda, 0, A.data(), A_packed.data());
+    funcs.run_bt_pack(n, k_split, ldb, ldb, 0, B.data(), B_packed.data());
+
+    const size_t a_split_offset = funcs.get_a_packed_offset(0, k_split, lda, m);
+    const size_t b_split_offset = funcs.get_b_packed_offset(0, k_split, ldb, n);
+    funcs.run_a_pack(m, k - k_split, lda, lda, k_split, A.data() + k_split,
+                     A_packed.data() + a_split_offset);
+    funcs.run_bt_pack(n, k - k_split, ldb, ldb, k_split, B.data() + k_split,
+                      B_packed.data() + b_split_offset);
+
+    std::vector<TD> act_D(m * n, to_target_type<TD>(0.0f));
+    for (size_t m_idx = 0; m_idx < m; m_idx += m_step) {
+        const size_t actual_m = TQT_MIN(m - m_idx, m_step);
+        for (size_t n_idx = 0; n_idx < n; n_idx += n_step) {
+            const size_t actual_n = TQT_MIN(n - n_idx, n_step);
+            const size_t d_offset = funcs.get_d_offset(m_idx, n_idx, ldd);
+            TD *d_ptr =
+                reinterpret_cast<TD *>(reinterpret_cast<uint8_t *>(act_D.data()) + d_offset);
+            const TD *c_ptr =
+                reinterpret_cast<const TD *>(reinterpret_cast<const uint8_t *>(C.data()) +
+                                             funcs.get_c_offset(m_idx, n_idx, ldc));
+            const TD *bias_ptr = reinterpret_cast<const TD *>(
+                reinterpret_cast<const uint8_t *>(bias.data()) + funcs.get_bias_offset(n_idx));
+
+            const size_t a0_offset = funcs.get_a_packed_offset(m_idx, 0, lda, actual_m);
+            const size_t b0_offset = funcs.get_b_packed_offset(n_idx, 0, ldb, actual_n);
+            funcs.run_gemm(actual_m, actual_n, k_split, A_packed.data() + a0_offset, lda, 0,
+                           B_packed.data() + b0_offset, ldb, 0, c_ptr, ldc, d_ptr, ldd, nullptr,
+                           static_cast<ClampT>(-FLT_MAX), static_cast<ClampT>(FLT_MAX));
+
+            const size_t a1_offset = funcs.get_a_packed_offset(m_idx, k_split, lda, actual_m);
+            const size_t b1_offset = funcs.get_b_packed_offset(n_idx, k_split, ldb, actual_n);
+            funcs.run_gemm(actual_m, actual_n, k - k_split, A_packed.data() + a1_offset, lda,
+                           k_split, B_packed.data() + b1_offset, ldb, k_split, d_ptr, ldd, d_ptr,
+                           ldd, bias_ptr, static_cast<ClampT>(clamp_min),
+                           static_cast<ClampT>(clamp_max));
+        }
+    }
+
+    auto result = verify_gemm_result<TD>(ref_D.data(), act_D.data(), m * n, abs_error_threshold,
+                                         cosine_sim_threshold);
+    EXPECT_TRUE(result.passed) << result.error_message << "\n  Shape: M=" << m << " N=" << n
+                               << " K=" << k << " split=" << k_split
                                << "\n  Max abs error: " << result.max_abs_error
                                << "\n  Cosine similarity: " << result.cosine_similarity;
 }
@@ -623,7 +762,9 @@ void run_packed_gemm_test(const GemmTestParams &params, const PackedGemmFuncs<Cl
 
 template <typename TA, typename TD, BiasMode kBiasMode, typename ClampT>
 void run_b_only_packed_gemm_test(const GemmTestParams &params,
-                                 const BOnlyPackedGemmFuncs<ClampT> &funcs)
+                                 const BOnlyPackedGemmFuncs<ClampT> &funcs,
+                                 float abs_error_threshold = DefaultThreshold<TD>::abs_error,
+                                 float cosine_sim_threshold = DefaultThreshold<TD>::cosine_sim)
 {
     const size_t m = params.m;
     const size_t n = params.n;
@@ -724,28 +865,28 @@ void run_b_only_packed_gemm_test(const GemmTestParams &params,
                                static_cast<ClampT>(clamp_max));
             });
     } else {
+        const size_t b_packed_size = funcs.get_b_packed_size(n, k);
+        std::vector<uint8_t> B_packed(b_packed_size);
+
+        for (size_t k_start = 0; k_start < k; k_start += k_tile) {
+            const size_t actual_k = TQT_MIN(k - k_start, k_tile);
+            const size_t b_packed_offset = funcs.get_b_packed_offset(0, k_start, ldb_orig, n);
+            funcs.run_bt_pack(n, actual_k, ldb_orig, ldb_orig, k_start,
+                              static_cast<const void *>(B_orig.data() + k_start),
+                              static_cast<void *>(B_packed.data() + b_packed_offset));
+        }
+
         run_tiled_loop(
             m, n, k, m_tile, n_tile, k_tile, params.loop_order,
             [&](size_t m_start, size_t n_start, size_t k_start, size_t actual_m, size_t actual_n,
                 size_t actual_k, bool is_first_k) {
-                std::vector<TA> B_block(actual_n * actual_k);
-                for (size_t i = 0; i < actual_n; ++i) {
-                    for (size_t j = 0; j < actual_k; ++j) {
-                        B_block[i * actual_k + j] = B_orig[(n_start + i) * ldb_orig + k_start + j];
-                    }
-                }
-
-                const size_t b_packed_size = funcs.get_b_packed_size(actual_n, actual_k);
-                std::vector<uint8_t> B_packed(b_packed_size);
-
-                funcs.run_bt_pack(actual_n, actual_k, actual_k, actual_k, 0,
-                                  static_cast<const void *>(B_block.data()),
-                                  static_cast<void *>(B_packed.data()));
-
                 const size_t a_offset = funcs.get_a_offset(m_start, k_start, lda);
+                const size_t b_packed_offset =
+                    funcs.get_b_packed_offset(n_start, k_start, ldb_orig, actual_n);
                 const size_t d_offset = funcs.get_d_offset(m_start, n_start, ldd);
 
                 const void *a_ptr = reinterpret_cast<const uint8_t *>(A.data()) + a_offset;
+                const void *b_ptr = B_packed.data() + b_packed_offset;
                 void *d_ptr = reinterpret_cast<uint8_t *>(act_D.data()) + d_offset;
 
                 const void *c_ptr = nullptr;
@@ -773,15 +914,14 @@ void run_b_only_packed_gemm_test(const GemmTestParams &params,
                     effective_clamp_max = static_cast<ClampT>(clamp_max);
                 }
 
-                funcs.run_gemm(actual_m, actual_n, actual_k, a_ptr, lda, 0,
-                               static_cast<const void *>(B_packed.data()), actual_k, 0, c_ptr, ldc,
-                               d_ptr, ldd, bias_ptr, effective_clamp_min, effective_clamp_max);
+                funcs.run_gemm(actual_m, actual_n, actual_k, a_ptr, lda, k_start, b_ptr, ldb_orig,
+                               k_start, c_ptr, ldc, d_ptr, ldd, bias_ptr, effective_clamp_min,
+                               effective_clamp_max);
             });
     }
 
-    auto result =
-        verify_gemm_result<TD>(ref_D.data(), act_D.data(), m * n, DefaultThreshold<TD>::abs_error,
-                               DefaultThreshold<TD>::cosine_sim);
+    auto result = verify_gemm_result<TD>(ref_D.data(), act_D.data(), m * n, abs_error_threshold,
+                                         cosine_sim_threshold);
     EXPECT_TRUE(result.passed) << result.error_message << "\n  Shape: M=" << m << " N=" << n
                                << " K=" << k << "\n  Config: " << params.name
                                << "\n  m_tile=" << m_tile << " n_tile=" << n_tile

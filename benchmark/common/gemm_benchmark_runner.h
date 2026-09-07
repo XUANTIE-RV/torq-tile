@@ -187,10 +187,11 @@ inline void register_b_only_packed_gemm_benchmark(const char *name,
 
 // ============================================================================
 // Non-packed GEMM benchmark function
-// (InputT: A/B element type, OutputT: D element type; for same-type GEMM use InputT == OutputT)
+// (InputT: A type, WeightT: B type, OutputT: D type; WeightT defaults to InputT)
 // ============================================================================
 
-template <typename InputT, typename OutputT, BLayout kBLayout, typename ClampT>
+template <typename InputT, typename OutputT, BLayout kBLayout, typename ClampT,
+          typename WeightT = InputT>
 void run_nonpacked_gemm_benchmark(::benchmark::State &state,
                                   const NonPackedGemmFuncs<ClampT> &funcs)
 {
@@ -198,13 +199,13 @@ void run_nonpacked_gemm_benchmark(::benchmark::State &state,
     const size_t n = static_cast<size_t>(state.range(1));
     const size_t k = static_cast<size_t>(state.range(2));
 
-    // Allocate and fill input buffers (A and B use InputT)
+    // Allocate and fill input buffers.
     std::vector<InputT> A(m * k);
     fill_random(A.data(), m * k);
 
     const size_t lda = k;
     size_t ldb;
-    std::vector<InputT> B;
+    std::vector<WeightT> B;
     if (kBLayout == BLayout::kTransposed) {
         B.resize(n * k);
         fill_random(B.data(), n * k);
@@ -238,13 +239,14 @@ void run_nonpacked_gemm_benchmark(::benchmark::State &state,
 // Helper: register a non-packed GEMM benchmark
 // ============================================================================
 
-template <typename InputT, typename OutputT, BLayout kBLayout, typename ClampT>
+template <typename InputT, typename OutputT, BLayout kBLayout, typename ClampT,
+          typename WeightT = InputT>
 inline void register_nonpacked_gemm_benchmark(const char *name,
                                               const NonPackedGemmFuncs<ClampT> &funcs)
 {
     auto *benchmark_instance =
         ::benchmark::RegisterBenchmark(name, [funcs](::benchmark::State &state) {
-            run_nonpacked_gemm_benchmark<InputT, OutputT, kBLayout, ClampT>(state, funcs);
+            run_nonpacked_gemm_benchmark<InputT, OutputT, kBLayout, ClampT, WeightT>(state, funcs);
         });
 
     const auto &shape = global_gemm_shape();
@@ -256,10 +258,10 @@ inline void register_nonpacked_gemm_benchmark(const char *name,
 
 // ============================================================================
 // Packed GEMM benchmark function
-// (InputT: A/B element type, OutputT: D element type; for same-type GEMM use InputT == OutputT)
+// (InputT: A type, WeightT: B type, OutputT: D type; WeightT defaults to InputT)
 // ============================================================================
 
-template <typename InputT, typename OutputT, typename ClampT>
+template <typename InputT, typename OutputT, typename ClampT, typename WeightT = InputT>
 void run_packed_gemm_benchmark(::benchmark::State &state, const PackedGemmFuncs<ClampT> &funcs)
 {
     const size_t m = static_cast<size_t>(state.range(0));
@@ -272,7 +274,7 @@ void run_packed_gemm_benchmark(::benchmark::State &state, const PackedGemmFuncs<
 
     // Allocate and fill input buffers (B in transposed layout for pack input)
     std::vector<InputT> A(m * k);
-    std::vector<InputT> B_orig(n * k);
+    std::vector<WeightT> B_orig(n * k);
     fill_random(A.data(), m * k);
     fill_random(B_orig.data(), n * k);
 
@@ -309,14 +311,130 @@ void run_packed_gemm_benchmark(::benchmark::State &state, const PackedGemmFuncs<
 // Helper: register a packed GEMM benchmark
 // ============================================================================
 
-template <typename InputT, typename OutputT, typename ClampT>
+template <typename InputT, typename OutputT, typename ClampT, typename WeightT = InputT>
 inline void register_packed_gemm_benchmark(const char *name, const PackedGemmFuncs<ClampT> &funcs)
 {
     auto *benchmark_instance =
         ::benchmark::RegisterBenchmark(name, [funcs](::benchmark::State &state) {
-            run_packed_gemm_benchmark<InputT, OutputT, ClampT>(state, funcs);
+            run_packed_gemm_benchmark<InputT, OutputT, ClampT, WeightT>(state, funcs);
         });
 
+    const auto &shape = global_gemm_shape();
+    benchmark_instance
+        ->Args({static_cast<int64_t>(shape.m), static_cast<int64_t>(shape.n),
+                static_cast<int64_t>(shape.k)})
+        ->ArgNames({"m", "n", "k"});
+}
+
+// ============================================================================
+// Packed GEMM component benchmarks
+// ============================================================================
+
+template <typename InputT, typename ClampT>
+void run_gemm_a_pack_benchmark(::benchmark::State &state, const PackedGemmFuncs<ClampT> &funcs)
+{
+    const size_t m = static_cast<size_t>(state.range(0));
+    const size_t k = static_cast<size_t>(state.range(2));
+    std::vector<InputT> A(m * k);
+    fill_random(A.data(), A.size());
+    std::vector<uint8_t> A_packed(funcs.get_a_packed_size(m, k));
+
+    for (auto _ : state) {
+        funcs.run_a_pack(m, k, k, k, 0, A.data(), A_packed.data());
+        ::benchmark::DoNotOptimize(A_packed.data());
+        ::benchmark::ClobberMemory();
+    }
+
+    state.SetBytesProcessed(static_cast<int64_t>(state.iterations() * m * k * sizeof(InputT)));
+}
+
+template <typename WeightT, typename ClampT>
+void run_gemm_b_pack_benchmark(::benchmark::State &state, const PackedGemmFuncs<ClampT> &funcs)
+{
+    const size_t n = static_cast<size_t>(state.range(1));
+    const size_t k = static_cast<size_t>(state.range(2));
+    std::vector<WeightT> B(n * k);
+    fill_random(B.data(), B.size());
+    std::vector<uint8_t> B_packed(funcs.get_b_packed_size(n, k));
+
+    for (auto _ : state) {
+        funcs.run_bt_pack(n, k, k, k, 0, B.data(), B_packed.data());
+        ::benchmark::DoNotOptimize(B_packed.data());
+        ::benchmark::ClobberMemory();
+    }
+
+    state.SetBytesProcessed(static_cast<int64_t>(state.iterations() * n * k * sizeof(WeightT)));
+}
+
+template <typename InputT, typename OutputT, typename ClampT, typename WeightT = InputT>
+void run_gemm_a_pack_and_gemm_benchmark(::benchmark::State &state,
+                                        const PackedGemmFuncs<ClampT> &funcs)
+{
+    const size_t m = static_cast<size_t>(state.range(0));
+    const size_t n = static_cast<size_t>(state.range(1));
+    const size_t k = static_cast<size_t>(state.range(2));
+    std::vector<InputT> A(m * k);
+    std::vector<WeightT> B(n * k);
+    fill_random(A.data(), A.size());
+    fill_random(B.data(), B.size());
+
+    std::vector<uint8_t> A_packed(funcs.get_a_packed_size(m, k));
+    std::vector<uint8_t> B_packed(funcs.get_b_packed_size(n, k));
+    funcs.run_bt_pack(n, k, k, k, 0, B.data(), B_packed.data());
+
+    std::vector<OutputT> D(m * n, static_cast<OutputT>(0));
+    const ClampT clamp_min = static_cast<ClampT>(static_cast<OutputT>(-FLT_MAX));
+    const ClampT clamp_max = static_cast<ClampT>(static_cast<OutputT>(FLT_MAX));
+
+    for (auto _ : state) {
+        funcs.run_a_pack(m, k, k, k, 0, A.data(), A_packed.data());
+        funcs.run_gemm(m, n, k, A_packed.data(), k, 0, B_packed.data(), k, 0, nullptr, n, D.data(),
+                       n, nullptr, clamp_min, clamp_max);
+        ::benchmark::DoNotOptimize(D.data());
+        ::benchmark::ClobberMemory();
+    }
+
+    state.counters["GFLOPS"] =
+        ::benchmark::Counter(gemm_flops(m, n, k), ::benchmark::Counter::kIsIterationInvariantRate,
+                             ::benchmark::Counter::OneK::kIs1000);
+}
+
+template <typename InputT, typename ClampT>
+inline void register_gemm_a_pack_benchmark(const char *name, const PackedGemmFuncs<ClampT> &funcs)
+{
+    auto *benchmark_instance =
+        ::benchmark::RegisterBenchmark(name, [funcs](::benchmark::State &state) {
+            run_gemm_a_pack_benchmark<InputT, ClampT>(state, funcs);
+        });
+    const auto &shape = global_gemm_shape();
+    benchmark_instance
+        ->Args({static_cast<int64_t>(shape.m), static_cast<int64_t>(shape.n),
+                static_cast<int64_t>(shape.k)})
+        ->ArgNames({"m", "n", "k"});
+}
+
+template <typename WeightT, typename ClampT>
+inline void register_gemm_b_pack_benchmark(const char *name, const PackedGemmFuncs<ClampT> &funcs)
+{
+    auto *benchmark_instance =
+        ::benchmark::RegisterBenchmark(name, [funcs](::benchmark::State &state) {
+            run_gemm_b_pack_benchmark<WeightT, ClampT>(state, funcs);
+        });
+    const auto &shape = global_gemm_shape();
+    benchmark_instance
+        ->Args({static_cast<int64_t>(shape.m), static_cast<int64_t>(shape.n),
+                static_cast<int64_t>(shape.k)})
+        ->ArgNames({"m", "n", "k"});
+}
+
+template <typename InputT, typename OutputT, typename ClampT, typename WeightT = InputT>
+inline void register_gemm_a_pack_and_gemm_benchmark(const char *name,
+                                                    const PackedGemmFuncs<ClampT> &funcs)
+{
+    auto *benchmark_instance =
+        ::benchmark::RegisterBenchmark(name, [funcs](::benchmark::State &state) {
+            run_gemm_a_pack_and_gemm_benchmark<InputT, OutputT, ClampT, WeightT>(state, funcs);
+        });
     const auto &shape = global_gemm_shape();
     benchmark_instance
         ->Args({static_cast<int64_t>(shape.m), static_cast<int64_t>(shape.n),

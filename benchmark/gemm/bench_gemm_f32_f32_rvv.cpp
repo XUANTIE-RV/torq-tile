@@ -5,6 +5,7 @@
 //
 
 #include "benchmark/common/gemm_benchmark_runner.h"
+#include "benchmark/common/sgemm_benchmark_runner.h"
 #include "src/gemm/gemm_f32_f32/gemm_1xnbias_clamp_f32_f32_f32/tqt_gemm_1xnbias_clamp_f32_f32_f32_2x8vl_rvv.h"
 #include "src/gemm/gemm_f32_f32/gemm_1xnbias_clamp_f32_f32_f32/tqt_gemm_1xnbias_clamp_f32_f32_f32_4x4vl_rvv.h"
 #include "src/gemm/gemm_f32_f32/gemm_1xnbias_clamp_f32_f32_f32/tqt_gemm_1xnbias_clamp_f32_f32_f32_8x3vl_rvv.h"
@@ -17,6 +18,10 @@
 #include "src/gemm/gemm_f32_f32/gemm_1xnbias_clamp_f32_f32p_f32p/tqt_gemm_1xnbias_clamp_f32_f32p_f32p_8x3vl_rvv.h"
 #include "src/gemm/gemm_f32_f32/gemm_mx1bias_clamp_f32_f32_f32/tqt_gemm_mx1bias_clamp_f32_f32_f32_8x3vl_rvv.h"
 #include "src/gemm/gemm_f32_f32/gemm_mx1bias_clamp_f32_f32p_f32p/tqt_gemm_mx1bias_clamp_f32_f32p_f32p_8x3vl_rvv.h"
+#include "src/gemm/gemm_f32_f32/sgemm_f32_f32_f32/tqt_sgemm_f32_f32_f32_8x3vl_rvv.h"
+#include "src/gemm/gemm_f32_f32/sgemm_f32_f32_f32t/tqt_sgemm_f32_f32_f32t_8x3vl_rvv.h"
+#include "src/gemm/gemm_f32_f32/sgemm_f32_f32t_f32/tqt_sgemm_f32_f32t_f32_8x3vl_rvv.h"
+#include "src/gemm/gemm_f32_f32/sgemm_f32_f32t_f32t/tqt_sgemm_f32_f32t_f32t_8x3vl_rvv.h"
 
 namespace torq_tile
 {
@@ -234,6 +239,67 @@ static PackedGemmFuncs<float> make_packed_1xnbias_f32_f32p_f32p_2x8vl_rvv()
 }
 
 // ============================================================================
+// SGEMM A=RowMajor, B=RowMajor: sgemm_f32_f32_f32_8x3vl_rvv
+// ============================================================================
+
+static NonPackedSgemmFuncs<float> make_sgemm_f32_f32_f32_8x3vl_rvv()
+{
+    return {
+        tqt_get_m_step_sgemm_f32_f32_f32_8x3vl_rvv,   tqt_get_n_step_sgemm_f32_f32_f32_8x3vl_rvv,
+        tqt_get_a_offset_sgemm_f32_f32_f32_8x3vl_rvv, tqt_get_b_offset_sgemm_f32_f32_f32_8x3vl_rvv,
+        tqt_get_d_offset_sgemm_f32_f32_f32_8x3vl_rvv, tqt_run_sgemm_f32_f32_f32_8x3vl_rvv,
+    };
+}
+
+// ============================================================================
+// SGEMM A=RowMajor, B=Transposed: sgemm_f32_f32_f32t_8x3vl_rvv
+// ============================================================================
+
+static NonPackedSgemmFuncs<float> make_sgemm_f32_f32_f32t_8x3vl_rvv()
+{
+    return {
+        tqt_get_m_step_sgemm_f32_f32_f32t_8x3vl_rvv,
+        tqt_get_n_step_sgemm_f32_f32_f32t_8x3vl_rvv,
+        tqt_get_a_offset_sgemm_f32_f32_f32t_8x3vl_rvv,
+        tqt_get_b_offset_sgemm_f32_f32_f32t_8x3vl_rvv,
+        tqt_get_d_offset_sgemm_f32_f32_f32t_8x3vl_rvv,
+        tqt_run_sgemm_f32_f32_f32t_8x3vl_rvv,
+    };
+}
+
+// ============================================================================
+// SGEMM A=Transposed, B=RowMajor: sgemm_f32_f32t_f32_8x3vl_rvv
+// ============================================================================
+
+static NonPackedSgemmFuncs<float> make_sgemm_f32_f32t_f32_8x3vl_rvv()
+{
+    return {
+        tqt_get_m_step_sgemm_f32_f32t_f32_8x3vl_rvv,
+        tqt_get_n_step_sgemm_f32_f32t_f32_8x3vl_rvv,
+        tqt_get_a_offset_sgemm_f32_f32t_f32_8x3vl_rvv,
+        tqt_get_b_offset_sgemm_f32_f32t_f32_8x3vl_rvv,
+        tqt_get_d_offset_sgemm_f32_f32t_f32_8x3vl_rvv,
+        tqt_run_sgemm_f32_f32t_f32_8x3vl_rvv,
+    };
+}
+
+// ============================================================================
+// SGEMM A=Transposed, B=Transposed: sgemm_f32_f32t_f32t_8x3vl_rvv
+// ============================================================================
+
+static NonPackedSgemmFuncs<float> make_sgemm_f32_f32t_f32t_8x3vl_rvv()
+{
+    return {
+        tqt_get_m_step_sgemm_f32_f32t_f32t_8x3vl_rvv,
+        tqt_get_n_step_sgemm_f32_f32t_f32t_8x3vl_rvv,
+        tqt_get_a_offset_sgemm_f32_f32t_f32t_8x3vl_rvv,
+        tqt_get_b_offset_sgemm_f32_f32t_f32t_8x3vl_rvv,
+        tqt_get_d_offset_sgemm_f32_f32t_f32t_8x3vl_rvv,
+        tqt_run_sgemm_f32_f32t_f32t_8x3vl_rvv,
+    };
+}
+
+// ============================================================================
 // Registration
 // ============================================================================
 
@@ -276,6 +342,19 @@ void register_gemm_f32_f32_rvv_benchmarks()
     register_b_only_packed_gemm_benchmark<float, float>(
         "tqt_gemm_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv",
         make_b_only_packed_1xnbias_f32_f32_f32p_8x3vl_rvv());
+
+    // SGEMM benchmarks (BLAS-style: D = alpha * op(A) * op(B) + beta * C)
+    register_nonpacked_sgemm_benchmark<float, ALayout::kRowMajor, BLayout::kRowMajor>(
+        "tqt_sgemm_f32_f32_f32_8x3vl_rvv", make_sgemm_f32_f32_f32_8x3vl_rvv());
+
+    register_nonpacked_sgemm_benchmark<float, ALayout::kRowMajor, BLayout::kTransposed>(
+        "tqt_sgemm_f32_f32_f32t_8x3vl_rvv", make_sgemm_f32_f32_f32t_8x3vl_rvv());
+
+    register_nonpacked_sgemm_benchmark<float, ALayout::kTransposed, BLayout::kRowMajor>(
+        "tqt_sgemm_f32_f32t_f32_8x3vl_rvv", make_sgemm_f32_f32t_f32_8x3vl_rvv());
+
+    register_nonpacked_sgemm_benchmark<float, ALayout::kTransposed, BLayout::kTransposed>(
+        "tqt_sgemm_f32_f32t_f32t_8x3vl_rvv", make_sgemm_f32_f32t_f32t_8x3vl_rvv());
 }
 
 }  // namespace benchmark

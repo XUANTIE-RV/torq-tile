@@ -10,6 +10,7 @@
 add_library(torq_tile_test_common STATIC
     common/data_generator.cpp
     common/reference_gemm.cpp
+    common/reference_sgemm.cpp
     common/reference_conv.cpp
     common/reference_dwconv.cpp
     common/verify.cpp

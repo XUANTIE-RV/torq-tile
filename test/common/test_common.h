@@ -73,6 +73,16 @@ struct DefaultThreshold<int32_t>
 };
 
 // ============================================================================
+// A layout enumeration (for BLAS-style SGEMM)
+// ============================================================================
+
+enum class ALayout
+{
+    kRowMajor,    // A stored as [M, K], access A[m_idx * lda + k_idx]
+    kTransposed,  // A stored as [K, M], access A[k_idx * lda + m_idx]
+};
+
+// ============================================================================
 // Loop Dimension Enumeration (for configurable loop order)
 // ============================================================================
 

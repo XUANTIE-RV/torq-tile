@@ -73,6 +73,11 @@ set(TORQ_TILE_RVV_SOURCES
     src/gemm/gemm_f32_f32/gemm_1xnbias_clamp_f32_f32p_f32p/tqt_gemm_1xnbias_clamp_f32_f32p_f32p_2x8vl_rvv.cpp
     src/gemm/gemm_f32_f32/gemm_mx1bias_clamp_f32_f32_f32/tqt_gemm_mx1bias_clamp_f32_f32_f32_8x3vl_rvv.cpp
     src/gemm/gemm_f32_f32/gemm_mx1bias_clamp_f32_f32p_f32p/tqt_gemm_mx1bias_clamp_f32_f32p_f32p_8x3vl_rvv.cpp
+    # BLAS-style SGEMM: D = alpha * A * B + beta * C
+    src/gemm/gemm_f32_f32/sgemm_f32_f32_f32/tqt_sgemm_f32_f32_f32_8x3vl_rvv.cpp
+    src/gemm/gemm_f32_f32/sgemm_f32_f32_f32t/tqt_sgemm_f32_f32_f32t_8x3vl_rvv.cpp
+    src/gemm/gemm_f32_f32/sgemm_f32_f32t_f32/tqt_sgemm_f32_f32t_f32_8x3vl_rvv.cpp
+    src/gemm/gemm_f32_f32/sgemm_f32_f32t_f32t/tqt_sgemm_f32_f32t_f32t_8x3vl_rvv.cpp
     src/conv/conv_f32_f32/convcf_mx1bias_clamp_f32_f32_f32/tqt_convcf_mx1bias_clamp_f32_f32_f32_8x3vl_rvv.cpp
     src/conv/conv_f32_f32/convcf_mx1bias_clamp_f32_f32p_f32p/tqt_convcf_mx1bias_clamp_f32_f32p_f32p_8x3vl_rvv.cpp
     src/conv/conv_f32_f32/convcl_1xnbias_clamp_f32_f32_f32t/tqt_convcl_1xnbias_clamp_f32_f32_f32t_8x3vl_rvv.cpp

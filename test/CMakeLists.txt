@@ -61,8 +61,9 @@ if(TORQ_TILE_ENABLE_RVV)
     # --- Gemm INT8 RVV variants ---
     torq_tile_add_test(test_gemm_i8_i8_rvv
         gemm/test_gemm_i8_i8_rvv.cpp)
-    # --- Gemm W4A8 (F32/F16/BF16_QAI8DX_QSI4CX) RVV variants ---
-    # F32 path is always compiled; F16/BF16 paths are gated inside the TU
+    # --- Gemm W4A8 (per-channel qai8dx/qsi4cx + block-quantized
+    #     qai8dx|qsi8d2 × qsi4c2|qai4c2) RVV variants ---
+    # F32 paths are always compiled; F16/BF16 paths are gated inside the TU
     # by __riscv_zfh/__riscv_zvfh and __riscv_zvfbfwma feature macros.
     torq_tile_add_test(test_gemm_i8_i4_rvv
         gemm/test_gemm_i8_i4_rvv.cpp)

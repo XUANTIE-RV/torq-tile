@@ -256,8 +256,8 @@ void run_nonpacked_sgemm_test(const SgemmTestParams &params, const NonPackedSgem
                 effective_ldc = actual_n;
             }
 
-            funcs.run_sgemm(actual_m, actual_n, actual_k, a_ptr, lda, 0, b_ptr, ldb, 0, c_ptr,
-                            effective_ldc, d_ptr, ldd, effective_alpha, effective_beta);
+            funcs.run_sgemm(actual_m, actual_n, actual_k, a_ptr, lda, k_start, b_ptr, ldb, k_start,
+                            c_ptr, effective_ldc, d_ptr, ldd, effective_alpha, effective_beta);
         });
 
     auto result = verify_gemm_result<TD>(ref_D.data(), act_D.data(), m * n, abs_error_threshold,

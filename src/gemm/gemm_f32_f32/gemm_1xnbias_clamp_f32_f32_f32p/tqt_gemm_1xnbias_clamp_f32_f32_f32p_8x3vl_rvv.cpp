@@ -45,7 +45,7 @@ size_t tqt_get_b_packed_offset_gemm_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv(size_t 
                                                                          size_t actual_n)
 {
     TQT_ASSUME(n_idx % n_step == 0);
-    return (n_idx * ldb + k_idx * TQT_MIN(actual_n, n_step)) * sizeof(float);
+    return (n_idx * ldb + k_idx * tqt_gemm_pack_3vl_first_n(actual_n, vlmax)) * sizeof(float);
 }
 
 size_t tqt_get_c_offset_gemm_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv(size_t m_idx, size_t n_idx,
@@ -199,25 +199,23 @@ void tqt_run_gemm_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv(size_t m, size_t n, size_
                                                        float clamp_min, float clamp_max)
 {
     TQT_UNUSED(k_idx_a);
+    const size_t origin_n = tqt_gemm_pack_3vl_first_n(TQT_MIN(n, n_step), vlmax);
 
     for (size_t m_idx = 0; m_idx < m; m_idx += m_step) {
         for (size_t n_idx = 0; n_idx < n; n_idx += n_step) {
             const size_t actual_m = TQT_MIN(m - m_idx, m_step);
             const size_t actual_n = TQT_MIN(n - n_idx, n_step);
+            const size_t first_n = tqt_gemm_pack_3vl_first_n(actual_n, vlmax);
 
             // A: original row-major layout
             const float *a_ptr = (const float *)A + m_idx * lda;
 
             // B: packed layout
-            const float *b_ptr;
-            if (actual_n == n_step || k_idx_b == 0) {
-                b_ptr = (const float *)B_packed + n_idx * ldb;
-            } else {
-                b_ptr = (const float *)B_packed + n_idx * ldb - k_idx_b * (n_step - actual_n);
-            }
+            const float *b_ptr =
+                (const float *)B_packed + n_idx * ldb + k_idx_b * first_n - k_idx_b * origin_n;
 
-            const float *c_ptr = C ? (const float *)C + m_idx * ldc + n_idx : NULL;
-            const float *bias_ptr = bias ? (const float *)bias + n_idx : NULL;
+            const float *c_ptr = C ? (const float *)C + m_idx * ldc + n_idx : nullptr;
+            const float *bias_ptr = bias ? (const float *)bias + n_idx : nullptr;
             float *d_ptr = (float *)D + m_idx * ldd + n_idx;
 
             size_t size_n = 0;
@@ -234,7 +232,9 @@ void tqt_run_gemm_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv(size_t m, size_t n, size_
             }
             size_t remain_n = actual_n - size_n;
             if (remain_n > 0) {
-                b_ptr += size_n * ldb - k_idx_b * (remain_n);
+                if (size_n > 0) {
+                    b_ptr += size_n * ldb - k_idx_b * (size_n - remain_n);
+                }
                 if (C)
                     c_ptr += size_n;
                 if (bias)

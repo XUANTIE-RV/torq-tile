@@ -79,6 +79,7 @@ static PackedIgemmcfFuncs<float> make_igemmcf_packed_funcs()
         tqt_get_a_packed_size_igemmcf_mx1bias_clamp_f32_f32p_f32_3vlx8_rvv,
         tqt_run_a_pack_igemmcf_mx1bias_clamp_f32_f32p_f32_3vlx8_rvv,
         tqt_run_igemm_igemmcf_mx1bias_clamp_f32_f32p_f32_3vlx8_rvv,
+        tqt_get_a_packed_offset_igemmcf_mx1bias_clamp_f32_f32p_f32_3vlx8_rvv,
     };
 }
 
@@ -160,6 +161,7 @@ static PackedIgemmclFuncs<float> make_igemmcl_packed_funcs()
         tqt_get_b_packed_size_igemmcl_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv,
         tqt_run_bt_pack_igemmcl_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv,
         tqt_run_igemm_igemmcl_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv,
+        tqt_get_b_packed_offset_igemmcl_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv,
     };
 }
 
@@ -175,3 +177,38 @@ TEST_P(Test_igemmcl_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv, Correctness)
 
 INSTANTIATE_TEST_SUITE_P(ConvTests, Test_igemmcl_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv,
                          common_igemmcl_test_values(), ConvTestParamNameGenerator());
+
+// ============================================================================
+// Nonzero K-origin (split-K) coverage for the packed weight paths
+//
+// The parameterized suites above always pack and run at k_idx = 0. These shapes
+// force a panel past the first one to use the 3vl tail split, plus a single
+// partial panel below vlmax, which is where the origin-relative packed
+// addressing differs from a plain per-panel offset.
+// ============================================================================
+
+static std::vector<size_t> nonzero_k_origin_channels(size_t vlmax)
+{
+    std::vector<size_t> channels = {4 * vlmax + 1};
+    if (vlmax > 1) {
+        channels.push_back(vlmax - 1);
+    }
+    return channels;
+}
+
+TEST(IgemmF32F32Rvv, PackedNonzeroKOrigin)
+{
+    const auto cl_funcs = make_igemmcl_packed_funcs();
+    for (size_t oc : nonzero_k_origin_channels(cl_funcs.get_n_step() / 3)) {
+        ConvTestParams tp(2, oc, 1, 5, 5, 3, 3, "OC" + std::to_string(oc));
+        tp.input_shape[0] = 2;   // ID, so that KD = 2 gives two sliceable K planes
+        tp.kernel_shape[0] = 2;  // KD
+        run_packed_igemmcl_nonzero_k_origin_test<float, float>(tp, cl_funcs);
+    }
+
+    const auto cf_funcs = make_igemmcf_packed_funcs();
+    for (size_t oc : nonzero_k_origin_channels(cf_funcs.get_m_step() / 3)) {
+        ConvTestParams tp(2, oc, 1, 5, 5, 3, 3, "OC" + std::to_string(oc));
+        run_packed_igemmcf_nonzero_k_origin_test<float, float>(tp, cf_funcs);
+    }
+}

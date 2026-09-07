@@ -39,7 +39,7 @@ size_t tqt_get_a_packed_offset_igemmcf_mx1bias_clamp_f32_f32p_f32_3vlx8_rvv(size
                                                                             size_t actual_m)
 {
     TQT_ASSUME(m_idx % m_step == 0);
-    return (m_idx * lda + k_idx * TQT_MIN(actual_m, m_step)) * sizeof(float);
+    return (m_idx * lda + k_idx * tqt_gemm_pack_3vl_first_n(actual_m, vlmax)) * sizeof(float);
 }
 
 size_t tqt_get_c_offset_igemmcf_mx1bias_clamp_f32_f32p_f32_3vlx8_rvv(size_t m_idx, size_t n_idx,
@@ -250,6 +250,10 @@ void tqt_run_igemm_igemmcf_mx1bias_clamp_f32_f32p_f32_3vlx8_rvv(
 
     const float *input_group = (const float *)input + group_idx * IC_per_group * ID * IH * IW;
 
+    // Packed-weight origin anchor: the caller selects A_packed with the first M panel's packed
+    // width, so the per-panel addressing below is relative to that anchor.
+    const size_t origin_m = tqt_gemm_pack_3vl_first_n(TQT_MIN(m, m_step), vlmax);
+
     // N tiling (spatial direction)
     for (size_t n_idx_local = 0; n_idx_local < n; n_idx_local += n_step) {
         const size_t actual_n = TQT_MIN(n - n_idx_local, n_step);
@@ -268,17 +272,15 @@ void tqt_run_igemm_igemmcf_mx1bias_clamp_f32_f32p_f32_3vlx8_rvv(
         // M tiling (OC direction)
         for (size_t m_idx = 0; m_idx < m; m_idx += m_step) {
             const size_t actual_m = TQT_MIN(m - m_idx, m_step);
+            const size_t first_m = tqt_gemm_pack_3vl_first_n(actual_m, vlmax);
 
-            // Packed weight pointer: locate the packed block for this OC tile
-            const float *w_ptr;
-            if (actual_m == m_step || k_idx_a == 0) {
-                w_ptr = (const float *)A_packed + m_idx * lda;
-            } else {
-                w_ptr = (const float *)A_packed + m_idx * lda - k_idx_a * (m_step - actual_m);
-            }
+            // Packed weight pointer: locate the packed block for this OC tile, addressed
+            // relative to the packed origin
+            const float *w_ptr =
+                (const float *)A_packed + m_idx * lda + k_idx_a * first_m - k_idx_a * origin_m;
 
-            const float *bias_ptr = bias ? (const float *)bias + m_idx : NULL;
-            const float *c_ptr = C ? (const float *)C + m_idx * ldc + global_n : NULL;
+            const float *bias_ptr = bias ? (const float *)bias + m_idx : nullptr;
+            const float *c_ptr = C ? (const float *)C + m_idx * ldc + global_n : nullptr;
             float *d_ptr = (float *)D + m_idx * ldd + global_n;
 
             // M tail handling
@@ -300,8 +302,12 @@ void tqt_run_igemm_igemmcf_mx1bias_clamp_f32_f32p_f32_3vlx8_rvv(
             if (remain_m > 0) {
                 // Advance pointers for remainder sub-block
                 const float *w_remain = w_ptr + size_m * lda;
-                const float *bias_remain = bias_ptr ? bias_ptr + size_m : NULL;
-                const float *c_remain = c_ptr ? c_ptr + size_m * ldc : NULL;
+                if (size_m > 0) {
+                    // The split tail sub-panel is packed at its own width
+                    w_remain -= k_idx_a * (size_m - remain_m);
+                }
+                const float *bias_remain = bias_ptr ? bias_ptr + size_m : nullptr;
+                const float *c_remain = c_ptr ? c_ptr + size_m * ldc : nullptr;
                 float *d_remain = d_ptr + size_m * ldd;
                 igemmcf_packed_dispatch(remain_m, actual_n, K_inner, ic_start, ic_end, d_remain,
                                         w_remain, input_group, c_remain, bias_remain, ldd, ldc,

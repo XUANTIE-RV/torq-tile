@@ -299,6 +299,31 @@ static inline void tqt_gemm_pack_nxk_e16_kernel(size_t n, size_t k, const uint16
 // Public Pack Functions
 // ============================================================================
 
+static inline size_t tqt_gemm_pack_3vl_first_n(size_t actual_n, size_t vlmax)
+{
+    if (actual_n >= 3 * vlmax) {
+        return 3 * vlmax;
+    }
+    if (actual_n >= 2 * vlmax) {
+        return 2 * vlmax;
+    }
+    if (actual_n >= vlmax) {
+        return vlmax;
+    }
+    return actual_n;
+}
+
+static inline size_t tqt_gemm_pack_2vl_first_n(size_t actual_n, size_t vlmax)
+{
+    if (actual_n >= 2 * vlmax) {
+        return 2 * vlmax;
+    }
+    if (actual_n >= vlmax) {
+        return vlmax;
+    }
+    return actual_n;
+}
+
 /// Pack A matrix: [m, k] -> [m/8, k, 8]
 /// A is stored in row-major with shape [m, k]
 /// A_packed will be stored as [m/8, k, 8]
@@ -413,13 +438,14 @@ static void tqt_gemm_pack_kxn_1x3vl_rvv(size_t n, size_t k, size_t ldb, size_t l
 
     for (size_t n_idx = 0; n_idx < n; n_idx += n_step) {
         const size_t actual_n = TQT_MIN(n - n_idx, n_step);
+        const size_t first_n = tqt_gemm_pack_3vl_first_n(actual_n, vlmax);
         const uint8_t *b_ptr = B_u8 + n_idx * bytes_per_elem;
         uint8_t *b_packed_ptr;
         if (n_idx == 0 || k_idx == 0 || actual_n == n_step) {
             b_packed_ptr = B_packed_u8 + (n_idx * ldb_packed) * bytes_per_elem;
         } else {
             b_packed_ptr =
-                B_packed_u8 + (n_idx * ldb_packed - k_idx * (n_step - actual_n)) * bytes_per_elem;
+                B_packed_u8 + (n_idx * ldb_packed - k_idx * (n_step - first_n)) * bytes_per_elem;
         }
 
         size_t size_n = 0;
@@ -440,8 +466,11 @@ static void tqt_gemm_pack_kxn_1x3vl_rvv(size_t n, size_t k, size_t ldb, size_t l
         }
         size_t remain_n = actual_n - size_n;
         if (remain_n > 0) {
-            b_ptr += size_n * bytes_per_elem;
-            b_packed_ptr += size_n * ldb_packed * bytes_per_elem;
+            if (size_n > 0) {
+                b_ptr += size_n * bytes_per_elem;
+                b_packed_ptr +=
+                    (size_n * ldb_packed - k_idx * (size_n - remain_n)) * bytes_per_elem;
+            }
             tqt_gemm_pack_kxn_kernel<1>(remain_n, k, b_ptr, ldb, b_packed_ptr, remain_n,
                                         bytes_per_elem);
         }
@@ -462,12 +491,13 @@ static void tqt_gemm_pack_nxk_1x3vl_e32_rvv(size_t n, size_t k, size_t ldb, size
 
     for (size_t n_idx = 0; n_idx < n; n_idx += n_step) {
         const size_t actual_n = TQT_MIN(n - n_idx, n_step);
+        const size_t first_n = tqt_gemm_pack_3vl_first_n(actual_n, vlmax);
         const uint32_t *b_ptr = B_u32 + n_idx * ldb;
         uint32_t *b_packed_ptr;
         if (n_idx == 0 || k_idx == 0 || actual_n == n_step) {
             b_packed_ptr = B_packed_u32 + n_idx * ldb_packed;
         } else {
-            b_packed_ptr = B_packed_u32 + n_idx * ldb_packed - k_idx * (n_step - actual_n);
+            b_packed_ptr = B_packed_u32 + n_idx * ldb_packed - k_idx * (n_step - first_n);
         }
 
         size_t size_n = 0;
@@ -485,8 +515,10 @@ static void tqt_gemm_pack_nxk_1x3vl_e32_rvv(size_t n, size_t k, size_t ldb, size
         }
         size_t remain_n = actual_n - size_n;
         if (remain_n > 0) {
-            b_ptr += size_n * ldb;
-            b_packed_ptr += size_n * ldb_packed;
+            if (size_n > 0) {
+                b_ptr += size_n * ldb;
+                b_packed_ptr += size_n * ldb_packed - k_idx * (size_n - remain_n);
+            }
             tqt_gemm_pack_nxk_e32_kernel<1>(remain_n, k, b_ptr, ldb, b_packed_ptr, remain_n);
         }
     }
@@ -506,12 +538,13 @@ static void tqt_gemm_pack_nxk_1x3vl_e16_rvv(size_t n, size_t k, size_t ldb, size
 
     for (size_t n_idx = 0; n_idx < n; n_idx += n_step) {
         const size_t actual_n = TQT_MIN(n - n_idx, n_step);
+        const size_t first_n = tqt_gemm_pack_3vl_first_n(actual_n, vlmax);
         const uint16_t *b_ptr = B_u16 + n_idx * ldb;
         uint16_t *b_packed_ptr;
         if (n_idx == 0 || k_idx == 0 || actual_n == n_step) {
             b_packed_ptr = B_packed_u16 + n_idx * ldb_packed;
         } else {
-            b_packed_ptr = B_packed_u16 + n_idx * ldb_packed - k_idx * (n_step - actual_n);
+            b_packed_ptr = B_packed_u16 + n_idx * ldb_packed - k_idx * (n_step - first_n);
         }
 
         size_t size_n = 0;
@@ -529,8 +562,10 @@ static void tqt_gemm_pack_nxk_1x3vl_e16_rvv(size_t n, size_t k, size_t ldb, size
         }
         size_t remain_n = actual_n - size_n;
         if (remain_n > 0) {
-            b_ptr += size_n * ldb;
-            b_packed_ptr += size_n * ldb_packed;
+            if (size_n > 0) {
+                b_ptr += size_n * ldb;
+                b_packed_ptr += size_n * ldb_packed - k_idx * (size_n - remain_n);
+            }
             tqt_gemm_pack_nxk_e16_kernel<1>(remain_n, k, b_ptr, ldb, b_packed_ptr, remain_n);
         }
     }
@@ -593,7 +628,7 @@ static void tqt_gemm_pack_nxk_1x1vl_e16_rvv(size_t n, size_t k, size_t ldb, size
 }
 
 // ============================================================================
-// INT8 Pack Kernels
+// INT8 / INT4 Pack Kernels
 // ============================================================================
 
 /// Pack kernel for A matrix: [m, k] -> [m/MR, k, MR]
@@ -816,12 +851,13 @@ static void tqt_gemm_pack_nxk_1x2vl_e8mf2_rvv(size_t n, size_t k, size_t ldb, si
 
     for (size_t n_idx = 0; n_idx < n; n_idx += n_step) {
         const size_t actual_n = TQT_MIN(n - n_idx, n_step);
+        const size_t first_n = tqt_gemm_pack_2vl_first_n(actual_n, vlmax_mf2);
         const uint8_t *b_ptr = B_u8 + n_idx * ldb;
         uint8_t *b_packed_ptr;
         if (n_idx == 0 || k_idx == 0 || actual_n == n_step) {
             b_packed_ptr = B_packed_u8 + n_idx * ldb_packed;
         } else {
-            b_packed_ptr = B_packed_u8 + n_idx * ldb_packed - k_idx * (n_step - actual_n);
+            b_packed_ptr = B_packed_u8 + n_idx * ldb_packed - k_idx * (n_step - first_n);
         }
 
         if (actual_n >= n_step) {
@@ -829,8 +865,9 @@ static void tqt_gemm_pack_nxk_1x2vl_e8mf2_rvv(size_t n, size_t k, size_t ldb, si
         } else if (actual_n > vlmax_mf2) {
             const size_t remain = actual_n - vlmax_mf2;
             tqt_gemm_pack_nxk_e8mf2_kernel<1>(vlmax_mf2, k, b_ptr, ldb, b_packed_ptr, vlmax_mf2);
-            tqt_gemm_pack_nxk_e8mf2_kernel<1>(remain, k, b_ptr + vlmax_mf2 * ldb, ldb,
-                                              b_packed_ptr + vlmax_mf2 * ldb_packed, remain);
+            tqt_gemm_pack_nxk_e8mf2_kernel<1>(
+                remain, k, b_ptr + vlmax_mf2 * ldb, ldb,
+                b_packed_ptr + vlmax_mf2 * ldb_packed - k_idx * (vlmax_mf2 - remain), remain);
         } else {
             tqt_gemm_pack_nxk_e8mf2_kernel<1>(actual_n, k, b_ptr, ldb, b_packed_ptr, actual_n);
         }

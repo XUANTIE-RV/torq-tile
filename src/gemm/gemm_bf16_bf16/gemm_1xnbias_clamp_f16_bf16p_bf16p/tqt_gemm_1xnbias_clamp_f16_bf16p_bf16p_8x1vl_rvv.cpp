@@ -183,20 +183,12 @@ void tqt_run_gemm_1xnbias_clamp_f16_bf16p_bf16p_8x1vl_rvv(
             const size_t actual_m = TQT_MIN(m - m_idx, m_step);
             const size_t actual_n = TQT_MIN(n - n_idx, n_step);
 
-            const bfloat16_t *a_ptr;
-            const bfloat16_t *b_ptr;
-            if (actual_m == m_step || k_idx_a == 0) {
-                a_ptr = (const bfloat16_t *)A_packed + m_idx * lda;
-            } else {
-                a_ptr = (const bfloat16_t *)A_packed + m_idx * lda - k_idx_a * (m_step - actual_m);
-            }
-            if (actual_n == n_step || k_idx_b == 0) {
-                b_ptr = (const bfloat16_t *)B_packed + n_idx * ldb;
-            } else {
-                b_ptr = (const bfloat16_t *)B_packed + n_idx * ldb - k_idx_b * (n_step - actual_n);
-            }
-            const float16_t *c_ptr = C ? (const float16_t *)C + m_idx * ldc + n_idx : NULL;
-            const float16_t *bias_ptr = bias ? (const float16_t *)bias + n_idx : NULL;
+            const bfloat16_t *a_ptr = (const bfloat16_t *)A_packed + m_idx * lda +
+                                      k_idx_a * actual_m - k_idx_a * TQT_MIN(m, m_step);
+            const bfloat16_t *b_ptr = (const bfloat16_t *)B_packed + n_idx * ldb +
+                                      k_idx_b * actual_n - k_idx_b * TQT_MIN(n, n_step);
+            const float16_t *c_ptr = C ? (const float16_t *)C + m_idx * ldc + n_idx : nullptr;
+            const float16_t *bias_ptr = bias ? (const float16_t *)bias + n_idx : nullptr;
             float16_t *d_ptr = (float16_t *)D + m_idx * ldd + n_idx;
 
             size_t mr_idx = actual_m - 1;

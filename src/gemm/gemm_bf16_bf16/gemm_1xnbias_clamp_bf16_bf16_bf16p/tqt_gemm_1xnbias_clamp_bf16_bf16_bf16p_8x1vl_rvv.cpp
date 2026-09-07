@@ -174,15 +174,11 @@ void tqt_run_gemm_1xnbias_clamp_bf16_bf16_bf16p_8x1vl_rvv(
             const bfloat16_t *a_ptr = (const bfloat16_t *)A + m_idx * lda;
 
             // B: packed layout
-            const bfloat16_t *b_ptr;
-            if (actual_n == n_step || k_idx_b == 0) {
-                b_ptr = (const bfloat16_t *)B_packed + n_idx * ldb;
-            } else {
-                b_ptr = (const bfloat16_t *)B_packed + n_idx * ldb - k_idx_b * (n_step - actual_n);
-            }
+            const bfloat16_t *b_ptr = (const bfloat16_t *)B_packed + n_idx * ldb +
+                                      k_idx_b * actual_n - k_idx_b * TQT_MIN(n, n_step);
 
-            const bfloat16_t *c_ptr = C ? (const bfloat16_t *)C + m_idx * ldc + n_idx : NULL;
-            const bfloat16_t *bias_ptr = bias ? (const bfloat16_t *)bias + n_idx : NULL;
+            const bfloat16_t *c_ptr = C ? (const bfloat16_t *)C + m_idx * ldc + n_idx : nullptr;
+            const bfloat16_t *bias_ptr = bias ? (const bfloat16_t *)bias + n_idx : nullptr;
             bfloat16_t *d_ptr = (bfloat16_t *)D + m_idx * ldd + n_idx;
 
             size_t mr_idx = actual_m - 1;

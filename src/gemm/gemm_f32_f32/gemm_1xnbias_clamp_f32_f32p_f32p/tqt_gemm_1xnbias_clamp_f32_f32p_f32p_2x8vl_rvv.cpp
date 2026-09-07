@@ -280,29 +280,20 @@ void tqt_run_gemm_1xnbias_clamp_f32_f32p_f32p_2x8vl_rvv(size_t m, size_t n, size
                                                         const void *bias, float clamp_min,
                                                         float clamp_max)
 {
+    const size_t origin_m = TQT_MIN(m, m_step);
+    const size_t origin_n = TQT_MIN(n, n_step);
+
     for (size_t m_idx = 0; m_idx < m; m_idx += m_step) {
         for (size_t n_idx = 0; n_idx < n; n_idx += n_step) {
             const size_t actual_m = TQT_MIN(m - m_idx, m_step);
             const size_t actual_n = TQT_MIN(n - n_idx, n_step);
 
-            // Packed A pointer: trailing partial m-block has stride actual_m (not m_step),
-            // so when k_idx_a > 0 we compensate for the over-counted advancement.
-            const float *a_ptr;
-            if (actual_m == m_step || k_idx_a == 0) {
-                a_ptr = (const float *)A + m_idx * lda;
-            } else {
-                a_ptr = (const float *)A + m_idx * lda - k_idx_a * (m_step - actual_m);
-            }
-            // Packed B pointer: same compensation for trailing partial n-block
-            // (per-k row stride within the block equals actual_n, not n_step).
-            const float *b_ptr;
-            if (actual_n == n_step || k_idx_b == 0) {
-                b_ptr = (const float *)B + n_idx * ldb;
-            } else {
-                b_ptr = (const float *)B + n_idx * ldb - k_idx_b * (n_step - actual_n);
-            }
-            const float *c_ptr = C ? (const float *)C + m_idx * ldc + n_idx : NULL;
-            const float *bias_ptr = bias ? (const float *)bias + n_idx : NULL;
+            const float *a_ptr =
+                (const float *)A + m_idx * lda + k_idx_a * actual_m - k_idx_a * origin_m;
+            const float *b_ptr =
+                (const float *)B + n_idx * ldb + k_idx_b * actual_n - k_idx_b * origin_n;
+            const float *c_ptr = C ? (const float *)C + m_idx * ldc + n_idx : nullptr;
+            const float *bias_ptr = bias ? (const float *)bias + n_idx : nullptr;
             float *d_ptr = (float *)D + m_idx * ldd + n_idx;
 
             gemm_mrxnr_8vl_rvv(actual_m, actual_n, k, d_ptr, a_ptr, b_ptr, c_ptr, bias_ptr, ldd,

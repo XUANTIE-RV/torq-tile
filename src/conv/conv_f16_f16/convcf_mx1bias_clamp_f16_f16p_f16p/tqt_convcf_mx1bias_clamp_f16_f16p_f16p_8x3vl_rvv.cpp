@@ -12,6 +12,7 @@
 
 #include <stdlib.h>
 
+#include "src/common/tqt_gemm_pack_rvv.h"
 #include "src/gemm/gemm_f16_f16/gemm_mx1bias_clamp_f16_f16p_f16p/tqt_gemm_mx1bias_clamp_f16_f16p_f16p_8x3vl_rvv.h"
 
 // ============================================================================
@@ -198,11 +199,14 @@ void tqt_run_b_im2colpack_convcf_mx1bias_clamp_f16_f16p_f16p_8x3vl_rvv(
 
     for (size_t n_idx = 0; n_idx < N; n_idx += n_step) {
         const size_t actual_n = TQT_MIN(N - n_idx, n_step);
+        // Anchor each panel exactly like the shared 3vl packer: a split tail panel is stored at
+        // its own packed width, so the K origin advances by first_n rather than by actual_n.
+        const size_t first_n = tqt_gemm_pack_3vl_first_n(actual_n, vlmax);
         float16_t *panel_ptr;
         if (n_idx == 0 || k_idx == 0 || actual_n == n_step)
             panel_ptr = packed + n_idx * ldb_packed;
         else
-            panel_ptr = packed + n_idx * ldb_packed - k_idx * (n_step - actual_n);
+            panel_ptr = packed + n_idx * ldb_packed - k_idx * (n_step - first_n);
 
         size_t size_n = 0;
         if (actual_n >= vlmax) {
@@ -217,9 +221,13 @@ void tqt_run_b_im2colpack_convcf_mx1bias_clamp_f16_f16p_f16p_8x3vl_rvv(
 
         if (size_n > 0)
             b_im2colpack_cf_fill(panel_ptr, size_n, n_idx, input_group, IC_per_group, params);
-        if (remain_n > 0)
-            b_im2colpack_cf_fill(panel_ptr + size_n * ldb_packed, remain_n, n_idx + size_n,
-                                 input_group, IC_per_group, params);
+        if (remain_n > 0) {
+            float16_t *remain_ptr = panel_ptr;
+            if (size_n > 0)
+                remain_ptr += size_n * ldb_packed - k_idx * (size_n - remain_n);
+            b_im2colpack_cf_fill(remain_ptr, remain_n, n_idx + size_n, input_group, IC_per_group,
+                                 params);
+        }
     }
 }
 

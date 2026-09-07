@@ -114,6 +114,10 @@ set(TORQ_TILE_RVV_SOURCES
     src/elementwise/div_f32_f32/divvv_f32_f32_f32/tqt_divvv_f32_f32_f32_8vl_rvv.cpp
     src/elementwise/div_f32_f32/divvs_f32_f32_f32/tqt_divvs_f32_f32_f32_8vl_rvv.cpp
     # Reduction F32 RVV
+    src/reduction/sum_f32_f32/sumrow_f32_f32/tqt_sumrow_f32_f32_4x4vl_rvv.cpp
+    src/reduction/sum_f32_f32/sumcol_f32_f32/tqt_sumcol_f32_f32_2x8vl_rvv.cpp
+    src/reduction/mean_f32_f32/meanrow_f32_f32/tqt_meanrow_f32_f32_4x4vl_rvv.cpp
+    src/reduction/mean_f32_f32/meancol_f32_f32/tqt_meancol_f32_f32_2x8vl_rvv.cpp
     # INT8 RVV
     src/gemm/gemm_i8_i8/gemm_clamp_i32_i8_i8/tqt_gemm_clamp_i32_i8_i8_4x1vl_rvv.cpp
     src/gemm/gemm_i8_i8/gemm_clamp_i32_i8p_i8p/tqt_gemm_clamp_i32_i8p_i8p_4x1vl_rvv.cpp
@@ -212,6 +216,11 @@ set(TORQ_TILE_RVV_FP16_SOURCES
     src/elementwise/mul_f16_f16/mulvs_f16_f16_f16/tqt_mulvs_f16_f16_f16_8vl_rvv.cpp
     src/elementwise/div_f16_f16/divvv_f16_f16_f16/tqt_divvv_f16_f16_f16_8vl_rvv.cpp
     src/elementwise/div_f16_f16/divvs_f16_f16_f16/tqt_divvs_f16_f16_f16_8vl_rvv.cpp
+    # Reduction F16 RVV
+    src/reduction/sum_f16_f16/sumrow_f16_f16/tqt_sumrow_f16_f16_4x2vl_rvv.cpp
+    src/reduction/sum_f16_f16/sumcol_f16_f16/tqt_sumcol_f16_f16_2x4vl_rvv.cpp
+    src/reduction/mean_f16_f16/meanrow_f16_f16/tqt_meanrow_f16_f16_4x2vl_rvv.cpp
+    src/reduction/mean_f16_f16/meancol_f16_f16/tqt_meancol_f16_f16_2x4vl_rvv.cpp
 )
 
 # RVV BF16 (RISC-V Vector + Zvfbfwma) kernel files

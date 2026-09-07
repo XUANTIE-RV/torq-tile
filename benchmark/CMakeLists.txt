@@ -28,6 +28,8 @@ if(TORQ_TILE_ENABLE_RVV)
         elementwise/bench_sub_f32_f32_rvv.cpp
         elementwise/bench_mul_f32_f32_rvv.cpp
         elementwise/bench_div_f32_f32_rvv.cpp
+        reduction/bench_sum_f32_f32_rvv.cpp
+        reduction/bench_mean_f32_f32_rvv.cpp
     )
 endif()
 
@@ -49,6 +51,8 @@ if(TORQ_TILE_ENABLE_RVV_FP16)
         elementwise/bench_sub_f16_f16_rvv.cpp
         elementwise/bench_mul_f16_f16_rvv.cpp
         elementwise/bench_div_f16_f16_rvv.cpp
+        reduction/bench_sum_f16_f16_rvv.cpp
+        reduction/bench_mean_f16_f16_rvv.cpp
     )
 endif()
 

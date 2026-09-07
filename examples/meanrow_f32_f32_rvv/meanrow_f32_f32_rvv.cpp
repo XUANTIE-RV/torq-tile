@@ -1,0 +1,158 @@
+//
+// SPDX-FileCopyrightText: Copyright 2024-2026 C-SKY Microsystems Co., Ltd.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+
+#if !defined(__riscv) || !defined(__riscv_v)
+#error This file must be compiled for riscv, riscv_vector.
+#endif  // Architectural features check.
+
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+
+#include "src/common/tqt_common.h"
+
+// Include micro-kernel variants
+#include "tqt_meanrow_f32_f32_4x4vl_rvv.h"
+#include "tqt_meanrow_f32_f32_interface.h"
+
+namespace
+{
+/// Micro-kernel interface
+const tqt_meanrow_f32_f32_ukernel ukernel{tqt_get_m_step_meanrow_f32_f32_4x4vl_rvv,
+                                          tqt_get_n_step_meanrow_f32_f32_4x4vl_rvv,
+                                          tqt_run_meanrow_f32_f32_4x4vl_rvv};
+
+// Fill matrix with random float values
+void fill_random(size_t n, float *vec, float min_val, float max_val)
+{
+    for (size_t i = 0; i < n; ++i) {
+        vec[i] = min_val + (max_val - min_val) * ((float)rand() / (float)RAND_MAX);
+    }
+}
+
+// Reference implementation: c[m] = (1/n) * sum over n of a[m * lda + n]
+void run_meanrow_ref(size_t m, size_t n, const float *a, size_t lda, float *c)
+{
+    const float recip = (n != 0) ? 1.0f / (float)n : 0.0f;
+    for (size_t i = 0; i < m; ++i) {
+        float acc = 0.0f;
+        for (size_t j = 0; j < n; ++j) {
+            acc += a[i * lda + j];
+        }
+        c[i] = acc * recip;
+    }
+}
+
+// Verify results element-wise
+bool verify_results(size_t n, float tolerance, const float *ref, const float *act)
+{
+    bool passed = true;
+    float max_diff = 0.0f;
+    size_t max_diff_idx = 0;
+    float max_diff_ref = 0.0f;
+    float max_diff_act = 0.0f;
+
+    for (size_t i = 0; i < n; ++i) {
+        float diff = fabsf(ref[i] - act[i]);
+
+        if (diff > max_diff) {
+            max_diff = diff;
+            max_diff_idx = i;
+            max_diff_ref = ref[i];
+            max_diff_act = act[i];
+        }
+
+        // Use relative tolerance for large values
+        float ref_abs = fabsf(ref[i]);
+        float tol = (ref_abs > 1.0f) ? tolerance * ref_abs : tolerance;
+        if (diff > tol) {
+#ifdef TQT_DEBUG
+            printf("[%zu]: ref=%.6f vs act=%.6f (diff=%.6f) [FAIL]\n", i, ref[i], act[i], diff);
+#endif
+            passed = false;
+        } else {
+#ifdef TQT_DEBUG
+            printf("[%zu]: ref=%.6f vs act=%.6f (diff=%.6f)\n", i, ref[i], act[i], diff);
+#endif
+        }
+    }
+
+#ifdef TQT_DEBUG
+    printf("Max difference at [%zu]: ref=%.6f, act=%.6f, diff=%.6f\n", max_diff_idx, max_diff_ref,
+           max_diff_act, max_diff);
+#endif
+
+    return passed;
+}
+
+// Calculate cosine similarity between two vectors
+float calculate_cosine_similarity(size_t n, const float *ref, const float *act)
+{
+    double dot_product = 0.0;
+    double ref_norm = 0.0;
+    double act_norm = 0.0;
+
+    for (size_t i = 0; i < n; ++i) {
+        dot_product += ref[i] * act[i];
+        ref_norm += ref[i] * ref[i];
+        act_norm += act[i] * act[i];
+    }
+
+    ref_norm = sqrt(ref_norm);
+    act_norm = sqrt(act_norm);
+
+    if (ref_norm > 0.0 && act_norm > 0.0) {
+        return (float)(dot_product / (ref_norm * act_norm));
+    }
+
+    return 0.0f;
+}
+
+}  // namespace
+
+int main()
+{
+    const size_t M = 8;
+    const size_t N = 256;
+
+    // Allocate memory
+    float *a = (float *)malloc(M * N * sizeof(float));
+    float *c_ref = (float *)malloc(M * sizeof(float));
+    float *c_actual = (float *)malloc(M * sizeof(float));
+
+    if (!a || !c_ref || !c_actual) {
+        fprintf(stderr, "Memory allocation failed\n");
+        return 1;
+    }
+
+    // Initialize input matrix
+    fill_random(M * N, a, -1.0f, 1.0f);
+
+    // Run reference implementation
+    run_meanrow_ref(M, N, a, N, c_ref);
+
+    // Run micro-kernel implementation
+    tqt_run_meanrow_f32_f32_4x4vl_rvv(M, N, a, N, c_actual, nullptr);
+
+    // Verify results
+    const float tolerance = 1e-4f;
+    verify_results(M, tolerance, c_ref, c_actual);
+
+    // Calculate cosine similarity
+    const float cosine_sim = calculate_cosine_similarity(M, c_ref, c_actual);
+    const bool passed = cosine_sim > 0.9999f;
+
+    printf("TEST[meanrow_f32_f32]\n");
+    printf("- ukernel: meanrow_f32_f32_4x4vl_rvv\n");
+    printf("- Cosine Similarity: %f\n", cosine_sim);
+    printf("- Status: %s\n", passed ? "PASSED" : "FAILED");
+
+    free(a);
+    free(c_ref);
+    free(c_actual);
+
+    return passed ? 0 : 1;
+}

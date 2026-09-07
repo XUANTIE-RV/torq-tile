@@ -100,6 +100,8 @@ void tqt_run_gemm_1xnbias_clamp_f32_qsi8d32p_qsi4c32p_4x1vl_rvv(
     size_t ldd, const void *bias, float clamp_min, float clamp_max,
     const struct tqt_qsi8d32_qsi4c32_params *params)
 {
+    const bool apply_clamp = tqt_gemm_clamp_is_enabled((float)clamp_min, (float)clamp_max);
+
     TQT_ASSUME(k % 32 == 0);
     TQT_ASSUME(lda % 32 == 0);
     TQT_ASSUME(ldb % 32 == 0);
@@ -125,7 +127,8 @@ void tqt_run_gemm_1xnbias_clamp_f32_qsi8d32p_qsi4c32p_4x1vl_rvv(
                 params->scale_a + m_idx * params->ldsa, params->ldsa,
                 params->scale_b + n_idx * params->ldsb, params->ldsb,
                 C ? (const float *)C + m_idx * ldc + n_idx : nullptr,
-                bias ? (const float *)bias + n_idx : nullptr, ldc, ldd, clamp_min, clamp_max);
+                bias ? (const float *)bias + n_idx : nullptr, ldc, ldd, clamp_min, clamp_max,
+                apply_clamp);
         }
     }
 }

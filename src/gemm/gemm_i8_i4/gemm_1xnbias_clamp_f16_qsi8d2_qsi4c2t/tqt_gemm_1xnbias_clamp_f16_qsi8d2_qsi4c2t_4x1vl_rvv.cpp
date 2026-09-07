@@ -102,7 +102,7 @@ static void gemm_kernel(size_t K, size_t bl, float16_t *D, const int8_t *A, cons
                         const float *scale_a, const float *scale_b, const float16_t *C,
                         const float16_t *bias, size_t ldd, size_t lda, size_t ldb, size_t ldsa,
                         size_t ldsb, size_t ldc, float16_t clamp_min, float16_t clamp_max,
-                        size_t vl)
+                        bool apply_clamp, size_t vl)
 {
     static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
 
@@ -166,7 +166,10 @@ static void gemm_kernel(size_t K, size_t bl, float16_t *D, const int8_t *A, cons
 
     const float min_f32 = static_cast<float>(clamp_min);
     const float max_f32 = static_cast<float>(clamp_max);
-    tqt_clamp_f32_kernel_gemm_i8_i4_4x1vl_rvv<MR>(vl, min_f32, max_f32);
+    // Skip min/max only for the explicitly unbounded range.
+    if (apply_clamp) {
+        tqt_clamp_f32_kernel_gemm_i8_i4_4x1vl_rvv<MR>(vl, min_f32, max_f32);
+    }
 
     tqt_store_narrow_f16_kernel_gemm_i8_i4_4x1vl_rvv<MR>(vl, D, d_stride_row);
 }
@@ -175,7 +178,8 @@ using gemm_kernel_fn_t = void (*)(size_t K, size_t bl, float16_t *D, const int8_
                                   const uint8_t *B, const float *scale_a, const float *scale_b,
                                   const float16_t *C, const float16_t *bias, size_t ldd, size_t lda,
                                   size_t ldb, size_t ldsa, size_t ldsb, size_t ldc,
-                                  float16_t clamp_min, float16_t clamp_max, size_t vl);
+                                  float16_t clamp_min, float16_t clamp_max, bool apply_clamp,
+                                  size_t vl);
 
 static constexpr gemm_kernel_fn_t kernel_table[4] = {
     gemm_kernel<1>,
@@ -194,6 +198,8 @@ void tqt_run_gemm_1xnbias_clamp_f16_qsi8d2_qsi4c2t_4x1vl_rvv(
     const void *bias, float16_t clamp_min, float16_t clamp_max,
     const struct tqt_qsi8d2_qsi4c2_params *params)
 {
+    const bool apply_clamp = tqt_gemm_clamp_is_enabled((float)clamp_min, (float)clamp_max);
+
     if (!params) {
         return;
     }
@@ -228,7 +234,7 @@ void tqt_run_gemm_1xnbias_clamp_f16_qsi8d2_qsi4c2t_4x1vl_rvv(
             const size_t mr_idx = actual_m - 1;
             kernel_table[mr_idx](k, bl, d_tile, a_tile, b_tile, scale_a_tile, scale_b_tile, c_tile,
                                  bias_tile, ldd, lda, ldb, ldsa, ldsb, ldc, clamp_min, clamp_max,
-                                 actual_n);
+                                 apply_clamp, actual_n);
         }
     }
 }

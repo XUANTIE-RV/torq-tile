@@ -60,6 +60,9 @@ void tqt_run_bt_pack_gemm_mx1bias_1xnbias_clamp_f32_u8p_u8p_4x1vl_rvv(size_t n, 
 /// C is optional [M,N] int32 residual (nullptr to skip). D is [M,N] float output.
 /// bias_m is int32[actual_m]. bias_n is int32[actual_n].
 /// dst_bias is optional float[actual_n].
+/// @note If clamp_min is negative infinity and clamp_max is positive infinity,
+///       clamping is skipped. All other bounds retain the existing clamp behavior.
+///       This does not guarantee preservation of NaN payloads or exception flags.
 void tqt_run_gemm_mx1bias_1xnbias_clamp_f32_u8p_u8p_4x1vl_rvv(
     size_t m, size_t n, size_t k, const void *A_packed, size_t lda, size_t k_idx_a,
     const void *B_packed, size_t ldb, size_t k_idx_b, const void *C, size_t ldc, void *D,

@@ -38,6 +38,9 @@ size_t tqt_get_d_size_gemm_1xnbias_clamp_f16_f16_f16_4x4vl_rvv(size_t m, size_t 
 /// Runs the GEMM microkernel with bias addition and clamp operation.
 /// Computes: D = clamp(C + A*B + bias, clamp_min, clamp_max)
 /// Uses LMUL=4 with runtime-variable vl to handle any N tail in [1, n_step].
+/// @note If clamp_min is negative infinity and clamp_max is positive infinity,
+///       clamping is skipped. All other bounds retain the existing clamp behavior.
+///       This does not guarantee preservation of NaN payloads or exception flags.
 void tqt_run_gemm_1xnbias_clamp_f16_f16_f16_4x4vl_rvv(size_t m, size_t n, size_t k, const void *A,
                                                       size_t lda, size_t k_idx_a, const void *B,
                                                       size_t ldb, size_t k_idx_b, const void *C,

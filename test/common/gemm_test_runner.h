@@ -18,6 +18,7 @@
 
 #include "src/common/tqt_common.h"
 #include "test/common/data_generator.h"
+#include "test/common/gemm_clamp_test_utils.h"
 #include "test/common/reference_gemm.h"
 #include "test/common/test_common.h"
 #include "test/common/verify.h"
@@ -186,6 +187,16 @@ inline void resolve_tile_sizes(const GemmTestParams &params, size_t m_step, size
     m_tile = (params.m_tile == 0) ? params.m : params.m_tile;
     n_tile = (params.n_tile == 0) ? params.n : params.n_tile;
     k_tile = (params.k_tile == 0) ? params.k : params.k_tile;
+    if (gemm_clamp_probe_active) {
+        // Historical fixed tile sizes may be illegal at a larger runtime VLEN.
+        // Keep their split-K work, but give the dedicated clamp probe legal M/N panels.
+        if (m_tile != params.m && m_tile % m_step != 0) {
+            m_tile = std::min(params.m, ((m_tile + m_step - 1) / m_step) * m_step);
+        }
+        if (n_tile != params.n && n_tile % n_step != 0) {
+            n_tile = std::min(params.n, ((n_tile + n_step - 1) / n_step) * n_step);
+        }
+    }
 }
 
 // ============================================================================
@@ -447,8 +458,8 @@ void run_nonpacked_gemm_test(const GemmTestParams &params, const NonPackedGemmFu
                 bias_ptr = reinterpret_cast<const uint8_t *>(bias_data.data()) + bias_offset;
             }
 
-            ClampT effective_clamp_min = static_cast<ClampT>(to_target_type<TD>(-FLT_MAX));
-            ClampT effective_clamp_max = static_cast<ClampT>(to_target_type<TD>(FLT_MAX));
+            ClampT effective_clamp_min = static_cast<ClampT>(to_target_type<TD>(-INFINITY));
+            ClampT effective_clamp_max = static_cast<ClampT>(to_target_type<TD>(INFINITY));
             if (is_last_k) {
                 effective_clamp_min = static_cast<ClampT>(clamp_min);
                 effective_clamp_max = static_cast<ClampT>(clamp_max);
@@ -637,8 +648,8 @@ void run_packed_gemm_test(const GemmTestParams &params, const PackedGemmFuncs<Cl
                     bias_ptr = reinterpret_cast<const uint8_t *>(bias_data.data()) + bias_offset;
                 }
 
-                ClampT effective_clamp_min = static_cast<ClampT>(to_target_type<TD>(-FLT_MAX));
-                ClampT effective_clamp_max = static_cast<ClampT>(to_target_type<TD>(FLT_MAX));
+                ClampT effective_clamp_min = static_cast<ClampT>(to_target_type<TD>(-INFINITY));
+                ClampT effective_clamp_max = static_cast<ClampT>(to_target_type<TD>(INFINITY));
                 if (is_last_k) {
                     effective_clamp_min = static_cast<ClampT>(clamp_min);
                     effective_clamp_max = static_cast<ClampT>(clamp_max);
@@ -736,7 +747,7 @@ void run_packed_gemm_full_buffer_split_k_test(
             const size_t b0_offset = funcs.get_b_packed_offset(n_idx, 0, ldb, actual_n);
             funcs.run_gemm(actual_m, actual_n, k_split, A_packed.data() + a0_offset, lda, 0,
                            B_packed.data() + b0_offset, ldb, 0, c_ptr, ldc, d_ptr, ldd, nullptr,
-                           static_cast<ClampT>(-FLT_MAX), static_cast<ClampT>(FLT_MAX));
+                           static_cast<ClampT>(-INFINITY), static_cast<ClampT>(INFINITY));
 
             const size_t a1_offset = funcs.get_a_packed_offset(m_idx, k_split, lda, actual_m);
             const size_t b1_offset = funcs.get_b_packed_offset(n_idx, k_split, ldb, actual_n);
@@ -907,8 +918,8 @@ void run_b_only_packed_gemm_test(const GemmTestParams &params,
                     bias_ptr = reinterpret_cast<const uint8_t *>(bias_data.data()) + bias_offset;
                 }
 
-                ClampT effective_clamp_min = static_cast<ClampT>(to_target_type<TD>(-FLT_MAX));
-                ClampT effective_clamp_max = static_cast<ClampT>(to_target_type<TD>(FLT_MAX));
+                ClampT effective_clamp_min = static_cast<ClampT>(to_target_type<TD>(-INFINITY));
+                ClampT effective_clamp_max = static_cast<ClampT>(to_target_type<TD>(INFINITY));
                 if (is_last_k) {
                     effective_clamp_min = static_cast<ClampT>(clamp_min);
                     effective_clamp_max = static_cast<ClampT>(clamp_max);

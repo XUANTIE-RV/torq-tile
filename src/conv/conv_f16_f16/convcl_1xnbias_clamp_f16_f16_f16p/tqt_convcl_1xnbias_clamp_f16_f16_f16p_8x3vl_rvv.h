@@ -169,6 +169,9 @@ void tqt_run_im2col_convcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv(size_t group_idx
 /// @note A is im2col-transformed but not packed; B_packed is transposed and packed weight.
 /// @note The bias vector has shape [1, n] and is added to each row of the result.
 /// @note k_idx_a and k_idx_b are used when A and B are sub-buffers with different sizes.
+/// @note This GEMM-backed convolution skips clamping for exactly [-infinity, +infinity].
+///       Other bounds retain the existing clamp behavior. NaN payloads and exception
+///       flags are not guaranteed to be preserved.
 void tqt_run_conv_convcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv(
     size_t m, size_t n, size_t k, const void *A, size_t lda, size_t k_idx_a, const void *B_packed,
     size_t ldb, size_t k_idx_b, const void *C, size_t ldc, void *D, size_t ldd, const void *bias,

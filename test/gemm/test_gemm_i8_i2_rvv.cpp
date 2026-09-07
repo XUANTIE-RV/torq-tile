@@ -17,6 +17,7 @@
 #include "src/gemm/gemm_i8_i2/gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp/tqt_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i2/tqt_params_i8_i2.h"
 #include "src/gemm/gemm_i8_i2/tqt_utils_i8_i2.h"
+#include "test/common/gemm_clamp_test_utils.h"
 
 namespace
 {
@@ -345,7 +346,9 @@ TEST_P(Test_gemm_1xnbias_clamp_f32_qai8dx_qsi2cxt_4x1vl_rvv, Correctness)
     params.sum_b = g.sum_b.data();
 
     std::vector<float> D_act(p.m * p.n, 0.0f);
-    tqt_run_gemm_1xnbias_clamp_f32_qai8dx_qsi2cxt_4x1vl_rvv(
+    torq_tile::test::clamp_test_run<tqt_run_gemm_1xnbias_clamp_f32_qai8dx_qsi2cxt_4x1vl_rvv, float,
+                                    11, 9, 10, 12, torq_tile::test::ClampSource::kColumnBias, false,
+                                    5, false>()(
         p.m, p.n, p.k, g.A_q.data(), p.k, 0, g.B_u2.data(), p.k, 0, D_act.data(), p.n,
         p.has_bias ? g.bias.data() : nullptr, g.clamp_min, g.clamp_max,
         p.custom_lut ? g.lut.data() : nullptr, &params);
@@ -360,11 +363,60 @@ TEST_P(Test_gemm_1xnbias_clamp_f32_qai8dx_qsi2cxt_4x1vl_rvv, Correctness)
     params.sum_b = window_sum_b.data();
     std::vector<float> D_zero(p.m * p.n);
     std::vector<float> D_nonzero(p.m * p.n);
-    tqt_run_gemm_1xnbias_clamp_f32_qai8dx_qsi2cxt_4x1vl_rvv(
+    torq_tile::test::clamp_test_run<tqt_run_gemm_1xnbias_clamp_f32_qai8dx_qsi2cxt_4x1vl_rvv, float,
+                                    11, 9, 10, 12, torq_tile::test::ClampSource::kColumnBias, false,
+                                    5, false>()(
         p.m, p.n, window, A_window.data(), window, 0, B_window.data(), window, 0, D_zero.data(),
         p.n, nullptr, -std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
         p.custom_lut ? g.lut.data() : nullptr, &params);
-    tqt_run_gemm_1xnbias_clamp_f32_qai8dx_qsi2cxt_4x1vl_rvv(
+    torq_tile::test::clamp_test_run<tqt_run_gemm_1xnbias_clamp_f32_qai8dx_qsi2cxt_4x1vl_rvv, float,
+                                    11, 9, 10, 12, torq_tile::test::ClampSource::kColumnBias, false,
+                                    5, false>()(
+        p.m, p.n, window, g.A_q.data() + k_origin, p.k, k_origin, g.B_u2.data() + k_origin / 4, p.k,
+        k_origin, D_nonzero.data(), p.n, nullptr, -std::numeric_limits<float>::max(),
+        std::numeric_limits<float>::max(), p.custom_lut ? g.lut.data() : nullptr, &params);
+    verify(D_zero.data(), D_nonzero.data(), p.m * p.n, p);
+}
+
+TEST_P(Test_gemm_1xnbias_clamp_f32_qai8dx_qsi2cxt_4x1vl_rvv, ClampSpecialValues)
+{
+    torq_tile::test::ScopedGemmClampProbe probe;
+    const auto &p = GetParam();
+    auto g = generate_inputs(p);
+
+    tqt_qai8dx_qsi2cx_f32_params params{};
+    params.scale_a = g.recip_scale_a.data();
+    params.zero_point_a = g.zp_a.data();
+    params.scale_b = g.scale_b.data();
+    params.sum_b = g.sum_b.data();
+
+    std::vector<float> D_act(p.m * p.n, 0.0f);
+    torq_tile::test::clamp_test_run<tqt_run_gemm_1xnbias_clamp_f32_qai8dx_qsi2cxt_4x1vl_rvv, float,
+                                    11, 9, 10, 12, torq_tile::test::ClampSource::kColumnBias, false,
+                                    5, false>()(
+        p.m, p.n, p.k, g.A_q.data(), p.k, 0, g.B_u2.data(), p.k, 0, D_act.data(), p.n,
+        p.has_bias ? g.bias.data() : nullptr, g.clamp_min, g.clamp_max,
+        p.custom_lut ? g.lut.data() : nullptr, &params);
+
+    verify(g.D_ref.data(), D_act.data(), p.m * p.n, p);
+
+    const size_t k_origin = (p.k / 8) * 4;
+    const size_t window = p.k - k_origin;
+    auto A_window = copy_a_window(g.A_q, p.m, p.k, k_origin, window);
+    auto B_window = copy_b_window(g.B_u2, p.n, p.k, k_origin, window);
+    auto window_sum_b = sum_b_window(B_window, p.n, window, g.lut);
+    params.sum_b = window_sum_b.data();
+    std::vector<float> D_zero(p.m * p.n);
+    std::vector<float> D_nonzero(p.m * p.n);
+    torq_tile::test::clamp_test_run<tqt_run_gemm_1xnbias_clamp_f32_qai8dx_qsi2cxt_4x1vl_rvv, float,
+                                    11, 9, 10, 12, torq_tile::test::ClampSource::kColumnBias, false,
+                                    5, false>()(
+        p.m, p.n, window, A_window.data(), window, 0, B_window.data(), window, 0, D_zero.data(),
+        p.n, nullptr, -std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
+        p.custom_lut ? g.lut.data() : nullptr, &params);
+    torq_tile::test::clamp_test_run<tqt_run_gemm_1xnbias_clamp_f32_qai8dx_qsi2cxt_4x1vl_rvv, float,
+                                    11, 9, 10, 12, torq_tile::test::ClampSource::kColumnBias, false,
+                                    5, false>()(
         p.m, p.n, window, g.A_q.data() + k_origin, p.k, k_origin, g.B_u2.data() + k_origin / 4, p.k,
         k_origin, D_nonzero.data(), p.n, nullptr, -std::numeric_limits<float>::max(),
         std::numeric_limits<float>::max(), p.custom_lut ? g.lut.data() : nullptr, &params);
@@ -409,7 +461,9 @@ TEST_P(Test_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv, Correctness)
         p.n, p.k, p.k, p.k, 0, g.B_u2.data(), B_packed.data());
 
     std::vector<float> D_act(p.m * p.n, 0.0f);
-    tqt_run_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv(
+    torq_tile::test::clamp_test_run<tqt_run_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv, float,
+                                    11, 9, 10, 12, torq_tile::test::ClampSource::kColumnBias, false,
+                                    5, false>()(
         p.m, p.n, p.k, A_packed.data(), p.k, 0, B_packed.data(), p.k, 0, D_act.data(), p.n,
         p.has_bias ? g.bias.data() : nullptr, g.clamp_min, g.clamp_max,
         p.custom_lut ? g.lut.data() : nullptr, &params);
@@ -440,11 +494,90 @@ TEST_P(Test_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv, Correctness)
                                                                                  p.n);
     std::vector<float> D_zero(p.m * p.n);
     std::vector<float> D_nonzero(p.m * p.n);
-    tqt_run_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv(
+    torq_tile::test::clamp_test_run<tqt_run_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv, float,
+                                    11, 9, 10, 12, torq_tile::test::ClampSource::kColumnBias, false,
+                                    5, false>()(
         p.m, p.n, window, A_window_packed.data(), window, 0, B_window_packed.data(), window, 0,
         D_zero.data(), p.n, nullptr, -std::numeric_limits<float>::max(),
         std::numeric_limits<float>::max(), p.custom_lut ? g.lut.data() : nullptr, &params);
-    tqt_run_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv(
+    torq_tile::test::clamp_test_run<tqt_run_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv, float,
+                                    11, 9, 10, 12, torq_tile::test::ClampSource::kColumnBias, false,
+                                    5, false>()(
+        p.m, p.n, window, A_packed.data() + a_offset, p.k, k_origin, B_packed.data() + b_offset,
+        p.k, k_origin, D_nonzero.data(), p.n, nullptr, -std::numeric_limits<float>::max(),
+        std::numeric_limits<float>::max(), p.custom_lut ? g.lut.data() : nullptr, &params);
+    verify(D_zero.data(), D_nonzero.data(), p.m * p.n, p);
+}
+
+TEST_P(Test_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv, ClampSpecialValues)
+{
+    torq_tile::test::ScopedGemmClampProbe probe;
+    const auto &p = GetParam();
+    auto g = generate_inputs(p);
+
+    tqt_qai8dx_qsi2cx_f32_params params{};
+    params.scale_a = g.recip_scale_a.data();
+    params.zero_point_a = g.zp_a.data();
+    params.scale_b = g.scale_b.data();
+    params.sum_b = g.sum_b.data();
+
+    // Pack A: [M, K] -> [M/4, K, 4]
+    const size_t a_packed_size =
+        tqt_get_a_packed_size_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv(p.m, p.k);
+    std::vector<int8_t> A_packed(a_packed_size);
+    tqt_run_a_pack_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv(p.m, p.k, p.k, p.k, 0,
+                                                                    g.A_q.data(), A_packed.data());
+
+    // Pack B (transposed): [N, K/4] -> [N/vl, K/4, vl]
+    const size_t b_packed_size =
+        tqt_get_b_packed_size_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv(p.n, p.k);
+    std::vector<uint8_t> B_packed(b_packed_size);
+    tqt_run_bt_pack_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv(
+        p.n, p.k, p.k, p.k, 0, g.B_u2.data(), B_packed.data());
+
+    std::vector<float> D_act(p.m * p.n, 0.0f);
+    torq_tile::test::clamp_test_run<tqt_run_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv, float,
+                                    11, 9, 10, 12, torq_tile::test::ClampSource::kColumnBias, false,
+                                    5, false>()(
+        p.m, p.n, p.k, A_packed.data(), p.k, 0, B_packed.data(), p.k, 0, D_act.data(), p.n,
+        p.has_bias ? g.bias.data() : nullptr, g.clamp_min, g.clamp_max,
+        p.custom_lut ? g.lut.data() : nullptr, &params);
+
+    verify(g.D_ref.data(), D_act.data(), p.m * p.n, p);
+
+    const size_t k_origin = (p.k / 8) * 4;
+    const size_t window = p.k - k_origin;
+    auto A_window = copy_a_window(g.A_q, p.m, p.k, k_origin, window);
+    auto B_window = copy_b_window(g.B_u2, p.n, p.k, k_origin, window);
+    auto window_sum_b = sum_b_window(B_window, p.n, window, g.lut);
+    params.sum_b = window_sum_b.data();
+
+    std::vector<int8_t> A_window_packed(
+        tqt_get_a_packed_size_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv(p.m, window));
+    std::vector<uint8_t> B_window_packed(
+        tqt_get_b_packed_size_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv(p.n, window));
+    tqt_run_a_pack_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv(
+        p.m, window, window, window, 0, A_window.data(), A_window_packed.data());
+    tqt_run_bt_pack_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv(
+        p.n, window, window, window, 0, B_window.data(), B_window_packed.data());
+
+    const size_t a_offset =
+        tqt_get_a_packed_offset_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv(0, k_origin, p.k,
+                                                                                 p.m);
+    const size_t b_offset =
+        tqt_get_b_packed_offset_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv(0, k_origin, p.k,
+                                                                                 p.n);
+    std::vector<float> D_zero(p.m * p.n);
+    std::vector<float> D_nonzero(p.m * p.n);
+    torq_tile::test::clamp_test_run<tqt_run_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv, float,
+                                    11, 9, 10, 12, torq_tile::test::ClampSource::kColumnBias, false,
+                                    5, false>()(
+        p.m, p.n, window, A_window_packed.data(), window, 0, B_window_packed.data(), window, 0,
+        D_zero.data(), p.n, nullptr, -std::numeric_limits<float>::max(),
+        std::numeric_limits<float>::max(), p.custom_lut ? g.lut.data() : nullptr, &params);
+    torq_tile::test::clamp_test_run<tqt_run_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv, float,
+                                    11, 9, 10, 12, torq_tile::test::ClampSource::kColumnBias, false,
+                                    5, false>()(
         p.m, p.n, window, A_packed.data() + a_offset, p.k, k_origin, B_packed.data() + b_offset,
         p.k, k_origin, D_nonzero.data(), p.n, nullptr, -std::numeric_limits<float>::max(),
         std::numeric_limits<float>::max(), p.custom_lut ? g.lut.data() : nullptr, &params);

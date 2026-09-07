@@ -56,9 +56,11 @@ void reference_gemm(size_t m, size_t n, size_t k, const TA *A, size_t lda, const
                 }
             }
 
-            // Apply clamp
-            acc = std::fmax(acc, clamp_min_f);
-            acc = std::fmin(acc, clamp_max_f);
+            // Only the explicit unbounded interval disables floating GEMM clamping.
+            if (clamp_min_f != -INFINITY || clamp_max_f != INFINITY) {
+                acc = std::fmax(acc, clamp_min_f);
+                acc = std::fmin(acc, clamp_max_f);
+            }
 
             D[i * ldd + j] = static_cast<TD>(acc);
         }
@@ -179,8 +181,11 @@ void reference_gemm_quantized_weight_mixed(size_t m, size_t n, size_t k, size_t 
                 }
             }
 
-            acc = std::max(acc, static_cast<float>(clamp_min));
-            acc = std::min(acc, static_cast<float>(clamp_max));
+            if (static_cast<float>(clamp_min) != -INFINITY ||
+                static_cast<float>(clamp_max) != INFINITY) {
+                acc = std::max(acc, static_cast<float>(clamp_min));
+                acc = std::min(acc, static_cast<float>(clamp_max));
+            }
             D[i * ldd + j] = static_cast<TD>(acc);
         }
     }

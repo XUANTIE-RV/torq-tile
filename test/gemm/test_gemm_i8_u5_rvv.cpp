@@ -6,6 +6,7 @@
 
 #include "src/gemm/gemm_i8_u5/gemm_1xnbias_clamp_f32_qsi8d256p_qau5c32p/tqt_gemm_1xnbias_clamp_f32_qsi8d256p_qau5c32p_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_u8/gemm_1xnbias_clamp_f32_qsi8d256p_qau8c32p/tqt_gemm_1xnbias_clamp_f32_qsi8d256p_qau8c32p_4x1vl_rvv.h"
+#include "test/common/gemm_clamp_test_utils.h"
 #include "test/common/quantized_gemm_test_runner.h"
 
 using namespace torq_tile::test;
@@ -41,7 +42,8 @@ make_qsi8d256_qau5c32_test_funcs()
         tqt_run_a_pack_gemm_1xnbias_clamp_f32_qsi8d256p_qau5c32p_4x1vl_rvv,
         tqt_run_bt_pack_gemm_1xnbias_clamp_f32_qsi8d256p_qau5c32p_4x1vl_rvv,
         make_qsi8d256_qau5c32_test_params,
-        tqt_run_gemm_1xnbias_clamp_f32_qsi8d256p_qau5c32p_4x1vl_rvv,
+        clamp_test_run<tqt_run_gemm_1xnbias_clamp_f32_qsi8d256p_qau5c32p_4x1vl_rvv, float, 13, 11,
+                       12, 14, ClampSource::kColumnBias, false, 5, true>(),
     };
 }
 
@@ -62,7 +64,8 @@ make_qsi8d256_qau8c32_test_funcs()
         tqt_run_a_pack_gemm_1xnbias_clamp_f32_qsi8d256p_qau8c32p_4x1vl_rvv,
         tqt_run_bt_pack_gemm_1xnbias_clamp_f32_qsi8d256p_qau8c32p_4x1vl_rvv,
         make_qsi8d256_qau8c32_test_params,
-        tqt_run_gemm_1xnbias_clamp_f32_qsi8d256p_qau8c32p_4x1vl_rvv,
+        clamp_test_run<tqt_run_gemm_1xnbias_clamp_f32_qsi8d256p_qau8c32p_4x1vl_rvv, float, 13, 11,
+                       12, 14, ClampSource::kColumnBias, false, 5, true>(),
     };
 }
 
@@ -88,5 +91,26 @@ TEST(GemmI8U5Rvv, Qsi8d256Qau5c32)
     }
     for (size_t n : {size_t{1}, n_step - 1, n_step, n_step + 3}) {
         run_packed_qsi8_block_quantized_gemm_test(5, n, 256, false, funcs, expanded_funcs);
+    }
+}
+
+TEST(GemmI8U5Rvv, ClampSpecialValues_Qsi8d256Qau5c32)
+{
+    ScopedGemmClampProbe probe;
+    const auto funcs = make_qsi8d256_qau5c32_test_funcs();
+    const auto expanded_funcs = make_qsi8d256_qau8c32_test_funcs();
+    const size_t n_step = funcs.get_n_step();
+    for (size_t m = 1; m <= 5; ++m) {
+        run_packed_qsi8_block_quantized_gemm_test(m, n_step + 3, 512, true, funcs, expanded_funcs);
+    }
+
+    for (size_t rows = 1;
+         rows <= tqt_get_m_step_gemm_1xnbias_clamp_f32_qsi8d256p_qau5c32p_4x1vl_rvv() + 1; ++rows) {
+        for (size_t columns :
+             {size_t{1}, tqt_get_n_step_gemm_1xnbias_clamp_f32_qsi8d256p_qau5c32p_4x1vl_rvv(),
+              tqt_get_n_step_gemm_1xnbias_clamp_f32_qsi8d256p_qau5c32p_4x1vl_rvv() + 3}) {
+            run_packed_qsi8_block_quantized_gemm_test(rows, columns, 256, false, funcs,
+                                                      expanded_funcs);
+        }
     }
 }

@@ -22,6 +22,13 @@ enum class ConvLayout
     kChannelLast,   // NDHWC
 };
 
+// GEMM-backed conv opts in; independent igemm keeps the existing reference behavior.
+enum class ConvClampPolicy
+{
+    kAlwaysApply,
+    kSkipUnbounded,
+};
+
 /// Reference convolution (naive, single-batch, single-group dispatch).
 ///
 /// For channel-first:
@@ -38,19 +45,19 @@ enum class ConvLayout
 template <typename T>
 void reference_conv(size_t group_idx, const T *activation, const T *weight, const T *bias,
                     T *output, const tqt_conv_params *params, ConvLayout layout, T clamp_min,
-                    T clamp_max);
+                    T clamp_max, ConvClampPolicy policy = ConvClampPolicy::kAlwaysApply);
 
 extern template void reference_conv<float>(size_t, const float *, const float *, const float *,
                                            float *, const tqt_conv_params *, ConvLayout, float,
-                                           float);
+                                           float, ConvClampPolicy);
 extern template void reference_conv<float16_t>(size_t, const float16_t *, const float16_t *,
                                                const float16_t *, float16_t *,
                                                const tqt_conv_params *, ConvLayout, float16_t,
-                                               float16_t);
+                                               float16_t, ConvClampPolicy);
 extern template void reference_conv<bfloat16_t>(size_t, const bfloat16_t *, const bfloat16_t *,
                                                 const bfloat16_t *, bfloat16_t *,
                                                 const tqt_conv_params *, ConvLayout, bfloat16_t,
-                                                bfloat16_t);
+                                                bfloat16_t, ConvClampPolicy);
 
 }  // namespace test
 }  // namespace torq_tile

@@ -141,6 +141,9 @@ void tqt_run_im2col_convcf_mx1bias_clamp_f32_f32_f32_8x3vl_rvv(size_t group_idx,
 /// @note B is the im2col-transformed activation with shape [K, N].
 /// @note The bias vector has shape [m, 1] and is added to each column of the result.
 /// @note k_idx_a and k_idx_b are used when A and B are sub-buffers with different sizes.
+/// @note This GEMM-backed convolution skips clamping for exactly [-infinity, +infinity].
+///       Other bounds retain the existing clamp behavior. NaN payloads and exception
+///       flags are not guaranteed to be preserved.
 void tqt_run_conv_convcf_mx1bias_clamp_f32_f32_f32_8x3vl_rvv(
     size_t m, size_t n, size_t k, const void *A, size_t lda, size_t k_idx_a, const void *B,
     size_t ldb, size_t k_idx_b, const void *C, size_t ldc, void *D, size_t ldd, const void *bias,

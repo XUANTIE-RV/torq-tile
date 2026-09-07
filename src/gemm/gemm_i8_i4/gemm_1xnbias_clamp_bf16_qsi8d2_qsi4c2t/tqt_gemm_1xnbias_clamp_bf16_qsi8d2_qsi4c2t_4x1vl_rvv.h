@@ -95,6 +95,9 @@ size_t tqt_get_d_size_gemm_1xnbias_clamp_bf16_qsi8d2_qsi4c2t_4x1vl_rvv(size_t m,
 /// @param[in]  clamp_max Maximum clamp value.
 /// @param[in]  params    Quantization parameters
 ///                        (scale_a[m, k/bl] + ldsa, scale_b[n, k/bl] + ldsb).
+/// @note If clamp_min is negative infinity and clamp_max is positive infinity,
+///       clamping is skipped. All other bounds retain the existing clamp behavior.
+///       This does not guarantee preservation of NaN payloads or exception flags.
 void tqt_run_gemm_1xnbias_clamp_bf16_qsi8d2_qsi4c2t_4x1vl_rvv(
     size_t m, size_t n, size_t k, size_t bl, const void *A, size_t lda, size_t k_idx_a,
     const void *B, size_t ldb, size_t k_idx_b, const void *C, size_t ldc, void *D, size_t ldd,

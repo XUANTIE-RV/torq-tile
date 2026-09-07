@@ -1297,6 +1297,17 @@ void run_quantized_weight_gemm_test(const GemmTestParams &params,
                                                     m * n, DefaultThreshold<TA>::abs_error,
                                                     DefaultThreshold<TA>::cosine_sim);
         EXPECT_TRUE(origin_result.passed) << origin_result.error_message;
+        if (gemm_clamp_probe_active) {
+            SCOPED_TRACE("special-value quantized-weight split-K propagation");
+            std::vector<TD> partial(m * n), combined(m * n);
+            funcs.run_gemm(m, n, k_origin, bl, A.data(), k, 0, B.data(), k, 0, scale_b.data(), ldsb,
+                           nullptr, n, partial.data(), n, nullptr, to_target_type<TD>(-INFINITY),
+                           to_target_type<TD>(INFINITY));
+            funcs.run_gemm(m, n, window, bl, A.data() + k_origin, k, k_origin,
+                           B.data() + k_origin / 2, k, k_origin, scale_b_window, ldsb,
+                           partial.data(), n, combined.data(), n, nullptr,
+                           to_target_type<TD>(-INFINITY), to_target_type<TD>(INFINITY));
+        }
     }
 }
 
@@ -1520,6 +1531,17 @@ void run_packed_quantized_weight_gemm_test(const GemmTestParams &params,
         EXPECT_TRUE(packed_origin_result.passed)
             << "Compact and nonzero-origin packed GEMM differ:\n"
             << packed_origin_result.error_message;
+        if (gemm_clamp_probe_active) {
+            SCOPED_TRACE("special-value quantized-weight split-K propagation");
+            std::vector<TD> partial(m * n), combined(m * n);
+            funcs.run_gemm(m, n, k_origin, bl, A_packed.data(), k, 0, B_packed.data(), k, 0,
+                           scale_b.data(), ldsb, nullptr, n, partial.data(), n, nullptr,
+                           to_target_type<TD>(-INFINITY), to_target_type<TD>(INFINITY));
+            funcs.run_gemm(m, n, window, bl, A_packed.data() + a_offset, k, k_origin,
+                           B_packed.data() + b_offset, k, k_origin, scale_b_window, ldsb,
+                           partial.data(), n, combined.data(), n, nullptr,
+                           to_target_type<TD>(-INFINITY), to_target_type<TD>(INFINITY));
+        }
     }
 }
 
@@ -2410,6 +2432,17 @@ inline void check_w4a8_nonzero_origin(const GemmTestParams &params, const W4A8Ge
         verify_gemm_result<TD>(expected.data(), actual.data(), actual.size(),
                                DefaultThreshold<TD>::abs_error, DefaultThreshold<TD>::cosine_sim);
     EXPECT_TRUE(result.passed) << result.error_message;
+    if (gemm_clamp_probe_active) {
+        SCOPED_TRACE("special-value split-K propagation");
+        std::vector<TD> partial(params.m * params.n), combined(params.m * params.n);
+        funcs.run_gemm(params.m, params.n, k_origin, A_i8.data(), params.k, 0, B_i4.data(),
+                       params.k, 0, nullptr, params.n, partial.data(), params.n, nullptr,
+                       to_target_type<TD>(-INFINITY), to_target_type<TD>(INFINITY), &qparams);
+        funcs.run_gemm(params.m, params.n, window, A_i8.data() + k_origin, params.k, k_origin,
+                       B_i4.data() + k_origin / 2, params.k, k_origin, partial.data(), params.n,
+                       combined.data(), params.n, nullptr, to_target_type<TD>(-INFINITY),
+                       to_target_type<TD>(INFINITY), &qparams);
+    }
 }
 
 template <typename TD>
@@ -2453,6 +2486,17 @@ inline void check_w4a8_nonzero_origin(const GemmTestParams &params,
         verify_gemm_result<TD>(expected.data(), actual.data(), actual.size(),
                                DefaultThreshold<TD>::abs_error, DefaultThreshold<TD>::cosine_sim);
     EXPECT_TRUE(result.passed) << result.error_message;
+    if (gemm_clamp_probe_active) {
+        SCOPED_TRACE("special-value split-K propagation");
+        std::vector<TD> partial(params.m * params.n), combined(params.m * params.n);
+        funcs.run_gemm(params.m, params.n, k_origin, A_packed.data(), params.k, 0, B_packed.data(),
+                       params.k, 0, nullptr, params.n, partial.data(), params.n, nullptr,
+                       to_target_type<TD>(-INFINITY), to_target_type<TD>(INFINITY), &qparams);
+        funcs.run_gemm(params.m, params.n, window, A_packed.data() + a_offset, params.k, k_origin,
+                       B_packed.data() + b_offset, params.k, k_origin, partial.data(), params.n,
+                       combined.data(), params.n, nullptr, to_target_type<TD>(-INFINITY),
+                       to_target_type<TD>(INFINITY), &qparams);
+    }
 }
 
 template <typename TD>
@@ -3213,6 +3257,18 @@ inline void check_w4a8_bq_nonzero_origin(const GemmTestParams &params, const Fun
         verify_gemm_result<TD>(expected.data(), actual.data(), actual.size(),
                                DefaultThreshold<TD>::abs_error, DefaultThreshold<TD>::cosine_sim);
     EXPECT_TRUE(result.passed) << result.error_message;
+    if (gemm_clamp_probe_active) {
+        SCOPED_TRACE("special-value block-quantized split-K propagation");
+        std::vector<TD> partial(params.m * params.n), combined(params.m * params.n);
+        funcs.run_gemm(params.m, params.n, k_origin, params.bl, A_i8.data(), params.k, 0,
+                       B_i4.data(), params.k, 0, nullptr, params.n, partial.data(), params.n,
+                       nullptr, to_target_type<TD>(-INFINITY), to_target_type<TD>(INFINITY),
+                       &full_params);
+        funcs.run_gemm(params.m, params.n, window, params.bl, A_i8.data() + k_origin, params.k,
+                       k_origin, B_i4.data() + k_origin / 2, params.k, k_origin, partial.data(),
+                       params.n, combined.data(), params.n, nullptr, to_target_type<TD>(-INFINITY),
+                       to_target_type<TD>(INFINITY), &full_params);
+    }
 }
 
 template <typename TD, typename Funcs, typename QParams>
@@ -3256,6 +3312,18 @@ inline void check_w4a8_bq_nonzero_packed_origin(
         verify_gemm_result<TD>(expected.data(), actual.data(), actual.size(),
                                DefaultThreshold<TD>::abs_error, DefaultThreshold<TD>::cosine_sim);
     EXPECT_TRUE(result.passed) << result.error_message;
+    if (gemm_clamp_probe_active) {
+        SCOPED_TRACE("special-value block-quantized split-K propagation");
+        std::vector<TD> partial(params.m * params.n), combined(params.m * params.n);
+        funcs.run_gemm(params.m, params.n, k_origin, params.bl, A_packed.data(), params.k, 0,
+                       B_packed.data(), params.k, 0, nullptr, params.n, partial.data(), params.n,
+                       nullptr, to_target_type<TD>(-INFINITY), to_target_type<TD>(INFINITY),
+                       &full_params);
+        funcs.run_gemm(params.m, params.n, window, params.bl, A_packed.data() + a_offset, params.k,
+                       k_origin, B_packed.data() + b_offset, params.k, k_origin, partial.data(),
+                       params.n, combined.data(), params.n, nullptr, to_target_type<TD>(-INFINITY),
+                       to_target_type<TD>(INFINITY), &full_params);
+    }
 }
 
 // ============================================================================
@@ -3857,8 +3925,11 @@ template <typename QParams, typename ExpandedQParams>
 void run_packed_qsi8_block_quantized_gemm_test(
     size_t m, size_t n, size_t k, bool compare_expanded,
     const PackedQsi8BlockQuantizedGemmTestFuncs<QParams> &funcs,
-    const PackedQsi8BlockQuantizedGemmTestFuncs<ExpandedQParams> &expanded_funcs)
+    const PackedQsi8BlockQuantizedGemmTestFuncs<ExpandedQParams> &expanded_funcs,
+    bool test_split_k = true)
 {
+    SCOPED_TRACE(::testing::Message()
+                 << "m=" << m << " n=" << n << " k=" << k << " split_k=" << test_split_k);
     auto data = make_qsi8_block_quantized_gemm_test_data(n, k, funcs.activation_block_size,
                                                          funcs.weight_block_size, funcs.asymmetric,
                                                          funcs.max_weight, m);
@@ -3882,7 +3953,8 @@ void run_packed_qsi8_block_quantized_gemm_test(
                    std::numeric_limits<float>::infinity(), &params);
     check_qsi8_block_quantized_gemm_result(output, data.reference);
 
-    if (k >= 2 * funcs.activation_block_size) {
+    if (test_split_k && k >= 2 * funcs.activation_block_size) {
+        SCOPED_TRACE("split-K continuation");
         std::vector<float> partial(m * n);
         const size_t split = funcs.activation_block_size;
         funcs.run_gemm(m, n, split, a_packed.data(), k, 0, b_packed.data(), k, 0, data.c.data(), n,
@@ -3922,9 +3994,10 @@ void run_packed_qsi8_block_quantized_gemm_test(
 
 template <typename QParams>
 void run_packed_qsi8_block_quantized_gemm_test(
-    size_t m, size_t n, size_t k, const PackedQsi8BlockQuantizedGemmTestFuncs<QParams> &funcs)
+    size_t m, size_t n, size_t k, const PackedQsi8BlockQuantizedGemmTestFuncs<QParams> &funcs,
+    bool test_split_k = true)
 {
-    run_packed_qsi8_block_quantized_gemm_test(m, n, k, false, funcs, funcs);
+    run_packed_qsi8_block_quantized_gemm_test(m, n, k, false, funcs, funcs, test_split_k);
 }
 
 // ============================================================================
@@ -4123,6 +4196,8 @@ std::vector<float> run_packed_qsi8_kblock_gemm_once(
     const Qsi8KBlockGemmTestData &data, const PackedQsi8KBlockGemmTestFuncs<QParams> &funcs,
     bool test_split_k)
 {
+    SCOPED_TRACE(::testing::Message() << "m=" << data.m << " n=" << data.n << " k=" << data.k
+                                      << " split_k=" << test_split_k);
     const std::vector<uint8_t> b_source =
         make_qsi8_kblock_weight_source(data, funcs.weight_encoding);
     std::vector<uint8_t> a_packed(funcs.get_a_packed_size(data.m, data.k));
@@ -4153,6 +4228,7 @@ std::vector<float> run_packed_qsi8_kblock_gemm_once(
     check_qsi8_block_quantized_gemm_result(output, clamped_reference);
 
     if (test_split_k && data.k >= 512) {
+        SCOPED_TRACE("split-K continuation");
         constexpr size_t split = 256;
         std::vector<float> partial(data.m * data.n);
         funcs.run_gemm(data.m, data.n, split, a_packed.data(), data.k, 0, b_packed.data(), data.k,
@@ -4175,20 +4251,21 @@ std::vector<float> run_packed_qsi8_kblock_gemm_once(
 
 template <typename QParams>
 void run_packed_qsi8_kblock_gemm_test(size_t m, size_t n, size_t k,
-                                      const PackedQsi8KBlockGemmTestFuncs<QParams> &funcs)
+                                      const PackedQsi8KBlockGemmTestFuncs<QParams> &funcs,
+                                      bool test_split_k = true)
 {
     const auto data = make_qsi8_kblock_gemm_test_data(m, n, k, funcs.asymmetric);
-    (void)run_packed_qsi8_kblock_gemm_once(data, funcs, true);
+    (void)run_packed_qsi8_kblock_gemm_once(data, funcs, test_split_k);
 }
 
 template <typename CompactQParams, typename ExpandedQParams>
 void run_packed_qsi8_kblock_gemm_equivalence_test(
     size_t m, size_t n, size_t k, const PackedQsi8KBlockGemmTestFuncs<CompactQParams> &compact,
-    const PackedQsi8KBlockGemmTestFuncs<ExpandedQParams> &expanded)
+    const PackedQsi8KBlockGemmTestFuncs<ExpandedQParams> &expanded, bool test_split_k = true)
 {
     const auto data = make_qsi8_kblock_gemm_test_data(m, n, k, compact.asymmetric);
-    const auto compact_output = run_packed_qsi8_kblock_gemm_once(data, compact, true);
-    const auto expanded_output = run_packed_qsi8_kblock_gemm_once(data, expanded, true);
+    const auto compact_output = run_packed_qsi8_kblock_gemm_once(data, compact, test_split_k);
+    const auto expanded_output = run_packed_qsi8_kblock_gemm_once(data, expanded, test_split_k);
     check_qsi8_block_quantized_gemm_result(compact_output, expanded_output);
 }
 
@@ -4546,49 +4623,71 @@ void run_packed_qsi8_qx0_source_test(size_t m, size_t n, size_t k,
 // ============================================================================
 
 // Unpacked test: kernel base + TD + runner + funcs typename.
-#define W4A8_BQ_DEFINE_UNPACKED_TEST(KBASE, TD, RUNNER, FUNCS_TYPE)                     \
-    static FUNCS_TYPE<TD> make_gemm_##KBASE##_funcs()                                   \
-    {                                                                                   \
-        FUNCS_TYPE<TD> funcs;                                                           \
-        funcs.get_m_step = tqt_get_m_step_gemm_##KBASE##_4x1vl_rvv;                     \
-        funcs.get_n_step = tqt_get_n_step_gemm_##KBASE##_4x1vl_rvv;                     \
-        funcs.run_gemm = tqt_run_gemm_##KBASE##_4x1vl_rvv;                              \
-        return funcs;                                                                   \
-    }                                                                                   \
-    class Test_gemm_##KBASE##_4x1vl_rvv : public testing::TestWithParam<GemmTestParams> \
-    {                                                                                   \
-    };                                                                                  \
-    TEST_P(Test_gemm_##KBASE##_4x1vl_rvv, Correctness)                                  \
-    {                                                                                   \
-        auto funcs = make_gemm_##KBASE##_funcs();                                       \
-        RUNNER<TD>(GetParam(), funcs);                                                  \
-    }                                                                                   \
-    INSTANTIATE_TEST_SUITE_P(GemmTests, Test_gemm_##KBASE##_4x1vl_rvv,                  \
-                             common_w4a8_bq_test_values(), GemmTestParamNameGenerator())
+#define W4A8_BQ_DEFINE_UNPACKED_TEST(KBASE, TD, RUNNER, FUNCS_TYPE)                           \
+    static FUNCS_TYPE<TD> make_gemm_##KBASE##_funcs()                                         \
+    {                                                                                         \
+        FUNCS_TYPE<TD> funcs;                                                                 \
+        funcs.get_m_step = tqt_get_m_step_gemm_##KBASE##_4x1vl_rvv;                           \
+        funcs.get_n_step = tqt_get_n_step_gemm_##KBASE##_4x1vl_rvv;                           \
+        funcs.run_gemm = clamp_test_run<tqt_run_gemm_##KBASE##_4x1vl_rvv, TD, 14, 12, 13, 15, \
+                                        ClampSource::kColumnBias, false, 6>();                \
+        return funcs;                                                                         \
+    }                                                                                         \
+    class Test_gemm_##KBASE##_4x1vl_rvv : public testing::TestWithParam<GemmTestParams>       \
+    {                                                                                         \
+    };                                                                                        \
+    TEST_P(Test_gemm_##KBASE##_4x1vl_rvv, Correctness)                                        \
+    {                                                                                         \
+        auto funcs = make_gemm_##KBASE##_funcs();                                             \
+        RUNNER<TD>(GetParam(), funcs);                                                        \
+    }                                                                                         \
+    TEST_P(Test_gemm_##KBASE##_4x1vl_rvv, ClampSpecialValues)                                 \
+    {                                                                                         \
+        ScopedGemmClampProbe probe;                                                           \
+        auto funcs = make_gemm_##KBASE##_funcs();                                             \
+        RUNNER<TD>(GetParam(), funcs);                                                        \
+    }                                                                                         \
+    INSTANTIATE_TEST_SUITE_P(                                                                 \
+        GemmTests, Test_gemm_##KBASE##_4x1vl_rvv,                                             \
+        with_clamp_dimensions(common_w4a8_bq_test_values(),                                   \
+                              tqt_get_m_step_gemm_##KBASE##_4x1vl_rvv(),                      \
+                              tqt_get_n_step_gemm_##KBASE##_4x1vl_rvv(), 1, true),            \
+        GemmTestParamNameGenerator())
 
 // Packed test: kernel base + TD + runner + funcs typename.
-#define W4A8_BQ_DEFINE_PACKED_TEST(KBASE, TD, RUNNER, FUNCS_TYPE)                       \
-    static FUNCS_TYPE<TD> make_gemm_##KBASE##_funcs()                                   \
-    {                                                                                   \
-        FUNCS_TYPE<TD> funcs;                                                           \
-        funcs.get_m_step = tqt_get_m_step_gemm_##KBASE##_4x1vl_rvv;                     \
-        funcs.get_n_step = tqt_get_n_step_gemm_##KBASE##_4x1vl_rvv;                     \
-        funcs.get_a_packed_offset = tqt_get_a_packed_offset_gemm_##KBASE##_4x1vl_rvv;   \
-        funcs.get_b_packed_offset = tqt_get_b_packed_offset_gemm_##KBASE##_4x1vl_rvv;   \
-        funcs.get_a_packed_size = tqt_get_a_packed_size_gemm_##KBASE##_4x1vl_rvv;       \
-        funcs.get_b_packed_size = tqt_get_b_packed_size_gemm_##KBASE##_4x1vl_rvv;       \
-        funcs.run_a_pack = tqt_run_a_pack_gemm_##KBASE##_4x1vl_rvv;                     \
-        funcs.run_bt_pack = tqt_run_bt_pack_gemm_##KBASE##_4x1vl_rvv;                   \
-        funcs.run_gemm = tqt_run_gemm_##KBASE##_4x1vl_rvv;                              \
-        return funcs;                                                                   \
-    }                                                                                   \
-    class Test_gemm_##KBASE##_4x1vl_rvv : public testing::TestWithParam<GemmTestParams> \
-    {                                                                                   \
-    };                                                                                  \
-    TEST_P(Test_gemm_##KBASE##_4x1vl_rvv, Correctness)                                  \
-    {                                                                                   \
-        auto funcs = make_gemm_##KBASE##_funcs();                                       \
-        RUNNER<TD>(GetParam(), funcs);                                                  \
-    }                                                                                   \
-    INSTANTIATE_TEST_SUITE_P(GemmTests, Test_gemm_##KBASE##_4x1vl_rvv,                  \
-                             common_w4a8_bq_test_values(), GemmTestParamNameGenerator())
+#define W4A8_BQ_DEFINE_PACKED_TEST(KBASE, TD, RUNNER, FUNCS_TYPE)                             \
+    static FUNCS_TYPE<TD> make_gemm_##KBASE##_funcs()                                         \
+    {                                                                                         \
+        FUNCS_TYPE<TD> funcs;                                                                 \
+        funcs.get_m_step = tqt_get_m_step_gemm_##KBASE##_4x1vl_rvv;                           \
+        funcs.get_n_step = tqt_get_n_step_gemm_##KBASE##_4x1vl_rvv;                           \
+        funcs.get_a_packed_offset = tqt_get_a_packed_offset_gemm_##KBASE##_4x1vl_rvv;         \
+        funcs.get_b_packed_offset = tqt_get_b_packed_offset_gemm_##KBASE##_4x1vl_rvv;         \
+        funcs.get_a_packed_size = tqt_get_a_packed_size_gemm_##KBASE##_4x1vl_rvv;             \
+        funcs.get_b_packed_size = tqt_get_b_packed_size_gemm_##KBASE##_4x1vl_rvv;             \
+        funcs.run_a_pack = tqt_run_a_pack_gemm_##KBASE##_4x1vl_rvv;                           \
+        funcs.run_bt_pack = tqt_run_bt_pack_gemm_##KBASE##_4x1vl_rvv;                         \
+        funcs.run_gemm = clamp_test_run<tqt_run_gemm_##KBASE##_4x1vl_rvv, TD, 14, 12, 13, 15, \
+                                        ClampSource::kColumnBias, false, 6>();                \
+        return funcs;                                                                         \
+    }                                                                                         \
+    class Test_gemm_##KBASE##_4x1vl_rvv : public testing::TestWithParam<GemmTestParams>       \
+    {                                                                                         \
+    };                                                                                        \
+    TEST_P(Test_gemm_##KBASE##_4x1vl_rvv, Correctness)                                        \
+    {                                                                                         \
+        auto funcs = make_gemm_##KBASE##_funcs();                                             \
+        RUNNER<TD>(GetParam(), funcs);                                                        \
+    }                                                                                         \
+    TEST_P(Test_gemm_##KBASE##_4x1vl_rvv, ClampSpecialValues)                                 \
+    {                                                                                         \
+        ScopedGemmClampProbe probe;                                                           \
+        auto funcs = make_gemm_##KBASE##_funcs();                                             \
+        RUNNER<TD>(GetParam(), funcs);                                                        \
+    }                                                                                         \
+    INSTANTIATE_TEST_SUITE_P(                                                                 \
+        GemmTests, Test_gemm_##KBASE##_4x1vl_rvv,                                             \
+        with_clamp_dimensions(common_w4a8_bq_test_values(),                                   \
+                              tqt_get_m_step_gemm_##KBASE##_4x1vl_rvv(),                      \
+                              tqt_get_n_step_gemm_##KBASE##_4x1vl_rvv(), 1, true),            \
+        GemmTestParamNameGenerator())

@@ -86,7 +86,7 @@ template <size_t MR>
 static void gemm_kernel(size_t K, float *D, const uint8_t *A, const uint8_t *B, const int32_t *C,
                         const int32_t *bias_m, const int32_t *bias_n, const float *dst_bias,
                         size_t ldd, size_t lda, size_t ldb, size_t ldc, float clamp_min,
-                        float clamp_max, float scale, size_t vl)
+                        float clamp_max, bool apply_clamp, float scale, size_t vl)
 {
     static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
 
@@ -114,14 +114,14 @@ static void gemm_kernel(size_t K, float *D, const uint8_t *A, const uint8_t *B, 
 
     tqt_add_bias_mn_kernel_gemm_u8_u8_4x1vl_rvv<MR>(vl, bias_m, bias_n);
     tqt_dequant_f32_kernel_gemm_u8_u8_4x1vl_rvv<MR>(vl, D, d_stride_row, scale, dst_bias, clamp_min,
-                                                    clamp_max);
+                                                    clamp_max, apply_clamp);
 }
 
 using gemm_kernel_fn_t = void (*)(size_t K, float *D, const uint8_t *A, const uint8_t *B,
                                   const int32_t *C, const int32_t *bias_m, const int32_t *bias_n,
                                   const float *dst_bias, size_t ldd, size_t lda, size_t ldb,
-                                  size_t ldc, float clamp_min, float clamp_max, float scale,
-                                  size_t vl);
+                                  size_t ldc, float clamp_min, float clamp_max, bool apply_clamp,
+                                  float scale, size_t vl);
 
 static constexpr gemm_kernel_fn_t kernel_table[4] = {
     gemm_kernel<1>,
@@ -136,6 +136,8 @@ void tqt_run_gemm_mx1bias_1xnbias_clamp_f32_u8_u8t_4x1vl_rvv(
     const void *bias_n, const void *dst_bias, float clamp_min, float clamp_max,
     const struct tqt_u8_u8_clamp_f32_params *params)
 {
+    const bool apply_clamp = tqt_gemm_clamp_is_enabled((float)clamp_min, (float)clamp_max);
+
     TQT_UNUSED(k_idx_a);
     TQT_UNUSED(k_idx_b);
 
@@ -164,7 +166,7 @@ void tqt_run_gemm_mx1bias_1xnbias_clamp_f32_u8_u8t_4x1vl_rvv(
 
             size_t mr_idx = actual_m - 1;
             kernel_table[mr_idx](k, d_ptr, a_ptr, b_ptr, c_ptr, bm_ptr, bn_ptr, db_ptr, ldd, lda,
-                                 ldb, ldc, clamp_min, clamp_max, scale, actual_n);
+                                 ldb, ldc, clamp_min, clamp_max, apply_clamp, scale, actual_n);
         }
     }
 }

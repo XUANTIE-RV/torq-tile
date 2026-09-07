@@ -127,9 +127,9 @@ struct GemmTestParams
     // Optional: C matrix accumulation (default: no C)
     bool has_c = false;
 
-    // Optional: clamp (default: no clamp, i.e. -FLT_MAX / FLT_MAX)
-    float clamp_min_f = -FLT_MAX;
-    float clamp_max_f = FLT_MAX;
+    // Optional: clamp (default: no clamp, i.e. -INFINITY / INFINITY)
+    float clamp_min_f = -INFINITY;
+    float clamp_max_f = INFINITY;
 
     // Optional: tiling (0 means use full dimension or m_step/n_step at runtime)
     size_t m_tile = 0;

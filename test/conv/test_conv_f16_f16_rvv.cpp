@@ -12,6 +12,7 @@
 #include "src/conv/conv_f16_f16/convcl_1xnbias_clamp_f16_f16_f16t/tqt_convcl_1xnbias_clamp_f16_f16_f16t_8x3vl_rvv.h"
 #include "src/conv/conv_f16_f16/convcl_1xnbias_clamp_f16_f16p_f16p/tqt_convcl_1xnbias_clamp_f16_f16p_f16p_8x3vl_rvv.h"
 #include "test/common/conv_test_runner.h"
+#include "test/common/gemm_clamp_test_utils.h"
 
 using namespace torq_tile::test;
 
@@ -50,7 +51,8 @@ static NonPackedConvCfFuncs<float16_t> make_convcf_nonpacked_funcs()
         tqt_get_n_step_convcf_mx1bias_clamp_f16_f16_f16_8x3vl_rvv,
         tqt_get_b_im2col_size_convcf_mx1bias_clamp_f16_f16_f16_8x3vl_rvv,
         tqt_run_im2col_convcf_mx1bias_clamp_f16_f16_f16_8x3vl_rvv,
-        tqt_run_conv_convcf_mx1bias_clamp_f16_f16_f16_8x3vl_rvv,
+        clamp_test_run<tqt_run_conv_convcf_mx1bias_clamp_f16_f16_f16_8x3vl_rvv, float16_t, 13, 11,
+                       12, 14, ClampSource::kRowBias>(),
     };
 }
 
@@ -61,6 +63,12 @@ class Test_convcf_mx1bias_clamp_f16_f16_f16_8x3vl_rvv
 
 TEST_P(Test_convcf_mx1bias_clamp_f16_f16_f16_8x3vl_rvv, Correctness)
 {
+    run_nonpacked_convcf_test<float16_t, float16_t>(GetParam(), make_convcf_nonpacked_funcs());
+}
+
+TEST_P(Test_convcf_mx1bias_clamp_f16_f16_f16_8x3vl_rvv, ClampSpecialValues)
+{
+    ScopedGemmClampProbe probe;
     run_nonpacked_convcf_test<float16_t, float16_t>(GetParam(), make_convcf_nonpacked_funcs());
 }
 
@@ -78,7 +86,8 @@ static NonPackedConvClFuncs<float16_t> make_convcl_nonpacked_funcs()
         tqt_get_n_step_convcl_1xnbias_clamp_f16_f16_f16t_8x3vl_rvv,
         tqt_get_a_im2col_size_convcl_1xnbias_clamp_f16_f16_f16t_8x3vl_rvv,
         tqt_run_im2col_convcl_1xnbias_clamp_f16_f16_f16t_8x3vl_rvv,
-        tqt_run_conv_convcl_1xnbias_clamp_f16_f16_f16t_8x3vl_rvv,
+        clamp_test_run<tqt_run_conv_convcl_1xnbias_clamp_f16_f16_f16t_8x3vl_rvv, float16_t, 13, 11,
+                       12, 14, ClampSource::kColumnBias>(),
     };
 }
 
@@ -89,6 +98,12 @@ class Test_convcl_1xnbias_clamp_f16_f16_f16t_8x3vl_rvv
 
 TEST_P(Test_convcl_1xnbias_clamp_f16_f16_f16t_8x3vl_rvv, Correctness)
 {
+    run_nonpacked_convcl_test<float16_t, float16_t>(GetParam(), make_convcl_nonpacked_funcs());
+}
+
+TEST_P(Test_convcl_1xnbias_clamp_f16_f16_f16t_8x3vl_rvv, ClampSpecialValues)
+{
+    ScopedGemmClampProbe probe;
     run_nonpacked_convcl_test<float16_t, float16_t>(GetParam(), make_convcl_nonpacked_funcs());
 }
 
@@ -108,7 +123,8 @@ static PackedConvCfFuncs<float16_t> make_convcf_packed_funcs()
         tqt_get_b_im2colpack_size_convcf_mx1bias_clamp_f16_f16p_f16p_8x3vl_rvv,
         tqt_run_a_pack_convcf_mx1bias_clamp_f16_f16p_f16p_8x3vl_rvv,
         tqt_run_b_im2colpack_convcf_mx1bias_clamp_f16_f16p_f16p_8x3vl_rvv,
-        tqt_run_conv_convcf_mx1bias_clamp_f16_f16p_f16p_8x3vl_rvv,
+        clamp_test_run<tqt_run_conv_convcf_mx1bias_clamp_f16_f16p_f16p_8x3vl_rvv, float16_t, 13, 11,
+                       12, 14, ClampSource::kRowBias>(),
     };
 }
 
@@ -119,6 +135,12 @@ class Test_convcf_mx1bias_clamp_f16_f16p_f16p_8x3vl_rvv
 
 TEST_P(Test_convcf_mx1bias_clamp_f16_f16p_f16p_8x3vl_rvv, Correctness)
 {
+    run_packed_convcf_test<float16_t, float16_t>(GetParam(), make_convcf_packed_funcs());
+}
+
+TEST_P(Test_convcf_mx1bias_clamp_f16_f16p_f16p_8x3vl_rvv, ClampSpecialValues)
+{
+    ScopedGemmClampProbe probe;
     run_packed_convcf_test<float16_t, float16_t>(GetParam(), make_convcf_packed_funcs());
 }
 
@@ -138,7 +160,8 @@ static PackedConvClFuncs<float16_t> make_convcl_packed_funcs()
         tqt_get_b_packed_size_convcl_1xnbias_clamp_f16_f16p_f16p_8x3vl_rvv,
         tqt_run_bt_pack_convcl_1xnbias_clamp_f16_f16p_f16p_8x3vl_rvv,
         tqt_run_a_im2colpack_convcl_1xnbias_clamp_f16_f16p_f16p_8x3vl_rvv,
-        tqt_run_conv_convcl_1xnbias_clamp_f16_f16p_f16p_8x3vl_rvv,
+        clamp_test_run<tqt_run_conv_convcl_1xnbias_clamp_f16_f16p_f16p_8x3vl_rvv, float16_t, 13, 11,
+                       12, 14, ClampSource::kColumnBias>(),
     };
 }
 
@@ -149,6 +172,12 @@ class Test_convcl_1xnbias_clamp_f16_f16p_f16p_8x3vl_rvv
 
 TEST_P(Test_convcl_1xnbias_clamp_f16_f16p_f16p_8x3vl_rvv, Correctness)
 {
+    run_packed_convcl_test<float16_t, float16_t>(GetParam(), make_convcl_packed_funcs());
+}
+
+TEST_P(Test_convcl_1xnbias_clamp_f16_f16p_f16p_8x3vl_rvv, ClampSpecialValues)
+{
+    ScopedGemmClampProbe probe;
     run_packed_convcl_test<float16_t, float16_t>(GetParam(), make_convcl_packed_funcs());
 }
 
@@ -168,7 +197,8 @@ static MixedPackedConvClFuncs<float16_t> make_convcl_mixed_packed_funcs()
         tqt_get_b_packed_size_convcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv,
         tqt_run_bt_pack_convcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv,
         tqt_run_im2col_convcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv,
-        tqt_run_conv_convcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv,
+        clamp_test_run<tqt_run_conv_convcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv, float16_t, 13, 11,
+                       12, 14, ClampSource::kColumnBias>(),
     };
 }
 
@@ -179,6 +209,13 @@ class Test_convcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv
 
 TEST_P(Test_convcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv, Correctness)
 {
+    run_mixed_packed_convcl_test<float16_t, float16_t>(GetParam(),
+                                                       make_convcl_mixed_packed_funcs());
+}
+
+TEST_P(Test_convcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv, ClampSpecialValues)
+{
+    ScopedGemmClampProbe probe;
     run_mixed_packed_convcl_test<float16_t, float16_t>(GetParam(),
                                                        make_convcl_mixed_packed_funcs());
 }

@@ -82,7 +82,7 @@ size_t tqt_get_d_size_gemm_1xnbias_clamp_f32_f32_bf16t_8x1vl_rvv(size_t m, size_
 template <size_t MR>
 static void gemm_kernel(size_t K, float *D, const float *A, const bfloat16_t *B, const float *C,
                         const float *bias, size_t ldd, size_t lda, size_t ldb, size_t ldc,
-                        float clamp_min, float clamp_max, size_t vl)
+                        float clamp_min, float clamp_max, bool apply_clamp, size_t vl)
 {
     static_assert(MR >= 1 && MR <= 8, "MR must be in range [1, 8]");
 
@@ -110,7 +110,8 @@ static void gemm_kernel(size_t K, float *D, const float *A, const bfloat16_t *B,
     if (bias) {
         tqt_add_1xnbias_f32_kernel_gemm_f32_bf16_8x1vl_rvv<MR>(vl, bias);
     }
-    if (!(isinf(clamp_min) && clamp_min < 0.0f && isinf(clamp_max) && clamp_max > 0.0f)) {
+    // Skip min/max only for the explicitly unbounded range.
+    if (apply_clamp) {
         tqt_clamp_fp32scalar_kernel_gemm_f32_bf16_8x1vl_rvv<MR>(vl, clamp_min, clamp_max);
     }
 
@@ -120,7 +121,7 @@ static void gemm_kernel(size_t K, float *D, const float *A, const bfloat16_t *B,
 using gemm_kernel_fn_t = void (*)(size_t K, float *D, const float *A, const bfloat16_t *B,
                                   const float *C, const float *bias, size_t ldd, size_t lda,
                                   size_t ldb, size_t ldc, float clamp_min, float clamp_max,
-                                  size_t vl);
+                                  bool apply_clamp, size_t vl);
 
 static constexpr gemm_kernel_fn_t kernel_table[8] = {
     gemm_kernel<1>, gemm_kernel<2>, gemm_kernel<3>, gemm_kernel<4>,
@@ -138,6 +139,8 @@ void tqt_run_gemm_1xnbias_clamp_f32_f32_bf16t_8x1vl_rvv(size_t m, size_t n, size
                                                         const void *bias, float clamp_min,
                                                         float clamp_max)
 {
+    const bool apply_clamp = tqt_gemm_clamp_is_enabled((float)clamp_min, (float)clamp_max);
+
     TQT_UNUSED(k_idx_a);
     TQT_UNUSED(k_idx_b);
 
@@ -154,7 +157,7 @@ void tqt_run_gemm_1xnbias_clamp_f32_f32_bf16t_8x1vl_rvv(size_t m, size_t n, size
 
             size_t mr_idx = actual_m - 1;
             kernel_table[mr_idx](k, d_ptr, a_ptr, b_ptr, c_ptr, bias_ptr, ldd, lda, ldb, ldc,
-                                 clamp_min, clamp_max, actual_n);
+                                 clamp_min, clamp_max, apply_clamp, actual_n);
         }
     }
 }

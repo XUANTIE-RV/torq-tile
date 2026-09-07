@@ -95,6 +95,9 @@ void tqt_run_bt_pack_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv(size_t n, 
 ///                       {-2, -1, 0, 1}.
 /// @param[in]  params    Quantization parameters (scale_a[M], zero_point_a[M],
 ///                       scale_b[N], sum_b[N]).
+/// @note If clamp_min is negative infinity and clamp_max is positive infinity,
+///       clamping is skipped. All other bounds retain the existing clamp behavior.
+///       This does not guarantee preservation of NaN payloads or exception flags.
 void tqt_run_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv(
     size_t m, size_t n, size_t k, const void *A_packed, size_t lda, size_t k_idx_a,
     const void *B_packed, size_t ldb, size_t k_idx_b, void *D, size_t ldd, const void *bias,

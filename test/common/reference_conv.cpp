@@ -17,7 +17,7 @@ namespace test
 template <typename T>
 void reference_conv(size_t group_idx, const T *activation, const T *weight, const T *bias,
                     T *output, const tqt_conv_params *params, ConvLayout layout, T clamp_min,
-                    T clamp_max)
+                    T clamp_max, ConvClampPolicy policy)
 {
     const float clamp_min_f = static_cast<float>(clamp_min);
     const float clamp_max_f = static_cast<float>(clamp_max);
@@ -107,8 +107,11 @@ void reference_conv(size_t group_idx, const T *activation, const T *weight, cons
                         acc += static_cast<float>(bias[oc]);
                     }
 
-                    acc = std::fmax(acc, clamp_min_f);
-                    acc = std::fmin(acc, clamp_max_f);
+                    if (policy == ConvClampPolicy::kAlwaysApply || clamp_min_f != -INFINITY ||
+                        clamp_max_f != INFINITY) {
+                        acc = std::fmax(acc, clamp_min_f);
+                        acc = std::fmin(acc, clamp_max_f);
+                    }
 
                     if (layout == ConvLayout::kChannelFirst) {
                         // output: [OC_per_group, OD, OH, OW]
@@ -127,13 +130,14 @@ void reference_conv(size_t group_idx, const T *activation, const T *weight, cons
 
 // Explicit instantiations
 template void reference_conv<float>(size_t, const float *, const float *, const float *, float *,
-                                    const tqt_conv_params *, ConvLayout, float, float);
+                                    const tqt_conv_params *, ConvLayout, float, float,
+                                    ConvClampPolicy);
 template void reference_conv<float16_t>(size_t, const float16_t *, const float16_t *,
                                         const float16_t *, float16_t *, const tqt_conv_params *,
-                                        ConvLayout, float16_t, float16_t);
+                                        ConvLayout, float16_t, float16_t, ConvClampPolicy);
 template void reference_conv<bfloat16_t>(size_t, const bfloat16_t *, const bfloat16_t *,
                                          const bfloat16_t *, bfloat16_t *, const tqt_conv_params *,
-                                         ConvLayout, bfloat16_t, bfloat16_t);
+                                         ConvLayout, bfloat16_t, bfloat16_t, ConvClampPolicy);
 
 }  // namespace test
 }  // namespace torq_tile

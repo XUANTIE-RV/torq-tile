@@ -43,6 +43,9 @@ size_t tqt_get_d_size_gemm_1xnbias_clamp_f32_bf16_bf16_8x1vl_rvv(size_t m, size_
 ///
 /// @note A, B are bfloat16_t; C, D, bias are float.
 ///
+/// @note If clamp_min is negative infinity and clamp_max is positive infinity,
+///       clamping is skipped. All other bounds retain the existing clamp behavior.
+///       This does not guarantee preservation of NaN payloads or exception flags.
 void tqt_run_gemm_1xnbias_clamp_f32_bf16_bf16_8x1vl_rvv(size_t m, size_t n, size_t k, const void *A,
                                                         size_t lda, size_t k_idx_a, const void *B,
                                                         size_t ldb, size_t k_idx_b, const void *C,

@@ -144,7 +144,7 @@ static inline void tqt_vwmacc_zp_kernel_gemm_qai8dx_qsi8cx_4x1vl_rvv(size_t vl,
 template <size_t MR>
 static inline void tqt_dequant_fp32_kernel_gemm_qai8dx_qsi8cx_4x1vl_rvv(
     size_t vl, const float scale_a[MR], const float *scale_b, const float *bias, float clamp_min,
-    float clamp_max, float *D, size_t stride_row)
+    float clamp_max, bool apply_clamp, float *D, size_t stride_row)
 {
     static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
 
@@ -165,63 +165,75 @@ static inline void tqt_dequant_fp32_kernel_gemm_qai8dx_qsi8cx_4x1vl_rvv(
     }
 
     if constexpr (MR >= 1) {
+        // Skip min/max only for the explicitly unbounded range.
         asm volatile(
             "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"
             "vfcvt.f.x.v v16, v16\n\t"
             "vfmul.vf v12, v4, %[sa]\n\t"
             "vfmul.vv v16, v16, v12\n\t"
             "vfadd.vv v16, v16, v0\n\t"
+            "beqz %[apply_clamp], 90f\n\t"
             "vfmax.vf v16, v16, %[cmin]\n\t"
             "vfmin.vf v16, v16, %[cmax]\n\t"
+            "90:\n\t"
             "vse32.v v16, (%[d])\n\t"
             :
             : [vl] "r"(vl), [sa] "f"(scale_a[0]), [cmin] "f"(clamp_min), [cmax] "f"(clamp_max),
-              [d] "r"(D + 0 * stride_row)
+              [d] "r"(D + 0 * stride_row), [apply_clamp] "r"(apply_clamp)
             : "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "memory");
     }
     if constexpr (MR >= 2) {
+        // Skip min/max only for the explicitly unbounded range.
         asm volatile(
             "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"
             "vfcvt.f.x.v v20, v20\n\t"
             "vfmul.vf v12, v4, %[sa]\n\t"
             "vfmul.vv v20, v20, v12\n\t"
             "vfadd.vv v20, v20, v0\n\t"
+            "beqz %[apply_clamp], 90f\n\t"
             "vfmax.vf v20, v20, %[cmin]\n\t"
             "vfmin.vf v20, v20, %[cmax]\n\t"
+            "90:\n\t"
             "vse32.v v20, (%[d])\n\t"
             :
             : [vl] "r"(vl), [sa] "f"(scale_a[1]), [cmin] "f"(clamp_min), [cmax] "f"(clamp_max),
-              [d] "r"(D + 1 * stride_row)
+              [d] "r"(D + 1 * stride_row), [apply_clamp] "r"(apply_clamp)
             : "v12", "v13", "v14", "v15", "v20", "v21", "v22", "v23", "memory");
     }
     if constexpr (MR >= 3) {
+        // Skip min/max only for the explicitly unbounded range.
         asm volatile(
             "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"
             "vfcvt.f.x.v v24, v24\n\t"
             "vfmul.vf v12, v4, %[sa]\n\t"
             "vfmul.vv v24, v24, v12\n\t"
             "vfadd.vv v24, v24, v0\n\t"
+            "beqz %[apply_clamp], 90f\n\t"
             "vfmax.vf v24, v24, %[cmin]\n\t"
             "vfmin.vf v24, v24, %[cmax]\n\t"
+            "90:\n\t"
             "vse32.v v24, (%[d])\n\t"
             :
             : [vl] "r"(vl), [sa] "f"(scale_a[2]), [cmin] "f"(clamp_min), [cmax] "f"(clamp_max),
-              [d] "r"(D + 2 * stride_row)
+              [d] "r"(D + 2 * stride_row), [apply_clamp] "r"(apply_clamp)
             : "v12", "v13", "v14", "v15", "v24", "v25", "v26", "v27", "memory");
     }
     if constexpr (MR >= 4) {
+        // Skip min/max only for the explicitly unbounded range.
         asm volatile(
             "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"
             "vfcvt.f.x.v v28, v28\n\t"
             "vfmul.vf v12, v4, %[sa]\n\t"
             "vfmul.vv v28, v28, v12\n\t"
             "vfadd.vv v28, v28, v0\n\t"
+            "beqz %[apply_clamp], 90f\n\t"
             "vfmax.vf v28, v28, %[cmin]\n\t"
             "vfmin.vf v28, v28, %[cmax]\n\t"
+            "90:\n\t"
             "vse32.v v28, (%[d])\n\t"
             :
             : [vl] "r"(vl), [sa] "f"(scale_a[3]), [cmin] "f"(clamp_min), [cmax] "f"(clamp_max),
-              [d] "r"(D + 3 * stride_row)
+              [d] "r"(D + 3 * stride_row), [apply_clamp] "r"(apply_clamp)
             : "v12", "v13", "v14", "v15", "v28", "v29", "v30", "v31", "memory");
     }
 }
@@ -232,7 +244,7 @@ static inline void tqt_dequant_fp32_kernel_gemm_qai8dx_qsi8cx_4x1vl_rvv(
 template <size_t MR>
 static inline void tqt_dequant_fp16_kernel_gemm_qai8dx_qsi8cx_4x1vl_rvv(
     size_t vl, const float scale_a[MR], const float *scale_b, const float16_t *bias,
-    float16_t clamp_min, float16_t clamp_max, float16_t *D, size_t stride_row)
+    float16_t clamp_min, float16_t clamp_max, bool apply_clamp, float16_t *D, size_t stride_row)
 {
     static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
 
@@ -260,6 +272,7 @@ static inline void tqt_dequant_fp16_kernel_gemm_qai8dx_qsi8cx_4x1vl_rvv(
     }
 
     if constexpr (MR >= 1) {
+        // Skip min/max only for the explicitly unbounded range.
         asm volatile(
             "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"
             "vfcvt.f.x.v v16, v16\n\t"
@@ -268,15 +281,18 @@ static inline void tqt_dequant_fp16_kernel_gemm_qai8dx_qsi8cx_4x1vl_rvv(
             "vsetvli zero, %[vl], e16, m2, ta, ma\n\t"
             "vfncvt.f.f.w v0, v16\n\t"
             "vfadd.vv v0, v0, v2\n\t"
+            "beqz %[apply_clamp], 90f\n\t"
             "vfmax.vf v0, v0, %[cmin]\n\t"
             "vfmin.vf v0, v0, %[cmax]\n\t"
+            "90:\n\t"
             "vse16.v v0, (%[d])\n\t"
             :
             : [vl] "r"(vl), [sa] "f"(scale_a[0]), [cmin] "f"(clamp_min), [cmax] "f"(clamp_max),
-              [d] "r"(D + 0 * stride_row)
+              [d] "r"(D + 0 * stride_row), [apply_clamp] "r"(apply_clamp)
             : "v0", "v1", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "memory");
     }
     if constexpr (MR >= 2) {
+        // Skip min/max only for the explicitly unbounded range.
         asm volatile(
             "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"
             "vfcvt.f.x.v v20, v20\n\t"
@@ -285,15 +301,18 @@ static inline void tqt_dequant_fp16_kernel_gemm_qai8dx_qsi8cx_4x1vl_rvv(
             "vsetvli zero, %[vl], e16, m2, ta, ma\n\t"
             "vfncvt.f.f.w v0, v20\n\t"
             "vfadd.vv v0, v0, v2\n\t"
+            "beqz %[apply_clamp], 90f\n\t"
             "vfmax.vf v0, v0, %[cmin]\n\t"
             "vfmin.vf v0, v0, %[cmax]\n\t"
+            "90:\n\t"
             "vse16.v v0, (%[d])\n\t"
             :
             : [vl] "r"(vl), [sa] "f"(scale_a[1]), [cmin] "f"(clamp_min), [cmax] "f"(clamp_max),
-              [d] "r"(D + 1 * stride_row)
+              [d] "r"(D + 1 * stride_row), [apply_clamp] "r"(apply_clamp)
             : "v0", "v1", "v12", "v13", "v14", "v15", "v20", "v21", "v22", "v23", "memory");
     }
     if constexpr (MR >= 3) {
+        // Skip min/max only for the explicitly unbounded range.
         asm volatile(
             "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"
             "vfcvt.f.x.v v24, v24\n\t"
@@ -302,15 +321,18 @@ static inline void tqt_dequant_fp16_kernel_gemm_qai8dx_qsi8cx_4x1vl_rvv(
             "vsetvli zero, %[vl], e16, m2, ta, ma\n\t"
             "vfncvt.f.f.w v0, v24\n\t"
             "vfadd.vv v0, v0, v2\n\t"
+            "beqz %[apply_clamp], 90f\n\t"
             "vfmax.vf v0, v0, %[cmin]\n\t"
             "vfmin.vf v0, v0, %[cmax]\n\t"
+            "90:\n\t"
             "vse16.v v0, (%[d])\n\t"
             :
             : [vl] "r"(vl), [sa] "f"(scale_a[2]), [cmin] "f"(clamp_min), [cmax] "f"(clamp_max),
-              [d] "r"(D + 2 * stride_row)
+              [d] "r"(D + 2 * stride_row), [apply_clamp] "r"(apply_clamp)
             : "v0", "v1", "v12", "v13", "v14", "v15", "v24", "v25", "v26", "v27", "memory");
     }
     if constexpr (MR >= 4) {
+        // Skip min/max only for the explicitly unbounded range.
         asm volatile(
             "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"
             "vfcvt.f.x.v v28, v28\n\t"
@@ -319,12 +341,14 @@ static inline void tqt_dequant_fp16_kernel_gemm_qai8dx_qsi8cx_4x1vl_rvv(
             "vsetvli zero, %[vl], e16, m2, ta, ma\n\t"
             "vfncvt.f.f.w v0, v28\n\t"
             "vfadd.vv v0, v0, v2\n\t"
+            "beqz %[apply_clamp], 90f\n\t"
             "vfmax.vf v0, v0, %[cmin]\n\t"
             "vfmin.vf v0, v0, %[cmax]\n\t"
+            "90:\n\t"
             "vse16.v v0, (%[d])\n\t"
             :
             : [vl] "r"(vl), [sa] "f"(scale_a[3]), [cmin] "f"(clamp_min), [cmax] "f"(clamp_max),
-              [d] "r"(D + 3 * stride_row)
+              [d] "r"(D + 3 * stride_row), [apply_clamp] "r"(apply_clamp)
             : "v0", "v1", "v12", "v13", "v14", "v15", "v28", "v29", "v30", "v31", "memory");
     }
 }

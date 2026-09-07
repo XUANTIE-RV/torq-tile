@@ -63,7 +63,7 @@ static inline void tqt_i8_i8_blockquant_accumulate_group(size_t vl, float scale_
 
 static inline void tqt_i8_i8_blockquant_epilogue_f32(size_t vl, float *d, const float *c,
                                                      const float *bias, float clamp_min,
-                                                     float clamp_max)
+                                                     float clamp_max, bool apply_clamp)
 {
     asm volatile("vsetvli zero, %0, e32, m4, ta, ma" : : "r"(vl) :);
     if (c) {
@@ -82,12 +82,15 @@ static inline void tqt_i8_i8_blockquant_epilogue_f32(size_t vl, float *d, const 
             : "r"(bias)
             : "v4", "v5", "v6", "v7", "v16", "v17", "v18", "v19", "memory");
     }
+    // Skip min/max only for the explicitly unbounded range.
     asm volatile(
+        "beqz %[apply_clamp], 90f\n\t"
         "vfmax.vf v16, v16, %0\n\t"
         "vfmin.vf v16, v16, %1\n\t"
+        "90:\n\t"
         "vse32.v v16, (%2)"
         :
-        : "f"(clamp_min), "f"(clamp_max), "r"(d)
+        : "f"(clamp_min), "f"(clamp_max), "r"(d), [apply_clamp] "r"(apply_clamp)
         : "v16", "v17", "v18", "v19", "memory");
 }
 
@@ -95,7 +98,7 @@ static inline void tqt_compute_tile_kernel_gemm_i8_i8_4x1vl_blockquant_rvv(
     size_t mr, size_t nr, size_t k, size_t k_idx, size_t activation_block_size,
     size_t weight_block_size, float *d, const int8_t *a_packed, const int8_t *b_packed,
     const float *scale_a, size_t ldsa, const float *scale_b, size_t ldsb, const float *c,
-    const float *bias, size_t ldc, size_t ldd, float clamp_min, float clamp_max)
+    const float *bias, size_t ldc, size_t ldd, float clamp_min, float clamp_max, bool apply_clamp)
 {
     const size_t scale_b_byte_stride = ldsb * sizeof(float);
 
@@ -118,6 +121,7 @@ static inline void tqt_compute_tile_kernel_gemm_i8_i8_4x1vl_blockquant_rvv(
         }
 
         const float *c_row = c ? c + row * ldc : nullptr;
-        tqt_i8_i8_blockquant_epilogue_f32(nr, d + row * ldd, c_row, bias, clamp_min, clamp_max);
+        tqt_i8_i8_blockquant_epilogue_f32(nr, d + row * ldd, c_row, bias, clamp_min, clamp_max,
+                                          apply_clamp);
     }
 }

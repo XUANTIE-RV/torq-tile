@@ -119,6 +119,9 @@ size_t tqt_get_d_size_gemm_1xnbias_clamp_bf16_bf16_bf16t_8x1vl_rvv(size_t m, siz
 /// @note The bias vector has shape [1, n] and is added to each row of the result.
 /// @note k_idx_a and k_idx_b are used when A and B are sub-buffers with different sizes.
 ///
+/// @note If clamp_min is negative infinity and clamp_max is positive infinity,
+///       clamping is skipped. All other bounds retain the existing clamp behavior.
+///       This does not guarantee preservation of NaN payloads or exception flags.
 void tqt_run_gemm_1xnbias_clamp_bf16_bf16_bf16t_8x1vl_rvv(
     size_t m, size_t n, size_t k, const void *A, size_t lda, size_t k_idx_a, const void *B,
     size_t ldb, size_t k_idx_b, const void *C, size_t ldc, void *D, size_t ldd, const void *bias,

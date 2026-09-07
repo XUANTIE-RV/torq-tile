@@ -32,6 +32,13 @@ typedef uint8_t float8_e4m3_t;
 typedef uint8_t float8_e5m2_t;
 typedef uint8_t float8_e8m0_t;
 
+/// Return whether the caller requested floating-point GEMM clamping.
+/// Evaluate the original public bounds before any narrowing conversion.
+static inline bool tqt_gemm_clamp_is_enabled(float clamp_min, float clamp_max)
+{
+    return clamp_min != -INFINITY || clamp_max != INFINITY;
+}
+
 #ifndef TORQ_TILE_ERROR_TRAP
 #define TORQ_TILE_ERROR_TRAP 0
 #endif

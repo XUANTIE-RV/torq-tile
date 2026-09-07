@@ -65,6 +65,9 @@ void tqt_run_bt_pack_gemm_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv(size_t n, size_t 
                                                                const void *B, void *B_packed);
 
 /// Runs the GEMM microkernel with original A and packed B, bias addition and clamp.
+/// @note If clamp_min is negative infinity and clamp_max is positive infinity,
+///       clamping is skipped. All other bounds retain the existing clamp behavior.
+///       This does not guarantee preservation of NaN payloads or exception flags.
 void tqt_run_gemm_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv(size_t m, size_t n, size_t k, const void *A,
                                                        size_t lda, size_t k_idx_a,
                                                        const void *B_packed, size_t ldb,

@@ -119,7 +119,7 @@ void tqt_run_bt_pack_gemm_1xnbias_clamp_f32_f32p_f32p_8x3vl_rvv(size_t n, size_t
 template <size_t MR, size_t NR>
 static void gemm_kernel(size_t K, float *D, const float *A, const float *B, const float *C,
                         const float *bias, size_t ldd, size_t lda, size_t ldb, size_t ldc,
-                        float clamp_min, float clamp_max, size_t vl)
+                        float clamp_min, float clamp_max, bool apply_clamp, size_t vl)
 {
     static_assert(MR >= 1 && MR <= 8, "MR must be in range [1, 8]");
     static_assert(NR >= 1 && NR <= 3, "NR must be in range [1, 3]");
@@ -164,7 +164,10 @@ static void gemm_kernel(size_t K, float *D, const float *A, const float *B, cons
     if (bias) {
         tqt_add_1xnbias_kernel_gemm_f32_f32_8x3vl_rvv<MR, NR>(vl, bias);
     }
-    tqt_clamp_kernel_gemm_f32_f32_8x3vl_rvv<MR, NR>(vl, clamp_min, clamp_max);
+    // Skip min/max only for the explicitly unbounded range.
+    if (apply_clamp) {
+        tqt_clamp_kernel_gemm_f32_f32_8x3vl_rvv<MR, NR>(vl, clamp_min, clamp_max);
+    }
     tqt_store_kernel_gemm_f32_f32_8x3vl_rvv<MR, NR>(vl, D, d_stride_row, d_stride_col);
 }
 
@@ -172,7 +175,7 @@ static void gemm_kernel(size_t K, float *D, const float *A, const float *B, cons
 using gemm_kernel_fn_t = void (*)(size_t K, float *D, const float *A, const float *B,
                                   const float *C, const float *bias, size_t ldd, size_t lda,
                                   size_t ldb, size_t ldc, float clamp_min, float clamp_max,
-                                  size_t vl);
+                                  bool apply_clamp, size_t vl);
 
 // Kernel dispatch table (8 x 3 = 24 kernels)
 static constexpr gemm_kernel_fn_t kernel_table[8][3] = {
@@ -196,7 +199,8 @@ static constexpr gemm_kernel_fn_t kernel_table[8][3] = {
 
 static void gemm_mrxnr_rvv(size_t M, size_t N, size_t K, float *D, const float *A, const float *B,
                            const float *C, const float *bias, size_t ldd, size_t lda, size_t ldb,
-                           size_t ldc, float clamp_min, float clamp_max, size_t vl)
+                           size_t ldc, float clamp_min, float clamp_max, bool apply_clamp,
+                           size_t vl)
 {
     TQT_ASSUME(M > 0 && M <= 8);
     TQT_ASSUME(N == 3 * vlmax || N == 2 * vlmax || (N > 0 && N <= vlmax));
@@ -206,7 +210,8 @@ static void gemm_mrxnr_rvv(size_t M, size_t N, size_t K, float *D, const float *
     size_t nr_idx = (N + vlmax - 1) / vlmax - 1;  // 0-2
 
     // Dispatch to specialized kernel
-    kernel_table[mr_idx][nr_idx](K, D, A, B, C, bias, ldd, lda, ldb, ldc, clamp_min, clamp_max, vl);
+    kernel_table[mr_idx][nr_idx](K, D, A, B, C, bias, ldd, lda, ldb, ldc, clamp_min, clamp_max,
+                                 apply_clamp, vl);
 }
 
 // ============================================================================
@@ -218,6 +223,8 @@ void tqt_run_gemm_1xnbias_clamp_f32_f32p_f32p_8x3vl_rvv(
     const void *B_packed, size_t ldb, size_t k_idx_b, const void *C, size_t ldc, void *D,
     size_t ldd, const void *bias, float clamp_min, float clamp_max)
 {
+    const bool apply_clamp = tqt_gemm_clamp_is_enabled((float)clamp_min, (float)clamp_max);
+
     const size_t origin_m = TQT_MIN(m, m_step);
     const size_t origin_n = tqt_gemm_pack_3vl_first_n(TQT_MIN(n, n_step), vlmax);
     for (size_t m_idx = 0; m_idx < m; m_idx += m_step) {
@@ -244,7 +251,7 @@ void tqt_run_gemm_1xnbias_clamp_f32_f32p_f32p_8x3vl_rvv(
                     size_n = vlmax;
                 }
                 gemm_mrxnr_rvv(actual_m, size_n, k, d_ptr, a_ptr, b_ptr, c_ptr, bias_ptr, ldd, lda,
-                               ldb, ldc, clamp_min, clamp_max, vlmax);
+                               ldb, ldc, clamp_min, clamp_max, apply_clamp, vlmax);
             }
             size_t remain_n = actual_n - size_n;
             if (remain_n > 0) {
@@ -257,7 +264,7 @@ void tqt_run_gemm_1xnbias_clamp_f32_f32p_f32p_8x3vl_rvv(
                     bias_ptr += size_n;
                 d_ptr += size_n;
                 gemm_mrxnr_rvv(actual_m, remain_n, k, d_ptr, a_ptr, b_ptr, c_ptr, bias_ptr, ldd,
-                               lda, ldb, ldc, clamp_min, clamp_max, remain_n);
+                               lda, ldb, ldc, clamp_min, clamp_max, apply_clamp, remain_n);
             }
         }
     }

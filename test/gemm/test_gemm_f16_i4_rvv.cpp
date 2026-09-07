@@ -8,6 +8,7 @@
 #include "src/gemm/gemm_f16_i4/gemm_1xnbias_clamp_f16_f16p_qsi4c2p/tqt_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv.h"
 #include "src/gemm/gemm_f16_i4/gemm_1xnbias_clamp_f32_f16_qsi4c2t/tqt_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv.h"
 #include "src/gemm/gemm_f16_i4/gemm_1xnbias_clamp_f32_f16p_qsi4c2p/tqt_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv.h"
+#include "test/common/gemm_clamp_test_utils.h"
 #include "test/common/quantized_gemm_test_runner.h"
 
 using namespace torq_tile::test;
@@ -65,7 +66,8 @@ make_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv_funcs()
     funcs.get_bias_offset = tqt_get_bias_offset_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv;
     funcs.get_d_offset = tqt_get_d_offset_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv;
     funcs.get_d_size = tqt_get_d_size_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv;
-    funcs.run_gemm = tqt_run_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv;
+    funcs.run_gemm = clamp_test_run<tqt_run_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv, float16_t,
+                                    16, 14, 15, 17, ClampSource::kColumnBias, false, 6, true>();
     return funcs;
 }
 
@@ -80,8 +82,20 @@ TEST_P(Test_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv, Correctness)
     run_quantized_weight_gemm_test<float16_t, float16_t, BiasMode::k1xN>(GetParam(), funcs);
 }
 
-INSTANTIATE_TEST_SUITE_P(GemmTests, Test_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv,
-                         common_quantized_weight_test_values(), GemmTestParamNameGenerator());
+TEST_P(Test_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv, ClampSpecialValues)
+{
+    ScopedGemmClampProbe probe;
+    auto funcs = make_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv_funcs();
+    run_quantized_weight_gemm_test<float16_t, float16_t, BiasMode::k1xN>(GetParam(), funcs);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    GemmTests, Test_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv,
+    with_clamp_dimensions(common_quantized_weight_test_values(),
+                          tqt_get_m_step_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv(),
+                          tqt_get_n_step_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv(), 2, true,
+                          false),
+    GemmTestParamNameGenerator());
 
 // ============================================================================
 // gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv (D=fp16, packed A and B)
@@ -106,7 +120,9 @@ make_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv_funcs()
     funcs.get_b_packed_size = tqt_get_b_packed_size_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv;
     funcs.run_a_pack = tqt_run_a_pack_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv;
     funcs.run_bt_pack = tqt_run_bt_pack_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv;
-    funcs.run_gemm = tqt_run_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv;
+    funcs.run_gemm =
+        clamp_test_run<tqt_run_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv, float16_t, 16, 14, 15,
+                       17, ClampSource::kColumnBias, false, 6, true>();
     return funcs;
 }
 
@@ -121,8 +137,20 @@ TEST_P(Test_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv, Correctness)
     run_packed_quantized_weight_gemm_test<float16_t, float16_t, BiasMode::k1xN>(GetParam(), funcs);
 }
 
-INSTANTIATE_TEST_SUITE_P(GemmTests, Test_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv,
-                         common_quantized_weight_test_values(), GemmTestParamNameGenerator());
+TEST_P(Test_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv, ClampSpecialValues)
+{
+    ScopedGemmClampProbe probe;
+    auto funcs = make_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv_funcs();
+    run_packed_quantized_weight_gemm_test<float16_t, float16_t, BiasMode::k1xN>(GetParam(), funcs);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    GemmTests, Test_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv,
+    with_clamp_dimensions(common_quantized_weight_test_values(),
+                          tqt_get_m_step_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv(),
+                          tqt_get_n_step_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv(), 2, true,
+                          false),
+    GemmTestParamNameGenerator());
 
 // ============================================================================
 // gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv (D=fp32, A=fp16)
@@ -141,7 +169,8 @@ make_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv_funcs()
     funcs.get_bias_offset = tqt_get_bias_offset_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv;
     funcs.get_d_offset = tqt_get_d_offset_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv;
     funcs.get_d_size = tqt_get_d_size_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv;
-    funcs.run_gemm = tqt_run_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv;
+    funcs.run_gemm = clamp_test_run<tqt_run_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv, float, 16,
+                                    14, 15, 17, ClampSource::kColumnBias, true, 6, true>();
     return funcs;
 }
 
@@ -156,8 +185,20 @@ TEST_P(Test_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv, Correctness)
     run_quantized_weight_gemm_test<float16_t, float, BiasMode::k1xN>(GetParam(), funcs);
 }
 
-INSTANTIATE_TEST_SUITE_P(GemmTests, Test_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv,
-                         common_quantized_weight_test_values(), GemmTestParamNameGenerator());
+TEST_P(Test_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv, ClampSpecialValues)
+{
+    ScopedGemmClampProbe probe;
+    auto funcs = make_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv_funcs();
+    run_quantized_weight_gemm_test<float16_t, float, BiasMode::k1xN>(GetParam(), funcs);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    GemmTests, Test_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv,
+    with_clamp_dimensions(common_quantized_weight_test_values(),
+                          tqt_get_m_step_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv(),
+                          tqt_get_n_step_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv(), 2, true,
+                          false),
+    GemmTestParamNameGenerator());
 
 // ============================================================================
 // gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv (D=fp32, A=fp16, packed A and B)
@@ -182,7 +223,8 @@ make_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv_funcs()
     funcs.get_b_packed_size = tqt_get_b_packed_size_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv;
     funcs.run_a_pack = tqt_run_a_pack_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv;
     funcs.run_bt_pack = tqt_run_bt_pack_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv;
-    funcs.run_gemm = tqt_run_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv;
+    funcs.run_gemm = clamp_test_run<tqt_run_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv, float,
+                                    16, 14, 15, 17, ClampSource::kColumnBias, true, 6, true>();
     return funcs;
 }
 
@@ -197,5 +239,17 @@ TEST_P(Test_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv, Correctness)
     run_packed_quantized_weight_gemm_test<float16_t, float, BiasMode::k1xN>(GetParam(), funcs);
 }
 
-INSTANTIATE_TEST_SUITE_P(GemmTests, Test_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv,
-                         common_quantized_weight_test_values(), GemmTestParamNameGenerator());
+TEST_P(Test_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv, ClampSpecialValues)
+{
+    ScopedGemmClampProbe probe;
+    auto funcs = make_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv_funcs();
+    run_packed_quantized_weight_gemm_test<float16_t, float, BiasMode::k1xN>(GetParam(), funcs);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    GemmTests, Test_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv,
+    with_clamp_dimensions(common_quantized_weight_test_values(),
+                          tqt_get_m_step_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv(),
+                          tqt_get_n_step_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv(), 2, true,
+                          false),
+    GemmTestParamNameGenerator());

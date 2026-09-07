@@ -83,7 +83,7 @@ template <size_t MR>
 static void gemm_kernel(size_t K, float16_t *D, const int8_t *A, const int8_t *B, size_t ldd,
                         size_t lda, size_t ldb, size_t vl, const float scale_a[MR],
                         const int32_t neg_zp_a[MR], const float *scale_b, const float16_t *bias,
-                        float16_t clamp_min, float16_t clamp_max)
+                        float16_t clamp_min, float16_t clamp_max, bool apply_clamp)
 {
     static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
 
@@ -103,14 +103,14 @@ static void gemm_kernel(size_t K, float16_t *D, const int8_t *A, const int8_t *B
     }
 
     tqt_dequant_fp16_kernel_gemm_qai8dx_qsi8cx_4x1vl_rvv<MR>(vl, scale_a, scale_b, bias, clamp_min,
-                                                             clamp_max, D, ldd);
+                                                             clamp_max, apply_clamp, D, ldd);
 }
 
 using gemm_kernel_fn_t = void (*)(size_t K, float16_t *D, const int8_t *A, const int8_t *B,
                                   size_t ldd, size_t lda, size_t ldb, size_t vl,
                                   const float scale_a[], const int32_t neg_zp_a[],
                                   const float *scale_b, const float16_t *bias, float16_t clamp_min,
-                                  float16_t clamp_max);
+                                  float16_t clamp_max, bool apply_clamp);
 
 static constexpr gemm_kernel_fn_t kernel_table[4] = {
     gemm_kernel<1>,
@@ -128,6 +128,8 @@ void tqt_run_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv(
     size_t ldb, size_t k_idx_b, const void *C, size_t ldc, void *D, size_t ldd, const void *bias,
     float16_t clamp_min, float16_t clamp_max, const struct tqt_qai8dxp_qsi8cxp_params *params)
 {
+    const bool apply_clamp = tqt_gemm_clamp_is_enabled((float)clamp_min, (float)clamp_max);
+
     TQT_UNUSED(k_idx_a);
     TQT_UNUSED(k_idx_b);
     TQT_UNUSED(C);
@@ -164,7 +166,8 @@ void tqt_run_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv(
 
             size_t mr_idx = actual_m - 1;
             kernel_table[mr_idx](k, d_ptr, a_ptr, b_ptr, ldd, lda, ldb, actual_n, scale_a_tile,
-                                 neg_zp_a_tile, scale_b_tile, bias_tile_ptr, clamp_min, clamp_max);
+                                 neg_zp_a_tile, scale_b_tile, bias_tile_ptr, clamp_min, clamp_max,
+                                 apply_clamp);
         }
     }
 }

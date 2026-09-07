@@ -275,7 +275,7 @@ inline void run_nonpacked_convcf_test(const ConvTestParams &test_params,
     // Weight needs to be in [OC_per_group, IC_per_group, KD, KH, KW] for reference
     reference_conv<T>(0, activation.data(), weight.data(), bias_ptr, ref_output.data(), &params,
                       ConvLayout::kChannelFirst, to_target_type<T>(test_params.clamp_min),
-                      to_target_type<T>(test_params.clamp_max));
+                      to_target_type<T>(test_params.clamp_max), ConvClampPolicy::kSkipUnbounded);
 
     // Actual output via ukernel
     // Step 1: im2col B (activation) -> [K, N]
@@ -343,7 +343,7 @@ inline void run_nonpacked_convcl_test(const ConvTestParams &test_params,
     std::vector<T> ref_output(M * N, static_cast<T>(0.0f));
     reference_conv<T>(0, activation.data(), weight.data(), bias_ptr, ref_output.data(), &params,
                       ConvLayout::kChannelLast, to_target_type<T>(test_params.clamp_min),
-                      to_target_type<T>(test_params.clamp_max));
+                      to_target_type<T>(test_params.clamp_max), ConvClampPolicy::kSkipUnbounded);
 
     // Actual output via ukernel
     // Step 1: im2col A (activation) -> [M, K]
@@ -407,7 +407,7 @@ inline void run_packed_convcf_test(const ConvTestParams &test_params,
     std::vector<T> ref_output(OC_per_group * N, static_cast<T>(0.0f));
     reference_conv<T>(0, activation.data(), weight.data(), bias_ptr, ref_output.data(), &params,
                       ConvLayout::kChannelFirst, to_target_type<T>(test_params.clamp_min),
-                      to_target_type<T>(test_params.clamp_max));
+                      to_target_type<T>(test_params.clamp_max), ConvClampPolicy::kSkipUnbounded);
 
     // Pack A (weight) [M, K]
     size_t a_packed_size = funcs.get_a_packed_size(M, K);
@@ -473,7 +473,7 @@ inline void run_packed_convcl_test(const ConvTestParams &test_params,
     std::vector<T> ref_output(M * N, static_cast<T>(0.0f));
     reference_conv<T>(0, activation.data(), weight.data(), bias_ptr, ref_output.data(), &params,
                       ConvLayout::kChannelLast, to_target_type<T>(test_params.clamp_min),
-                      to_target_type<T>(test_params.clamp_max));
+                      to_target_type<T>(test_params.clamp_max), ConvClampPolicy::kSkipUnbounded);
 
     // Fused im2col+pack A (activation) -> A_packed
     size_t a_packed_size = funcs.get_a_im2colpack_size(M, K);
@@ -570,7 +570,7 @@ inline void run_mixed_packed_convcl_test(const ConvTestParams &test_params,
     std::vector<T> ref_output(M * N, static_cast<T>(0.0f));
     reference_conv<T>(0, activation.data(), weight.data(), bias_ptr, ref_output.data(), &params,
                       ConvLayout::kChannelLast, to_target_type<T>(test_params.clamp_min),
-                      to_target_type<T>(test_params.clamp_max));
+                      to_target_type<T>(test_params.clamp_max), ConvClampPolicy::kSkipUnbounded);
 
     // Step 1: im2col A (activation) -> [M, K] (no packing)
     size_t im2col_size = funcs.get_a_im2col_size(M, K);

@@ -51,7 +51,8 @@ static inline void tqt_qsi8d32_qsi4c32_dot_pair_rvv(size_t vl, const uint8_t *gr
 static inline void tqt_compute_tile_kernel_gemm_qsi8d32_qsi4c32_4x1vl_rvv(
     size_t mr, size_t nr, size_t k, size_t k_idx, float *d, const int8_t *a_packed,
     const uint8_t *b_packed, const float *scale_a, size_t ldsa, const float *scale_b, size_t ldsb,
-    const float *c, const float *bias, size_t ldc, size_t ldd, float clamp_min, float clamp_max)
+    const float *c, const float *bias, size_t ldc, size_t ldd, float clamp_min, float clamp_max,
+    bool apply_clamp)
 {
     constexpr size_t group_size = 32;
     constexpr size_t group_bytes = group_size / 2;
@@ -87,6 +88,6 @@ static inline void tqt_compute_tile_kernel_gemm_qsi8d32_qsi4c32_4x1vl_rvv(
             tqt_i8_i8_blockquant_accumulate_group(nr, sa, scale_b + block, scale_b_byte_stride);
         }
         tqt_i8_i8_blockquant_epilogue_f32(nr, d + row * ldd, c ? c + row * ldc : nullptr, bias,
-                                          clamp_min, clamp_max);
+                                          clamp_min, clamp_max, apply_clamp);
     }
 }

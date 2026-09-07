@@ -11,9 +11,10 @@
 static inline void tqt_compute_tile_kernel_gemm_qsi8d256_qsi8c16_4x1vl_rvv(
     size_t mr, size_t nr, size_t k, size_t k_idx, float *d, const int8_t *a_packed,
     const int8_t *b_packed, const float *scale_a, size_t ldsa, const float *scale_b, size_t ldsb,
-    const float *c, const float *bias, size_t ldc, size_t ldd, float clamp_min, float clamp_max)
+    const float *c, const float *bias, size_t ldc, size_t ldd, float clamp_min, float clamp_max,
+    bool apply_clamp)
 {
     tqt_compute_tile_kernel_gemm_i8_i8_4x1vl_blockquant_rvv(
         mr, nr, k, k_idx, 256, 16, d, a_packed, b_packed, scale_a, ldsa, scale_b, ldsb, c, bias,
-        ldc, ldd, clamp_min, clamp_max);
+        ldc, ldd, clamp_min, clamp_max, apply_clamp);
 }

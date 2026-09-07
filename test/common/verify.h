@@ -49,6 +49,8 @@ extern template VerificationResult verify_gemm_result<bfloat16_t>(const bfloat16
                                                                   float);
 extern template VerificationResult verify_gemm_result<int32_t>(const int32_t *, const int32_t *,
                                                                size_t, float, float);
+extern template VerificationResult verify_gemm_result<double>(const double *, const double *,
+                                                              size_t, float, float);
 
 }  // namespace test
 }  // namespace torq_tile

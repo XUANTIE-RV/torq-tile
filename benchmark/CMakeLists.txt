@@ -26,6 +26,12 @@ if(TORQ_TILE_ENABLE_RVV)
     )
 endif()
 
+if(TORQ_TILE_ENABLE_RVV_F64)
+    list(APPEND TORQ_TILE_BENCHMARK_SOURCES
+        gemm/bench_gemm_f64_f64_rvv.cpp
+    )
+endif()
+
 # RVV FP16 benchmarks (auto-detected via TORQ_TILE_ENABLE_RVV_FP16)
 if(TORQ_TILE_ENABLE_RVV_FP16)
     list(APPEND TORQ_TILE_BENCHMARK_SOURCES
@@ -67,6 +73,9 @@ if(TORQ_TILE_ENABLE_RVV_FP16)
 endif()
 if(TORQ_TILE_ENABLE_RVV_BF16)
     target_compile_definitions(torq_tile_benchmark PRIVATE TORQ_TILE_ENABLE_RVV_BF16)
+endif()
+if(TORQ_TILE_ENABLE_RVV_F64)
+    target_compile_definitions(torq_tile_benchmark PRIVATE TORQ_TILE_ENABLE_RVV_F64)
 endif()
 
 # Static library needs --whole-archive to ensure all symbols are visible

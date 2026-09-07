@@ -84,6 +84,11 @@ if(TORQ_TILE_ENABLE_RVV)
         conv/test_igemm_i8_i8_rvv.cpp)
 endif()
 
+if(TORQ_TILE_ENABLE_RVV_F64)
+    torq_tile_add_test(test_gemm_f64_f64_rvv
+        gemm/test_gemm_f64_f64_rvv.cpp)
+endif()
+
 if(TORQ_TILE_ENABLE_RVV_FP16)
     # --- Gemm F16 RVV variants ---
     torq_tile_add_test(test_gemm_f16_f16_rvv

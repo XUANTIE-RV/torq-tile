@@ -64,5 +64,44 @@ template void reference_sgemm<float, float>(size_t, size_t, size_t, const float 
                                             const float *, size_t, BLayout, const float *, size_t,
                                             float *, size_t, float, float);
 
+template <>
+void reference_sgemm<double, double>(size_t m, size_t n, size_t k, const double *A, size_t lda,
+                                     ALayout a_layout, const double *B, size_t ldb,
+                                     BLayout b_layout, const double *C, size_t ldc, double *D,
+                                     size_t ldd, double alpha, double beta)
+{
+    for (size_t i = 0; i < m; ++i) {
+        for (size_t j = 0; j < n; ++j) {
+            double acc = 0.0;
+
+            for (size_t p = 0; p < k; ++p) {
+                double a_val;
+                if (a_layout == ALayout::kTransposed) {
+                    a_val = A[p * lda + i];
+                } else {
+                    a_val = A[i * lda + p];
+                }
+
+                double b_val;
+                if (b_layout == BLayout::kTransposed) {
+                    b_val = B[j * ldb + p];
+                } else {
+                    b_val = B[p * ldb + j];
+                }
+
+                acc += a_val * b_val;
+            }
+
+            double result = alpha * acc;
+
+            if (C != nullptr && beta != 0.0) {
+                result += beta * C[i * ldc + j];
+            }
+
+            D[i * ldd + j] = result;
+        }
+    }
+}
+
 }  // namespace test
 }  // namespace torq_tile

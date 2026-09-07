@@ -72,6 +72,13 @@ struct DefaultThreshold<int32_t>
     static constexpr float cosine_sim = 1.0f;
 };
 
+template <>
+struct DefaultThreshold<double>
+{
+    static constexpr float abs_error = 1e-12f;
+    static constexpr float cosine_sim = 0.999999f;
+};
+
 // ============================================================================
 // A layout enumeration (for BLAS-style SGEMM)
 // ============================================================================

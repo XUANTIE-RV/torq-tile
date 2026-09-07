@@ -46,5 +46,11 @@ extern template void reference_sgemm<float, float>(size_t, size_t, size_t, const
                                                    const float *, size_t, float *, size_t, float,
                                                    float);
 
+template <>
+void reference_sgemm<double, double>(size_t m, size_t n, size_t k, const double *A, size_t lda,
+                                     ALayout a_layout, const double *B, size_t ldb,
+                                     BLayout b_layout, const double *C, size_t ldc, double *D,
+                                     size_t ldd, double alpha, double beta);
+
 }  // namespace test
 }  // namespace torq_tile

@@ -25,6 +25,7 @@ template class UniformRandomGenerator<float16_t>;
 template class UniformRandomGenerator<bfloat16_t>;
 template class UniformRandomGenerator<int8_t>;
 template class UniformRandomGenerator<int32_t>;
+template class UniformRandomGenerator<double>;
 
 }  // namespace test
 }  // namespace torq_tile

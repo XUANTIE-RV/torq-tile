@@ -54,6 +54,12 @@ check_c_source_compiles("
     int main() { return 0; }
 " TORQ_TILE_ENABLE_RVV_BF16)
 
+# Detect RISC-V Vector FP64 support (V + D, ELEN >= 64)
+check_c_source_compiles("
+    #if !defined(__riscv) || !defined(__riscv_v) || !defined(__riscv_v_elen) || (__riscv_v_elen < 64)\\n #error\\n #endif
+    int main() { return 0; }
+" TORQ_TILE_ENABLE_RVV_F64)
+
 # ============================================================================
 # Source Files Collection
 # ============================================================================
@@ -180,6 +186,14 @@ set(TORQ_TILE_RVV_BF16_SOURCES
     src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_bf16_qai8dxp_qsi4cxp/tqt_gemm_1xnbias_clamp_bf16_qai8dxp_qsi4cxp_4x1vl_rvv.cpp
 )
 
+# RVV F64 kernel files
+set(TORQ_TILE_RVV_F64_SOURCES
+    src/gemm/gemm_f64_f64/dgemm_f64_f64_f64/tqt_dgemm_f64_f64_f64_8x3vl_rvv.cpp
+    src/gemm/gemm_f64_f64/dgemm_f64_f64_f64t/tqt_dgemm_f64_f64_f64t_8x3vl_rvv.cpp
+    src/gemm/gemm_f64_f64/dgemm_f64_f64t_f64/tqt_dgemm_f64_f64t_f64_8x3vl_rvv.cpp
+    src/gemm/gemm_f64_f64/dgemm_f64_f64t_f64t/tqt_dgemm_f64_f64t_f64t_8x3vl_rvv.cpp
+)
+
 # ============================================================================
 # Collect All Sources Based on Detected Extensions
 # ============================================================================
@@ -199,6 +213,10 @@ endif()
 # Add RVV BF16 sources if detected
 if(TORQ_TILE_ENABLE_RVV_BF16)
     list(APPEND TORQ_TILE_ALL_SOURCES ${TORQ_TILE_RVV_BF16_SOURCES})
+endif()
+
+if(TORQ_TILE_ENABLE_RVV_F64)
+    list(APPEND TORQ_TILE_ALL_SOURCES ${TORQ_TILE_RVV_F64_SOURCES})
 endif()
 
 # ============================================================================

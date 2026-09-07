@@ -70,6 +70,7 @@ extern template class UniformRandomGenerator<float16_t>;
 extern template class UniformRandomGenerator<bfloat16_t>;
 extern template class UniformRandomGenerator<int8_t>;
 extern template class UniformRandomGenerator<int32_t>;
+extern template class UniformRandomGenerator<double>;
 
 }  // namespace test
 }  // namespace torq_tile

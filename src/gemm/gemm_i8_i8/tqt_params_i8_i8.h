@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -47,6 +48,28 @@ struct tqt_qai8dxp_qsi8cxp_params
     float *scale_a;
     int32_t *zero_point_a;
     float *scale_b;
+};
+
+/// Parameters for qsi8d256 A x qsi8c16 B -> f32.
+///
+/// scale_a is [M, K/256], and scale_b is [N, K/16].
+struct tqt_qsi8d256_qsi8c16_params
+{
+    const float *scale_a;
+    size_t ldsa;
+    const float *scale_b;
+    size_t ldsb;
+};
+
+/// Parameters for qsi8d32 A x qsi8c32 B -> f32.
+///
+/// scale_a and scale_b are [M, K/32] and [N, K/32], respectively.
+struct tqt_qsi8d32_qsi8c32_params
+{
+    const float *scale_a;
+    size_t ldsa;
+    const float *scale_b;
+    size_t ldsb;
 };
 
 #ifdef __cplusplus

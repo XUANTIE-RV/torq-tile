@@ -8,6 +8,7 @@
 
 #include <benchmark/benchmark.h>
 
+#include <algorithm>
 #include <cfloat>
 #include <cstddef>
 #include <cstdint>
@@ -646,6 +647,130 @@ inline void register_packed_quantized_weight_gemm_benchmark(
         ->Args({static_cast<int64_t>(shape.m), static_cast<int64_t>(shape.n),
                 static_cast<int64_t>(shape.k), 32})
         ->ArgNames({"m", "n", "k", "bl"});
+}
+
+// ============================================================================
+// Packed QSI8 block-quantized GEMM benchmark runner
+// ============================================================================
+
+enum class Qsi8BlockWeightEncoding
+{
+    Qau4,
+    Qau5,
+    Qau8,
+    Qsi6,
+    Qsi8,
+};
+
+inline size_t get_qsi8_block_weight_row_bytes(Qsi8BlockWeightEncoding encoding, size_t k)
+{
+    switch (encoding) {
+        case Qsi8BlockWeightEncoding::Qau4:
+            return k / 2;
+        case Qsi8BlockWeightEncoding::Qau5:
+            return (k / 32) * 20;
+        case Qsi8BlockWeightEncoding::Qsi6:
+            return (k / 16) * 12;
+        case Qsi8BlockWeightEncoding::Qau8:
+        case Qsi8BlockWeightEncoding::Qsi8:
+            return k;
+    }
+    return 0;
+}
+
+inline std::vector<uint8_t> make_qsi8_block_weight_benchmark_source(
+    size_t n, size_t k, Qsi8BlockWeightEncoding encoding)
+{
+    const size_t row_bytes = get_qsi8_block_weight_row_bytes(encoding, k);
+    std::vector<uint8_t> source(n * row_bytes, 1);
+    if (encoding == Qsi8BlockWeightEncoding::Qau4) {
+        std::fill(source.begin(), source.end(), 0x11);
+    } else if (encoding == Qsi8BlockWeightEncoding::Qau5) {
+        for (size_t offset = 0; offset < source.size(); offset += 20) {
+            std::fill(source.begin() + offset, source.begin() + offset + 16, 0x11);
+            std::fill(source.begin() + offset + 16, source.begin() + offset + 20, 0x00);
+        }
+    } else if (encoding == Qsi8BlockWeightEncoding::Qsi6) {
+        for (size_t offset = 0; offset < source.size(); offset += 12) {
+            std::fill(source.begin() + offset, source.begin() + offset + 8, 0x11);
+            std::fill(source.begin() + offset + 8, source.begin() + offset + 12, 0xaa);
+        }
+    }
+    return source;
+}
+
+template <typename QParams>
+struct PackedQsi8BlockQuantizedGemmBenchmarkFuncs
+{
+    using GetPackedSizeFunc = size_t (*)(size_t, size_t);
+    using RunPackFunc = void (*)(size_t, size_t, size_t, size_t, size_t, const void *, void *);
+    using MakeParamsFunc = QParams (*)(const float *, size_t, const int16_t *, size_t,
+                                       const float *, const float *, size_t);
+    using RunGemmFunc = void (*)(size_t, size_t, size_t, const void *, size_t, size_t, const void *,
+                                 size_t, size_t, const void *, size_t, void *, size_t, const void *,
+                                 float, float, const QParams *);
+
+    size_t activation_block_size;
+    size_t weight_block_size;
+    Qsi8BlockWeightEncoding weight_encoding;
+    GetPackedSizeFunc get_a_packed_size;
+    GetPackedSizeFunc get_b_packed_size;
+    RunPackFunc run_a_pack;
+    RunPackFunc run_bt_pack;
+    MakeParamsFunc make_params;
+    RunGemmFunc run_gemm;
+};
+
+template <typename QParams>
+void run_packed_qsi8_block_quantized_gemm_benchmark(
+    ::benchmark::State &state, const PackedQsi8BlockQuantizedGemmBenchmarkFuncs<QParams> &funcs)
+{
+    const size_t m = (size_t)state.range(0);
+    const size_t n = (size_t)state.range(1);
+    const size_t k = (size_t)state.range(2);
+    std::vector<int8_t> a(m * k, 1);
+    const std::vector<uint8_t> b_source =
+        make_qsi8_block_weight_benchmark_source(n, k, funcs.weight_encoding);
+    std::vector<uint8_t> a_packed(funcs.get_a_packed_size(m, k));
+    std::vector<uint8_t> b_packed(funcs.get_b_packed_size(n, k));
+    std::vector<float> scale_a(m * (k / funcs.activation_block_size), 0.01f);
+    std::vector<int16_t> bsums_a(m * (k / 16), 16);
+    std::vector<float> scale_b(n * (k / funcs.weight_block_size), 0.01f);
+    std::vector<float> real_zero_b(n * (k / funcs.weight_block_size), 0.0f);
+    std::vector<float> d(m * n);
+
+    funcs.run_a_pack(m, k, k, k, 0, a.data(), a_packed.data());
+    funcs.run_bt_pack(n, k, k, k, 0, b_source.data(), b_packed.data());
+    const QParams params =
+        funcs.make_params(scale_a.data(), k / funcs.activation_block_size, bsums_a.data(), k / 16,
+                          scale_b.data(), real_zero_b.data(), k / funcs.weight_block_size);
+
+    for (auto _ : state) {
+        funcs.run_gemm(m, n, k, a_packed.data(), k, 0, b_packed.data(), k, 0, nullptr, n, d.data(),
+                       n, nullptr, -FLT_MAX, FLT_MAX, &params);
+        ::benchmark::DoNotOptimize(d.data());
+    }
+
+    state.counters["GFLOPS"] =
+        ::benchmark::Counter(gemm_flops(m, n, k), ::benchmark::Counter::kIsIterationInvariantRate,
+                             ::benchmark::Counter::OneK::kIs1000);
+}
+
+template <typename QParams>
+void register_packed_qsi8_block_quantized_gemm_benchmark(
+    const char *name, const PackedQsi8BlockQuantizedGemmBenchmarkFuncs<QParams> &funcs)
+{
+    const GemmShape &shape = global_gemm_shape();
+    const size_t k =
+        std::max(funcs.activation_block_size,
+                 ((shape.k + funcs.activation_block_size - 1) / funcs.activation_block_size) *
+                     funcs.activation_block_size);
+    ::benchmark::RegisterBenchmark(name,
+                                   [funcs](::benchmark::State &state) {
+                                       run_packed_qsi8_block_quantized_gemm_benchmark(state, funcs);
+                                   })
+        ->Args({(int64_t)shape.m, (int64_t)shape.n, (int64_t)k})
+        ->ArgNames({"m", "n", "k"});
 }
 
 }  // namespace benchmark

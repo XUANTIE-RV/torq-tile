@@ -10,6 +10,8 @@
 #include "benchmark/common/gemm_benchmark_runner.h"
 #include "src/gemm/gemm_i8_i8/gemm_1xnbias_clamp_f32_qai8dx_qsi8cxt/tqt_gemm_1xnbias_clamp_f32_qai8dx_qsi8cxt_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i8/gemm_1xnbias_clamp_f32_qai8dxp_qsi8cxp/tqt_gemm_1xnbias_clamp_f32_qai8dxp_qsi8cxp_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i8/gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p/tqt_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i8/gemm_1xnbias_clamp_f32_qsi8d32p_qsi8c32p/tqt_gemm_1xnbias_clamp_f32_qsi8d32p_qsi8c32p_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i8/gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp/tqt_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i8/gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt/tqt_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i8/gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi8cxp/tqt_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi8cxp_4x1vl_rvv.h"
@@ -430,6 +432,22 @@ static PackedGemmFuncs<float16_t> make_packed_1xnbias_clamp_f16_qai8dxp_qsi8cxp_
 }
 #endif  // __riscv_zfh && __riscv_zvfh
 
+static tqt_qsi8d256_qsi8c16_params make_qsi8d256_qsi8c16_block_params(const float *scale_a,
+                                                                      size_t ldsa, const int16_t *,
+                                                                      size_t, const float *scale_b,
+                                                                      const float *, size_t ldsb)
+{
+    return {scale_a, ldsa, scale_b, ldsb};
+}
+
+static tqt_qsi8d32_qsi8c32_params make_qsi8d32_qsi8c32_block_params(const float *scale_a,
+                                                                    size_t ldsa, const int16_t *,
+                                                                    size_t, const float *scale_b,
+                                                                    const float *, size_t ldsb)
+{
+    return {scale_a, ldsa, scale_b, ldsb};
+}
+
 // ============================================================================
 // Registration
 // ============================================================================
@@ -479,6 +497,36 @@ void register_gemm_i8_i8_rvv_benchmarks()
         "tqt_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv",
         make_packed_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv());
 #endif
+
+    const PackedQsi8BlockQuantizedGemmBenchmarkFuncs<tqt_qsi8d256_qsi8c16_params>
+        qsi8d256_qsi8c16_funcs = {
+            256,
+            16,
+            Qsi8BlockWeightEncoding::Qsi8,
+            tqt_get_a_packed_size_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_4x1vl_rvv,
+            tqt_get_b_packed_size_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_4x1vl_rvv,
+            tqt_run_a_pack_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_4x1vl_rvv,
+            tqt_run_bt_pack_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_4x1vl_rvv,
+            make_qsi8d256_qsi8c16_block_params,
+            tqt_run_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_4x1vl_rvv,
+        };
+    register_packed_qsi8_block_quantized_gemm_benchmark(
+        "tqt_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_4x1vl_rvv", qsi8d256_qsi8c16_funcs);
+
+    const PackedQsi8BlockQuantizedGemmBenchmarkFuncs<tqt_qsi8d32_qsi8c32_params>
+        qsi8d32_qsi8c32_funcs = {
+            32,
+            32,
+            Qsi8BlockWeightEncoding::Qsi8,
+            tqt_get_a_packed_size_gemm_1xnbias_clamp_f32_qsi8d32p_qsi8c32p_4x1vl_rvv,
+            tqt_get_b_packed_size_gemm_1xnbias_clamp_f32_qsi8d32p_qsi8c32p_4x1vl_rvv,
+            tqt_run_a_pack_gemm_1xnbias_clamp_f32_qsi8d32p_qsi8c32p_4x1vl_rvv,
+            tqt_run_bt_pack_gemm_1xnbias_clamp_f32_qsi8d32p_qsi8c32p_4x1vl_rvv,
+            make_qsi8d32_qsi8c32_block_params,
+            tqt_run_gemm_1xnbias_clamp_f32_qsi8d32p_qsi8c32p_4x1vl_rvv,
+        };
+    register_packed_qsi8_block_quantized_gemm_benchmark(
+        "tqt_gemm_1xnbias_clamp_f32_qsi8d32p_qsi8c32p_4x1vl_rvv", qsi8d32_qsi8c32_funcs);
 }
 
 }  // namespace benchmark

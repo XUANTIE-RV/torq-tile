@@ -13,8 +13,11 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
+#include <type_traits>
 #include <vector>
 
+#include "src/common/tqt_common.h"
 #include "src/gemm/gemm_i8_i4/tqt_params_i8_i4.h"
 #include "src/gemm/gemm_i8_i8/tqt_params_i8_i8.h"
 #include "test/common/data_generator.h"
@@ -1242,6 +1245,129 @@ void run_packed_quantized_weight_gemm_test(const GemmTestParams &params,
                                << " K=" << k << " BL=" << bl << "\n  Config: " << params.name
                                << "\n  Max abs error: " << result.max_abs_error
                                << "\n  Cosine similarity: " << result.cosine_similarity;
+}
+
+// ============================================================================
+// Test runner: packed block-quantized byte-weight GEMM
+// ============================================================================
+
+template <typename InputType, typename OutputType, typename QParamType, typename QParamsPack,
+          typename RunGemm>
+void run_packed_block_quantized_byte_gemm_test(
+    size_t block_size, bool asymmetric, size_t (*get_m_step)(void), size_t (*get_n_step)(void),
+    size_t (*get_a_packed_size)(size_t, size_t), size_t (*get_b_packed_size)(size_t, size_t),
+    size_t (*get_qparams_packed_size)(size_t, size_t),
+    size_t (*get_a_packed_offset)(size_t, size_t, size_t, size_t),
+    size_t (*get_b_packed_offset)(size_t, size_t, size_t, size_t),
+    size_t (*get_qparams_packed_offset)(size_t, size_t, size_t, size_t),
+    void (*run_a_pack)(size_t, size_t, size_t, size_t, size_t, const void *, void *),
+    void (*run_bt_pack)(size_t, size_t, size_t, size_t, size_t, const void *, void *),
+    QParamsPack run_qparams_pack, RunGemm run_gemm, float tolerance)
+{
+    const size_t m_step = get_m_step();
+    const size_t n_step = get_n_step();
+    ASSERT_GT(m_step, 1U);
+    ASSERT_GT(n_step, 1U);
+
+    const size_t shapes[][2] = {
+        {3, 5},
+        {m_step - 1, n_step - 1},
+        {m_step + 1, n_step + 1},
+    };
+    const size_t k = 2 * block_size + 1;
+    const size_t blocks = (k + block_size - 1) / block_size;
+
+    for (const auto &shape : shapes) {
+        const size_t m = shape[0];
+        const size_t n = shape[1];
+        std::vector<InputType> A(m * k);
+        std::vector<OutputType> bias(n);
+        std::vector<int8_t> B(n * k);
+        std::vector<QParamType> scale(n * blocks), real_zero(n * blocks);
+        for (size_t i = 0; i < A.size(); ++i)
+            A[i] = (InputType)(((int)(i % 9) - 4) / 32.0f);
+        for (size_t i = 0; i < n; ++i)
+            bias[i] = (OutputType)(((int)(i % 5) - 2) / 64.0f);
+        for (size_t i = 0; i < B.size(); ++i) {
+            if (asymmetric) {
+                B[i] = (int8_t)((i * 5 + 3) & 31);
+            } else if (block_size == 16) {
+                B[i] = (int8_t)((int)(i * 5 + 3) % 64 - 32);
+            } else {
+                B[i] = (int8_t)((int)(i * 7 + 5) % 256 - 128);
+            }
+        }
+        for (size_t i = 0; i < scale.size(); ++i) {
+            scale[i] = (QParamType)(1.0f / 64.0f + (i % 3) / 512.0f);
+            real_zero[i] = (QParamType)((float)scale[i] * (12.0f + (float)(i & 1)));
+        }
+
+        std::vector<float> reference(m * n);
+        for (size_t row = 0; row < m; ++row) {
+            for (size_t column = 0; column < n; ++column) {
+                if constexpr (std::is_same<OutputType, float>::value) {
+                    float accumulator = bias[column];
+                    for (size_t depth = 0; depth < k; ++depth) {
+                        const size_t block = depth / block_size;
+                        const QParamType weight =
+                            asymmetric ? (QParamType)((QParamType)(uint8_t)B[column * k + depth] *
+                                                          scale[column * blocks + block] -
+                                                      real_zero[column * blocks + block])
+                                       : (QParamType)((QParamType)B[column * k + depth] *
+                                                      scale[column * blocks + block]);
+                        accumulator += (float)(float16_t)A[row * k + depth] * (float)weight;
+                    }
+                    reference[row * n + column] = accumulator;
+                } else {
+                    OutputType accumulator = bias[column];
+                    for (size_t depth = 0; depth < k; ++depth) {
+                        const size_t block = depth / block_size;
+                        const OutputType weight =
+                            asymmetric
+                                ? (OutputType)((OutputType)(uint8_t)B[column * k + depth] *
+                                                   (OutputType)scale[column * blocks + block] -
+                                               (OutputType)real_zero[column * blocks + block])
+                                : (OutputType)((OutputType)B[column * k + depth] *
+                                               (OutputType)scale[column * blocks + block]);
+                        accumulator =
+                            (OutputType)(accumulator +
+                                         (OutputType)((OutputType)A[row * k + depth] * weight));
+                    }
+                    reference[row * n + column] = (float)accumulator;
+                }
+            }
+        }
+
+        std::vector<uint8_t> A_packed(get_a_packed_size(m, k));
+        std::vector<uint8_t> B_packed(get_b_packed_size(n, k));
+        std::vector<uint8_t> qparams_packed(get_qparams_packed_size(n, k));
+        run_a_pack(m, k, k, k, 0, A.data(), A_packed.data());
+        run_bt_pack(n, k, k, k, 0, B.data(), B_packed.data());
+        run_qparams_pack(n, k, blocks, k, 0, scale.data(), asymmetric ? real_zero.data() : nullptr,
+                         qparams_packed.data());
+
+        std::vector<OutputType> D(m * n);
+        run_gemm(m, n, k, A_packed.data(), k, 0, B_packed.data(), k, 0, nullptr, n, D.data(), n,
+                 bias.data(), qparams_packed.data());
+        for (size_t i = 0; i < D.size(); ++i) {
+            EXPECT_NEAR((float)D[i], reference[i], tolerance)
+                << "index=" << i << " m=" << m << " n=" << n;
+        }
+
+        std::vector<OutputType> partial(m * n);
+        run_gemm(m, n, block_size, A_packed.data(), k, 0, B_packed.data(), k, 0, nullptr, n,
+                 partial.data(), n, nullptr, qparams_packed.data());
+        const size_t a_offset = get_a_packed_offset(0, block_size, k, m);
+        const size_t b_offset = get_b_packed_offset(0, block_size, k, n);
+        const size_t qparams_offset = get_qparams_packed_offset(0, block_size, k, n);
+        run_gemm(m, n, k - block_size, A_packed.data() + a_offset, k, block_size,
+                 B_packed.data() + b_offset, k, block_size, partial.data(), n, D.data(), n,
+                 bias.data(), qparams_packed.data() + qparams_offset);
+        for (size_t i = 0; i < D.size(); ++i) {
+            EXPECT_NEAR((float)D[i], reference[i], tolerance)
+                << "split index=" << i << " m=" << m << " n=" << n;
+        }
+    }
 }
 
 // ============================================================================
@@ -2814,6 +2940,363 @@ inline void run_w4a8_bq_qsi8d2p_qai4c2p_test(const GemmTestParams &params,
                    &qparams);
 
     verify_w4a8_bq_result(D_ref, D_act, params);
+}
+
+// ============================================================================
+// Packed QSI8 block-quantized GEMM test runner
+// ============================================================================
+
+enum class Qsi8BlockWeightEncoding
+{
+    Qau4,
+    Qau5,
+    Qau8,
+    Qsi6,
+    Qsi8,
+};
+
+struct Qsi8BlockQuantizedGemmTestData
+{
+    size_t m;
+    size_t n;
+    size_t k;
+    size_t activation_block_size;
+    size_t weight_block_size;
+    bool asymmetric;
+    std::vector<int8_t> a;
+    std::vector<int8_t> b;
+    std::vector<float> scale_a;
+    std::vector<int16_t> bsums_a;
+    std::vector<float> scale_b;
+    std::vector<float> real_zero_b;
+    std::vector<float> c;
+    std::vector<float> bias;
+    std::vector<float> reference;
+};
+
+inline Qsi8BlockQuantizedGemmTestData make_qsi8_block_quantized_gemm_test_data(
+    size_t n, size_t k, size_t activation_block_size, size_t weight_block_size, bool asymmetric,
+    int32_t max_weight, size_t m = 5)
+{
+    Qsi8BlockQuantizedGemmTestData data = {};
+    data.m = m;
+    data.n = n;
+    data.k = k;
+    data.activation_block_size = activation_block_size;
+    data.weight_block_size = weight_block_size;
+    data.asymmetric = asymmetric;
+    data.a.resize(m * k);
+    data.b.resize(n * k);
+    data.scale_a.resize(m * (k / activation_block_size));
+    data.bsums_a.resize(m * (k / 16));
+    data.scale_b.resize(n * (k / weight_block_size));
+    data.real_zero_b.resize(n * (k / weight_block_size));
+    data.c.resize(m * n);
+    data.bias.resize(n);
+    data.reference.resize(m * n);
+
+    for (size_t row = 0; row < m; ++row) {
+        for (size_t depth = 0; depth < k; ++depth)
+            data.a[row * k + depth] = (int8_t)(((row * 13 + depth * 7) % 31) - 15);
+        for (size_t block = 0; block < k / activation_block_size; ++block) {
+            data.scale_a[row * (k / activation_block_size) + block] =
+                0.006f + 0.001f * (float)((row + block) % 3);
+        }
+        for (size_t block = 0; block < k / 16; ++block) {
+            int32_t sum = 0;
+            for (size_t depth = 0; depth < 16; ++depth)
+                sum += data.a[row * k + block * 16 + depth];
+            data.bsums_a[row * (k / 16) + block] = (int16_t)sum;
+        }
+    }
+
+    for (size_t column = 0; column < n; ++column) {
+        for (size_t depth = 0; depth < k; ++depth) {
+            const int32_t value =
+                asymmetric ? (int32_t)((column * 5 + depth * 3) % (size_t)(max_weight + 1))
+                           : (int32_t)((column * 5 + depth * 3) % (size_t)(2 * max_weight + 1)) -
+                                 max_weight;
+            data.b[column * k + depth] = (int8_t)value;
+        }
+        for (size_t block = 0; block < k / weight_block_size; ++block) {
+            data.scale_b[column * (k / weight_block_size) + block] =
+                0.004f + 0.0005f * (float)((column + block) % 5);
+            data.real_zero_b[column * (k / weight_block_size) + block] =
+                0.015f + 0.002f * (float)((column + 2 * block) % 4);
+        }
+        data.bias[column] = 0.02f * (float)((int)(column % 5) - 2);
+    }
+
+    for (size_t row = 0; row < m; ++row) {
+        for (size_t column = 0; column < n; ++column)
+            data.c[row * n + column] = 0.01f * (float)((int)((row + column) % 7) - 3);
+    }
+
+    for (size_t row = 0; row < m; ++row) {
+        for (size_t column = 0; column < n; ++column) {
+            float value = data.c[row * n + column] + data.bias[column];
+            for (size_t group = 0; group < k / weight_block_size; ++group) {
+                int32_t dot = 0;
+                int32_t sum_a = 0;
+                for (size_t depth = 0; depth < weight_block_size; ++depth) {
+                    const size_t k_idx = group * weight_block_size + depth;
+                    dot += (int32_t)data.a[row * k + k_idx] * (int32_t)data.b[column * k + k_idx];
+                    sum_a += data.a[row * k + k_idx];
+                }
+                const float scale_a =
+                    data.scale_a[row * (k / activation_block_size) +
+                                 (group * weight_block_size) / activation_block_size];
+                const float scale_b = data.scale_b[column * (k / weight_block_size) + group];
+                value += scale_a * scale_b * (float)dot;
+                if (asymmetric) {
+                    value -= scale_a * data.real_zero_b[column * (k / weight_block_size) + group] *
+                             (float)sum_a;
+                }
+            }
+            data.reference[row * n + column] = value;
+        }
+    }
+    return data;
+}
+
+inline void check_qsi8_block_quantized_gemm_result(const std::vector<float> &actual,
+                                                   const std::vector<float> &reference)
+{
+    ASSERT_EQ(actual.size(), reference.size());
+    for (size_t i = 0; i < actual.size(); ++i) {
+        const float tolerance = 2.0e-4f * std::max(1.0f, std::abs(reference[i]));
+        EXPECT_NEAR(actual[i], reference[i], tolerance) << "index=" << i;
+    }
+}
+
+inline std::vector<uint8_t> pack_qau5c32_source(const Qsi8BlockQuantizedGemmTestData &data)
+{
+    const size_t row_bytes = (data.k / 32) * 20;
+    std::vector<uint8_t> packed(data.n * row_bytes);
+    for (size_t column = 0; column < data.n; ++column) {
+        for (size_t group = 0; group < data.k / 32; ++group) {
+            uint8_t *dst = packed.data() + column * row_bytes + group * 20;
+            const int8_t *src = data.b.data() + column * data.k + group * 32;
+            for (size_t pair = 0; pair < 16; ++pair) {
+                dst[pair] =
+                    ((uint8_t)src[2 * pair] & 0xf) | (((uint8_t)src[2 * pair + 1] & 0xf) << 4);
+            }
+            for (size_t high = 0; high < 4; ++high) {
+                uint8_t bits = 0;
+                for (size_t bit = 0; bit < 8; ++bit)
+                    bits |= ((uint8_t)src[high * 8 + bit] >> 4) << bit;
+                dst[16 + high] = bits;
+            }
+        }
+    }
+    return packed;
+}
+
+inline std::vector<uint8_t> pack_qsi6c16_source(const Qsi8BlockQuantizedGemmTestData &data)
+{
+    const size_t row_bytes = (data.k / 16) * 12;
+    std::vector<uint8_t> packed(data.n * row_bytes);
+    for (size_t column = 0; column < data.n; ++column) {
+        for (size_t group = 0; group < data.k / 16; ++group) {
+            uint8_t *dst = packed.data() + column * row_bytes + group * 12;
+            const int8_t *src = data.b.data() + column * data.k + group * 16;
+            for (size_t pair = 0; pair < 8; ++pair) {
+                const uint8_t lo = (uint8_t)((int32_t)src[2 * pair] + 32);
+                const uint8_t hi = (uint8_t)((int32_t)src[2 * pair + 1] + 32);
+                dst[pair] = (lo & 0xf) | ((hi & 0xf) << 4);
+            }
+            for (size_t high = 0; high < 4; ++high) {
+                uint8_t bits = 0;
+                for (size_t code = 0; code < 4; ++code) {
+                    const uint8_t value = (uint8_t)((int32_t)src[high * 4 + code] + 32);
+                    bits |= ((value >> 4) & 3) << (2 * code);
+                }
+                dst[8 + high] = bits;
+            }
+        }
+    }
+    return packed;
+}
+
+inline int32_t unpack_qau5c32_source(const uint8_t *row, size_t k_idx)
+{
+    const uint8_t *group = row + (k_idx / 32) * 20;
+    const size_t in_group = k_idx % 32;
+    const uint8_t low_byte = group[in_group / 2];
+    const uint8_t low = (low_byte >> (4 * (in_group & 1))) & 0xf;
+    const uint8_t high = (group[16 + in_group / 8] >> (in_group % 8)) & 1;
+    return (int32_t)(low | (high << 4));
+}
+
+inline int32_t unpack_qsi6c16_source(const uint8_t *row, size_t k_idx)
+{
+    const uint8_t *group = row + (k_idx / 16) * 12;
+    const size_t in_group = k_idx % 16;
+    const uint8_t low_byte = group[in_group / 2];
+    const uint8_t low = (low_byte >> (4 * (in_group & 1))) & 0xf;
+    const uint8_t high = (group[8 + in_group / 4] >> (2 * (in_group % 4))) & 3;
+    return (int32_t)(low | (high << 4)) - 32;
+}
+
+inline size_t get_qsi8_block_weight_row_bytes(Qsi8BlockWeightEncoding encoding, size_t k)
+{
+    switch (encoding) {
+        case Qsi8BlockWeightEncoding::Qau4:
+            return k / 2;
+        case Qsi8BlockWeightEncoding::Qau5:
+            return (k / 32) * 20;
+        case Qsi8BlockWeightEncoding::Qsi6:
+            return (k / 16) * 12;
+        case Qsi8BlockWeightEncoding::Qau8:
+        case Qsi8BlockWeightEncoding::Qsi8:
+            return k;
+    }
+    return 0;
+}
+
+inline std::vector<uint8_t> make_qsi8_block_weight_source(
+    const Qsi8BlockQuantizedGemmTestData &data, Qsi8BlockWeightEncoding encoding)
+{
+    if (encoding == Qsi8BlockWeightEncoding::Qau5)
+        return pack_qau5c32_source(data);
+    if (encoding == Qsi8BlockWeightEncoding::Qsi6)
+        return pack_qsi6c16_source(data);
+
+    const size_t row_bytes = get_qsi8_block_weight_row_bytes(encoding, data.k);
+    std::vector<uint8_t> source(data.n * row_bytes);
+    if (encoding == Qsi8BlockWeightEncoding::Qau4) {
+        for (size_t column = 0; column < data.n; ++column) {
+            for (size_t depth = 0; depth < data.k; depth += 2) {
+                source[column * row_bytes + depth / 2] =
+                    ((uint8_t)data.b[column * data.k + depth] & 0xf) |
+                    (((uint8_t)data.b[column * data.k + depth + 1] & 0xf) << 4);
+            }
+        }
+    } else {
+        for (size_t i = 0; i < data.b.size(); ++i)
+            source[i] = (uint8_t)data.b[i];
+    }
+    return source;
+}
+
+inline void check_qsi8_block_weight_n_interleaved_pack(const std::vector<uint8_t> &source,
+                                                       const std::vector<uint8_t> &packed, size_t n,
+                                                       size_t row_bytes, size_t n_step)
+{
+    for (size_t n_idx = 0; n_idx < n; n_idx += n_step) {
+        const size_t nr = std::min(n - n_idx, n_step);
+        const size_t tile_offset = n_idx * row_bytes;
+        for (size_t byte = 0; byte < row_bytes; ++byte) {
+            for (size_t lane = 0; lane < nr; ++lane) {
+                EXPECT_EQ(packed[tile_offset + byte * nr + lane],
+                          source[(n_idx + lane) * row_bytes + byte])
+                    << "n_idx=" << n_idx << " byte=" << byte << " lane=" << lane;
+            }
+        }
+    }
+}
+
+template <typename QParams>
+struct PackedQsi8BlockQuantizedGemmTestFuncs
+{
+    using GetNStepFunc = size_t (*)(void);
+    using GetPackedSizeFunc = size_t (*)(size_t, size_t);
+    using GetPackedOffsetFunc = size_t (*)(size_t, size_t, size_t, size_t);
+    using RunPackFunc = void (*)(size_t, size_t, size_t, size_t, size_t, const void *, void *);
+    using MakeParamsFunc = QParams (*)(const float *, size_t, const int16_t *, size_t,
+                                       const float *, const float *, size_t);
+    using RunGemmFunc = void (*)(size_t, size_t, size_t, const void *, size_t, size_t, const void *,
+                                 size_t, size_t, const void *, size_t, void *, size_t, const void *,
+                                 float, float, const QParams *);
+
+    size_t activation_block_size;
+    size_t weight_block_size;
+    bool asymmetric;
+    int32_t max_weight;
+    Qsi8BlockWeightEncoding weight_encoding;
+    GetNStepFunc get_n_step;
+    GetPackedSizeFunc get_a_packed_size;
+    GetPackedSizeFunc get_b_packed_size;
+    GetPackedOffsetFunc get_a_packed_offset;
+    GetPackedOffsetFunc get_b_packed_offset;
+    RunPackFunc run_a_pack;
+    RunPackFunc run_bt_pack;
+    MakeParamsFunc make_params;
+    RunGemmFunc run_gemm;
+};
+
+template <typename QParams, typename ExpandedQParams>
+void run_packed_qsi8_block_quantized_gemm_test(
+    size_t m, size_t n, size_t k, bool compare_expanded,
+    const PackedQsi8BlockQuantizedGemmTestFuncs<QParams> &funcs,
+    const PackedQsi8BlockQuantizedGemmTestFuncs<ExpandedQParams> &expanded_funcs)
+{
+    auto data = make_qsi8_block_quantized_gemm_test_data(n, k, funcs.activation_block_size,
+                                                         funcs.weight_block_size, funcs.asymmetric,
+                                                         funcs.max_weight, m);
+    const std::vector<uint8_t> b_source =
+        make_qsi8_block_weight_source(data, funcs.weight_encoding);
+    std::vector<uint8_t> a_packed(funcs.get_a_packed_size(m, k));
+    std::vector<uint8_t> b_packed(funcs.get_b_packed_size(n, k));
+    std::vector<float> output(m * n);
+
+    ASSERT_EQ(b_packed.size(), b_source.size());
+    funcs.run_a_pack(m, k, k, k, 0, data.a.data(), a_packed.data());
+    funcs.run_bt_pack(n, k, k, k, 0, b_source.data(), b_packed.data());
+    const size_t n_step = funcs.get_n_step();
+    check_qsi8_block_weight_n_interleaved_pack(b_source, b_packed, n, b_source.size() / n, n_step);
+
+    const QParams params = funcs.make_params(data.scale_a.data(), k / funcs.activation_block_size,
+                                             data.bsums_a.data(), k / 16, data.scale_b.data(),
+                                             data.real_zero_b.data(), k / funcs.weight_block_size);
+    funcs.run_gemm(m, n, k, a_packed.data(), k, 0, b_packed.data(), k, 0, data.c.data(), n,
+                   output.data(), n, data.bias.data(), -std::numeric_limits<float>::infinity(),
+                   std::numeric_limits<float>::infinity(), &params);
+    check_qsi8_block_quantized_gemm_result(output, data.reference);
+
+    if (k >= 2 * funcs.activation_block_size) {
+        std::vector<float> partial(m * n);
+        const size_t split = funcs.activation_block_size;
+        funcs.run_gemm(m, n, split, a_packed.data(), k, 0, b_packed.data(), k, 0, data.c.data(), n,
+                       partial.data(), n, nullptr, -std::numeric_limits<float>::infinity(),
+                       std::numeric_limits<float>::infinity(), &params);
+        const size_t a_offset = funcs.get_a_packed_offset(0, split, k, m);
+        const size_t b_offset = funcs.get_b_packed_offset(0, split, k, n);
+        EXPECT_EQ(b_offset, std::min(n, n_step) *
+                                get_qsi8_block_weight_row_bytes(funcs.weight_encoding, split));
+        funcs.run_gemm(m, n, k - split, a_packed.data() + a_offset, k, split,
+                       b_packed.data() + b_offset, k, split, partial.data(), n, output.data(), n,
+                       data.bias.data(), -std::numeric_limits<float>::infinity(),
+                       std::numeric_limits<float>::infinity(), &params);
+        check_qsi8_block_quantized_gemm_result(output, data.reference);
+    }
+
+    if (compare_expanded) {
+        const std::vector<uint8_t> expanded_b_source =
+            make_qsi8_block_weight_source(data, expanded_funcs.weight_encoding);
+        std::vector<uint8_t> expanded_a_packed(expanded_funcs.get_a_packed_size(m, k));
+        std::vector<uint8_t> expanded_b_packed(expanded_funcs.get_b_packed_size(n, k));
+        std::vector<float> expanded_output(m * n);
+        expanded_funcs.run_a_pack(m, k, k, k, 0, data.a.data(), expanded_a_packed.data());
+        expanded_funcs.run_bt_pack(n, k, k, k, 0, expanded_b_source.data(),
+                                   expanded_b_packed.data());
+        const ExpandedQParams expanded_params = expanded_funcs.make_params(
+            data.scale_a.data(), k / expanded_funcs.activation_block_size, data.bsums_a.data(),
+            k / 16, data.scale_b.data(), data.real_zero_b.data(),
+            k / expanded_funcs.weight_block_size);
+        expanded_funcs.run_gemm(m, n, k, expanded_a_packed.data(), k, 0, expanded_b_packed.data(),
+                                k, 0, data.c.data(), n, expanded_output.data(), n, data.bias.data(),
+                                -std::numeric_limits<float>::infinity(),
+                                std::numeric_limits<float>::infinity(), &expanded_params);
+        check_qsi8_block_quantized_gemm_result(output, expanded_output);
+    }
+}
+
+template <typename QParams>
+void run_packed_qsi8_block_quantized_gemm_test(
+    size_t m, size_t n, size_t k, const PackedQsi8BlockQuantizedGemmTestFuncs<QParams> &funcs)
+{
+    run_packed_qsi8_block_quantized_gemm_test(m, n, k, false, funcs, funcs);
 }
 
 }  // namespace test

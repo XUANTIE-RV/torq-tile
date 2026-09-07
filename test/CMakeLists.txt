@@ -74,6 +74,10 @@ if(TORQ_TILE_ENABLE_RVV)
     # --- GEMM block-quantized activation RVV variants ---
     torq_tile_add_test(test_gemm_i8_u4_rvv
         gemm/test_gemm_i8_u4_rvv.cpp)
+    torq_tile_add_test(test_gemm_i8_u2_rvv
+        gemm/test_gemm_i8_u2_rvv.cpp)
+    torq_tile_add_test(test_gemm_i8_i3_rvv
+        gemm/test_gemm_i8_i3_rvv.cpp)
     torq_tile_add_test(test_gemm_i8_u5_rvv
         gemm/test_gemm_i8_u5_rvv.cpp)
     torq_tile_add_test(test_gemm_i8_u8_rvv

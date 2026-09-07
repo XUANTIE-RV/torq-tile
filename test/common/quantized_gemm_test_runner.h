@@ -3299,6 +3299,271 @@ void run_packed_qsi8_block_quantized_gemm_test(
     run_packed_qsi8_block_quantized_gemm_test(m, n, k, false, funcs, funcs);
 }
 
+// ============================================================================
+// Q2_K/Q3_K-derived factorized-metadata GEMM test runner
+// ============================================================================
+
+enum class Qsi8KBlockWeightEncoding
+{
+    Qau2,
+    Qsi3,
+    Qau4,
+    Qsi4,
+};
+
+struct Qsi8KBlockGemmTestData
+{
+    size_t m;
+    size_t n;
+    size_t k;
+    bool asymmetric;
+    std::vector<int8_t> a;
+    std::vector<int8_t> b;
+    std::vector<float> scale_a;
+    std::vector<int16_t> bsums_a;
+    std::vector<int8_t> qscale_b;
+    std::vector<uint8_t> qmin_b;
+    std::vector<float> super_scale_b;
+    std::vector<float> super_min_b;
+    std::vector<float> c;
+    std::vector<float> bias;
+    std::vector<float> reference;
+};
+
+inline size_t get_qsi8_kblock_weight_row_bytes(Qsi8KBlockWeightEncoding encoding, size_t k)
+{
+    switch (encoding) {
+        case Qsi8KBlockWeightEncoding::Qau2:
+            return k / 4;
+        case Qsi8KBlockWeightEncoding::Qsi3:
+            return (k / 16) * 6;
+        case Qsi8KBlockWeightEncoding::Qau4:
+        case Qsi8KBlockWeightEncoding::Qsi4:
+            return k / 2;
+    }
+    return 0;
+}
+
+inline Qsi8KBlockGemmTestData make_qsi8_kblock_gemm_test_data(size_t m, size_t n, size_t k,
+                                                              bool asymmetric)
+{
+    const size_t groups = k / 16;
+    const size_t super_blocks = k / 256;
+    Qsi8KBlockGemmTestData data = {};
+    data.m = m;
+    data.n = n;
+    data.k = k;
+    data.asymmetric = asymmetric;
+    data.a.resize(m * k);
+    data.b.resize(n * k);
+    data.scale_a.resize(m * super_blocks);
+    data.bsums_a.resize(m * groups);
+    data.qscale_b.resize(n * groups);
+    data.qmin_b.resize(n * groups);
+    data.super_scale_b.resize(n * super_blocks);
+    data.super_min_b.resize(n * super_blocks);
+    data.c.resize(m * n);
+    data.bias.resize(n);
+    data.reference.resize(m * n);
+
+    for (size_t row = 0; row < m; ++row) {
+        for (size_t depth = 0; depth < k; ++depth)
+            data.a[row * k + depth] = (int8_t)(((row * 11 + depth * 7) % 31) - 15);
+        for (size_t block = 0; block < super_blocks; ++block)
+            data.scale_a[row * super_blocks + block] = 0.006f + 0.001f * (float)((row + block) % 3);
+        for (size_t group = 0; group < groups; ++group) {
+            int32_t sum = 0;
+            for (size_t depth = 0; depth < 16; ++depth)
+                sum += data.a[row * k + group * 16 + depth];
+            data.bsums_a[row * groups + group] = (int16_t)sum;
+        }
+    }
+    for (size_t column = 0; column < n; ++column) {
+        for (size_t depth = 0; depth < k; ++depth) {
+            data.b[column * k + depth] = asymmetric
+                                             ? (int8_t)((column * 5 + depth * 3) % 4)
+                                             : (int8_t)((int)((column * 5 + depth * 3) % 8) - 4);
+        }
+        for (size_t group = 0; group < groups; ++group) {
+            data.qscale_b[column * groups + group] =
+                asymmetric ? (int8_t)(1 + (column + group) % 7)
+                           : (int8_t)((int)((column + 2 * group) % 7) - 3);
+            data.qmin_b[column * groups + group] = (uint8_t)((column + 3 * group) % 8);
+        }
+        for (size_t block = 0; block < super_blocks; ++block) {
+            data.super_scale_b[column * super_blocks + block] =
+                0.004f + 0.0005f * (float)((column + block) % 5);
+            data.super_min_b[column * super_blocks + block] =
+                0.003f + 0.00025f * (float)((column + 2 * block) % 4);
+        }
+        data.bias[column] = 0.02f * (float)((int)(column % 5) - 2);
+    }
+    for (size_t row = 0; row < m; ++row) {
+        for (size_t column = 0; column < n; ++column) {
+            data.c[row * n + column] = 0.01f * (float)((int)((row + column) % 7) - 3);
+            float value = data.c[row * n + column] + data.bias[column];
+            for (size_t block = 0; block < super_blocks; ++block) {
+                int32_t scaled_dot = 0;
+                int32_t min_correction = 0;
+                for (size_t local_group = 0; local_group < 16; ++local_group) {
+                    const size_t group = block * 16 + local_group;
+                    int32_t dot = 0;
+                    for (size_t depth = 0; depth < 16; ++depth) {
+                        const size_t k_idx = group * 16 + depth;
+                        dot +=
+                            (int32_t)data.a[row * k + k_idx] * (int32_t)data.b[column * k + k_idx];
+                    }
+                    scaled_dot += dot * data.qscale_b[column * groups + group];
+                    if (asymmetric) {
+                        min_correction += data.bsums_a[row * groups + group] *
+                                          data.qmin_b[column * groups + group];
+                    }
+                }
+                value +=
+                    data.scale_a[row * super_blocks + block] *
+                    (data.super_scale_b[column * super_blocks + block] * scaled_dot -
+                     (asymmetric ? data.super_min_b[column * super_blocks + block] * min_correction
+                                 : 0.0f));
+            }
+            data.reference[row * n + column] = value;
+        }
+    }
+    return data;
+}
+
+inline std::vector<uint8_t> make_qsi8_kblock_weight_source(const Qsi8KBlockGemmTestData &data,
+                                                           Qsi8KBlockWeightEncoding encoding)
+{
+    const size_t row_bytes = get_qsi8_kblock_weight_row_bytes(encoding, data.k);
+    std::vector<uint8_t> source(data.n * row_bytes, 0);
+    for (size_t column = 0; column < data.n; ++column) {
+        for (size_t group = 0; group < data.k / 16; ++group) {
+            const int8_t *values = data.b.data() + column * data.k + group * 16;
+            uint8_t *packed = source.data() + column * row_bytes;
+            if (encoding == Qsi8KBlockWeightEncoding::Qau2) {
+                packed += group * 4;
+                for (size_t byte = 0; byte < 4; ++byte) {
+                    for (size_t index = 0; index < 4; ++index)
+                        packed[byte] |= ((uint8_t)values[byte * 4 + index] & 3) << (2 * index);
+                }
+            } else if (encoding == Qsi8KBlockWeightEncoding::Qsi3) {
+                packed += group * 6;
+                for (size_t index = 0; index < 16; ++index) {
+                    const uint8_t low =
+                        values[index] < 0 ? (uint8_t)(values[index] + 4) : (uint8_t)values[index];
+                    packed[index / 4] |= (low & 3) << (2 * (index % 4));
+                    if (values[index] >= 0)
+                        packed[4 + index / 8] |= (uint8_t)1 << (index % 8);
+                }
+            } else {
+                packed += group * 8;
+                for (size_t index = 0; index < 16; ++index)
+                    packed[index / 2] |= ((uint8_t)values[index] & 0xf) << (4 * (index % 2));
+            }
+        }
+    }
+    return source;
+}
+
+template <typename QParams>
+struct PackedQsi8KBlockGemmTestFuncs
+{
+    using GetNStepFunc = size_t (*)(void);
+    using GetPackedSizeFunc = size_t (*)(size_t, size_t);
+    using GetPackedOffsetFunc = size_t (*)(size_t, size_t, size_t, size_t);
+    using RunPackFunc = void (*)(size_t, size_t, size_t, size_t, size_t, const void *, void *);
+    using MakeParamsFunc = QParams (*)(const Qsi8KBlockGemmTestData &);
+    using RunGemmFunc = void (*)(size_t, size_t, size_t, const void *, size_t, size_t, const void *,
+                                 size_t, size_t, const void *, size_t, void *, size_t, const void *,
+                                 float, float, const QParams *);
+
+    bool asymmetric;
+    Qsi8KBlockWeightEncoding weight_encoding;
+    GetNStepFunc get_n_step;
+    GetPackedSizeFunc get_a_packed_size;
+    GetPackedSizeFunc get_b_packed_size;
+    GetPackedOffsetFunc get_a_packed_offset;
+    GetPackedOffsetFunc get_b_packed_offset;
+    RunPackFunc run_a_pack;
+    RunPackFunc run_bt_pack;
+    MakeParamsFunc make_params;
+    RunGemmFunc run_gemm;
+};
+
+template <typename QParams>
+std::vector<float> run_packed_qsi8_kblock_gemm_once(
+    const Qsi8KBlockGemmTestData &data, const PackedQsi8KBlockGemmTestFuncs<QParams> &funcs,
+    bool test_split_k)
+{
+    const std::vector<uint8_t> b_source =
+        make_qsi8_kblock_weight_source(data, funcs.weight_encoding);
+    std::vector<uint8_t> a_packed(funcs.get_a_packed_size(data.m, data.k));
+    std::vector<uint8_t> b_packed(funcs.get_b_packed_size(data.n, data.k));
+    EXPECT_EQ(b_packed.size(), b_source.size());
+    funcs.run_a_pack(data.m, data.k, data.k, data.k, 0, data.a.data(), a_packed.data());
+    funcs.run_bt_pack(data.n, data.k, data.k, data.k, 0, b_source.data(), b_packed.data());
+    const size_t n_step = funcs.get_n_step();
+    const size_t row_bytes = b_source.size() / data.n;
+    check_qsi8_block_weight_n_interleaved_pack(b_source, b_packed, data.n, row_bytes, n_step);
+
+    const QParams params = funcs.make_params(data);
+    std::vector<float> output(data.m * data.n);
+    funcs.run_gemm(data.m, data.n, data.k, a_packed.data(), data.k, 0, b_packed.data(), data.k, 0,
+                   data.c.data(), data.n, output.data(), data.n, data.bias.data(),
+                   -std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity(),
+                   &params);
+    check_qsi8_block_quantized_gemm_result(output, data.reference);
+
+    constexpr float clamp_min = -0.04f;
+    constexpr float clamp_max = 0.05f;
+    funcs.run_gemm(data.m, data.n, data.k, a_packed.data(), data.k, 0, b_packed.data(), data.k, 0,
+                   data.c.data(), data.n, output.data(), data.n, data.bias.data(), clamp_min,
+                   clamp_max, &params);
+    std::vector<float> clamped_reference = data.reference;
+    for (float &value : clamped_reference)
+        value = std::min(std::max(value, clamp_min), clamp_max);
+    check_qsi8_block_quantized_gemm_result(output, clamped_reference);
+
+    if (test_split_k && data.k >= 512) {
+        constexpr size_t split = 256;
+        std::vector<float> partial(data.m * data.n);
+        funcs.run_gemm(data.m, data.n, split, a_packed.data(), data.k, 0, b_packed.data(), data.k,
+                       0, data.c.data(), data.n, partial.data(), data.n, nullptr,
+                       -std::numeric_limits<float>::infinity(),
+                       std::numeric_limits<float>::infinity(), &params);
+        const size_t a_offset = funcs.get_a_packed_offset(0, split, data.k, data.m);
+        const size_t b_offset = funcs.get_b_packed_offset(0, split, data.k, data.n);
+        EXPECT_EQ(b_offset, std::min(data.n, n_step) *
+                                get_qsi8_kblock_weight_row_bytes(funcs.weight_encoding, split));
+        funcs.run_gemm(data.m, data.n, data.k - split, a_packed.data() + a_offset, data.k, split,
+                       b_packed.data() + b_offset, data.k, split, partial.data(), data.n,
+                       output.data(), data.n, data.bias.data(),
+                       -std::numeric_limits<float>::infinity(),
+                       std::numeric_limits<float>::infinity(), &params);
+        check_qsi8_block_quantized_gemm_result(output, data.reference);
+    }
+    return output;
+}
+
+template <typename QParams>
+void run_packed_qsi8_kblock_gemm_test(size_t m, size_t n, size_t k,
+                                      const PackedQsi8KBlockGemmTestFuncs<QParams> &funcs)
+{
+    const auto data = make_qsi8_kblock_gemm_test_data(m, n, k, funcs.asymmetric);
+    (void)run_packed_qsi8_kblock_gemm_once(data, funcs, true);
+}
+
+template <typename CompactQParams, typename ExpandedQParams>
+void run_packed_qsi8_kblock_gemm_equivalence_test(
+    size_t m, size_t n, size_t k, const PackedQsi8KBlockGemmTestFuncs<CompactQParams> &compact,
+    const PackedQsi8KBlockGemmTestFuncs<ExpandedQParams> &expanded)
+{
+    const auto data = make_qsi8_kblock_gemm_test_data(m, n, k, compact.asymmetric);
+    const auto compact_output = run_packed_qsi8_kblock_gemm_once(data, compact, true);
+    const auto expanded_output = run_packed_qsi8_kblock_gemm_once(data, expanded, true);
+    check_qsi8_block_quantized_gemm_result(compact_output, expanded_output);
+}
+
 }  // namespace test
 }  // namespace torq_tile
 

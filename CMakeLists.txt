@@ -151,6 +151,10 @@ set(TORQ_TILE_RVV_SOURCES
     src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f32_qsi8d2_qai4c2t/tqt_gemm_1xnbias_clamp_f32_qsi8d2_qai4c2t_4x1vl_rvv.cpp
     src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f32_qsi8d2p_qai4c2p/tqt_gemm_1xnbias_clamp_f32_qsi8d2p_qai4c2p_4x1vl_rvv.cpp
     # RVV quantized-activation block GEMM execution formats
+    src/gemm/gemm_i8_u2/gemm_1xnbias_clamp_f32_qsi8d256p_qau2c16p/tqt_gemm_1xnbias_clamp_f32_qsi8d256p_qau2c16p_4x1vl_rvv.cpp
+    src/gemm/gemm_i8_i3/gemm_1xnbias_clamp_f32_qsi8d256p_qsi3c16p/tqt_gemm_1xnbias_clamp_f32_qsi8d256p_qsi3c16p_4x1vl_rvv.cpp
+    src/gemm/gemm_i8_u4/gemm_1xnbias_clamp_f32_qsi8d256p_qau4c16p/tqt_gemm_1xnbias_clamp_f32_qsi8d256p_qau4c16p_4x1vl_rvv.cpp
+    src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f32_qsi8d256p_qsi4c16p/tqt_gemm_1xnbias_clamp_f32_qsi8d256p_qsi4c16p_4x1vl_rvv.cpp
     src/gemm/gemm_i8_u4/gemm_1xnbias_clamp_f32_qsi8d256p_qau4c32p/tqt_gemm_1xnbias_clamp_f32_qsi8d256p_qau4c32p_4x1vl_rvv.cpp
     src/gemm/gemm_i8_u8/gemm_1xnbias_clamp_f32_qsi8d256p_qau8c32p/tqt_gemm_1xnbias_clamp_f32_qsi8d256p_qau8c32p_4x1vl_rvv.cpp
     src/gemm/gemm_i8_i8/gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p/tqt_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_4x1vl_rvv.cpp

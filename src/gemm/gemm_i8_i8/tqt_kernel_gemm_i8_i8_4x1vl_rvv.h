@@ -125,18 +125,22 @@ static inline void tqt_vmacc_kernel_gemm_i8_i8_4x1vl_rvv(size_t vl, const int8_t
     // Load all A scalars into a0-a3
     // Widening multiply: int8 * int8 -> int16
     asm volatile("vsetvli zero, %0, e8, m1, ta, ma\n\t" : : "r"(vl) :);
-    if constexpr (MR >= 1)
+    if constexpr (MR >= 1) {
         asm volatile("lb a0, 0(%0)" : : "r"(a_ptrs[0]) : "a0", "memory");
-    asm volatile("vwmul.vx v8, v0, a0" : : : "v8", "v9");
-    if constexpr (MR >= 2)
+        asm volatile("vwmul.vx v8, v0, a0" : : : "v8", "v9");
+    }
+    if constexpr (MR >= 2) {
         asm volatile("lb a1, 0(%0)" : : "r"(a_ptrs[1]) : "a1", "memory");
-    asm volatile("vwmul.vx v10, v0, a1" : : : "v10", "v11");
-    if constexpr (MR >= 3)
+        asm volatile("vwmul.vx v10, v0, a1" : : : "v10", "v11");
+    }
+    if constexpr (MR >= 3) {
         asm volatile("lb a2, 0(%0)" : : "r"(a_ptrs[2]) : "a2", "memory");
-    asm volatile("vwmul.vx v12, v0, a2" : : : "v12", "v13");
-    if constexpr (MR >= 4)
+        asm volatile("vwmul.vx v12, v0, a2" : : : "v12", "v13");
+    }
+    if constexpr (MR >= 4) {
         asm volatile("lb a3, 0(%0)" : : "r"(a_ptrs[3]) : "a3", "memory");
-    asm volatile("vwmul.vx v14, v0, a3" : : : "v14", "v15");
+        asm volatile("vwmul.vx v14, v0, a3" : : : "v14", "v15");
+    }
 
     // Widening add int16 -> int32 accumulator
     asm volatile("vsetvli zero, %0, e16, m2, ta, ma\n\t" : : "r"(vl) :);

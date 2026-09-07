@@ -33,6 +33,7 @@ using namespace torq_tile::test;
 static auto int8_common_test_values()
 {
     return testing::Values(GemmTestParams(32, 32, 32),   //
+                           GemmTestParams(2, 8, 11),     //
                            GemmTestParams(3, 8, 11),     //
                            GemmTestParams(5, 11, 10),    //
                            GemmTestParams(9, 19, 23),    //

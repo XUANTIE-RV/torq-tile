@@ -262,6 +262,22 @@ int main()
     const float tolerance = 2.5f;
     bool passed_abs = verify_results(M, N, tolerance, D_ref_fp32, D_act_fp32);
 
+#ifdef TQT_DEBUG
+    for (size_t dbg_i = 0; dbg_i < M * N; ++dbg_i) {
+        size_t dbg_row = dbg_i / N;
+        size_t dbg_col = dbg_i % N;
+        float dbg_ref = (float)D_ref_fp32[dbg_i];
+        float dbg_act = (float)D_act_fp32[dbg_i];
+        float dbg_diff = fabsf(dbg_ref - dbg_act);
+        if (dbg_diff > 1.0f)
+            printf("[%zu][%zu]: ref=%.6f vs act=%.6f (diff=%.6f) [FAIL]\n", dbg_row, dbg_col,
+                   dbg_ref, dbg_act, dbg_diff);
+        else
+            printf("[%zu][%zu]: ref=%.6f vs act=%.6f (diff=%.6f)\n", dbg_row, dbg_col, dbg_ref,
+                   dbg_act, dbg_diff);
+    }
+#endif
+
     const float cosine_sim = calculate_cosine_similarity(M * N, D_ref_fp32, D_act_fp32);
     const bool passed = passed_abs && (cosine_sim > 0.998f);
 

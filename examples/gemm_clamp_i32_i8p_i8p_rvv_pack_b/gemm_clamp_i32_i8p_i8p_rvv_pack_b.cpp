@@ -148,9 +148,16 @@ bool verify_results(size_t rows, size_t cols, const int32_t *ref, const int32_t 
 #ifdef TQT_DEBUG
             size_t row = i / cols;
             size_t col = i % cols;
-            printf("[%zu][%zu]: ref=%d vs act=%d (diff=%d)\n", row, col, ref_val, act_val, diff);
+            printf("[%zu][%zu]: ref=%d vs act=%d (diff=%d) [FAIL]\n", row, col, ref_val, act_val,
+                   diff);
 #endif
             passed = false;
+        } else {
+#ifdef TQT_DEBUG
+            size_t row = i / cols;
+            size_t col = i % cols;
+            printf("[%zu][%zu]: ref=%d vs act=%d (diff=%d)\n", row, col, ref_val, act_val, diff);
+#endif
         }
     }
 

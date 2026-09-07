@@ -223,6 +223,22 @@ int main()
         }
     }
 
+#ifdef TQT_DEBUG
+    for (size_t dbg_i = 0; dbg_i < M * N; ++dbg_i) {
+        size_t dbg_row = dbg_i / N;
+        size_t dbg_col = dbg_i % N;
+        float dbg_ref = (float)D_ref[dbg_i];
+        float dbg_act = (float)D[dbg_i];
+        float dbg_diff = fabsf(dbg_ref - dbg_act);
+        if (dbg_diff > 1.0f)
+            printf("[%zu][%zu]: ref=%.6f vs act=%.6f (diff=%.6f) [FAIL]\n", dbg_row, dbg_col,
+                   dbg_ref, dbg_act, dbg_diff);
+        else
+            printf("[%zu][%zu]: ref=%.6f vs act=%.6f (diff=%.6f)\n", dbg_row, dbg_col, dbg_ref,
+                   dbg_act, dbg_diff);
+    }
+#endif
+
     const float cs = cosine_similarity(M * N, D_ref.data(), D.data());
     // f16 epilogue narrowing introduces minor noise vs fp32 reference; W4A8
     // quantization is also lossy, so relax cosine threshold accordingly.

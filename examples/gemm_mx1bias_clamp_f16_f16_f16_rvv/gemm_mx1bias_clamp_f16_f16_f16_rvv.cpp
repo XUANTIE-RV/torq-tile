@@ -130,10 +130,17 @@ bool verify_results(size_t rows, size_t cols, const float tolerance, const float
 #ifdef TQT_DEBUG
             size_t row = i / cols;
             size_t col = i % cols;
+            printf("[%zu][%zu]: ref=%.6f vs act=%.6f (diff=%.6f) [FAIL]\n", row, col, ref_val,
+                   act_val, diff);
+#endif
+            passed = false;
+        } else {
+#ifdef TQT_DEBUG
+            size_t row = i / cols;
+            size_t col = i % cols;
             printf("[%zu][%zu]: ref=%.6f vs act=%.6f (diff=%.6f)\n", row, col, ref_val, act_val,
                    diff);
 #endif
-            passed = false;
         }
     }
 

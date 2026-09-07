@@ -31,7 +31,7 @@ const tqt_gemm_1xnbias_clamp_f32_bf16_bf16_ukernel ukernel{
     tqt_get_d_size_gemm_1xnbias_clamp_f32_bf16_bf16_8x1vl_rvv,
     tqt_run_gemm_1xnbias_clamp_f32_bf16_bf16_8x1vl_rvv};
 
-// Reference implementation (B is in standard format [k, n], A bf16, D/C/bias f16)
+// Reference implementation (B is in standard format [k, n], A bf16, D/C/bias f32)
 void run_gemm_ref(size_t m, size_t n, size_t k, const bfloat16_t *A, size_t lda,
                   const bfloat16_t *B, size_t ldb, const float *C, size_t ldc, float *D, size_t ldd,
                   const float *bias, float clamp_min, float clamp_max)
@@ -118,6 +118,22 @@ int main()
                              bias_ptr, clamp_min, clamp_max);
         }
     }
+
+#ifdef TQT_DEBUG
+    for (size_t dbg_i = 0; dbg_i < M * N; ++dbg_i) {
+        size_t dbg_row = dbg_i / N;
+        size_t dbg_col = dbg_i % N;
+        float dbg_ref = (float)D_ref[dbg_i];
+        float dbg_act = (float)D[dbg_i];
+        float dbg_diff = fabsf(dbg_ref - dbg_act);
+        if (dbg_diff > 1.0f)
+            printf("[%zu][%zu]: ref=%.6f vs act=%.6f (diff=%.6f) [FAIL]\n", dbg_row, dbg_col,
+                   dbg_ref, dbg_act, dbg_diff);
+        else
+            printf("[%zu][%zu]: ref=%.6f vs act=%.6f (diff=%.6f)\n", dbg_row, dbg_col, dbg_ref,
+                   dbg_act, dbg_diff);
+    }
+#endif
 
     const float cos = cosine_similarity(M * N, D_ref, D);
     const bool passed = cos > 0.9999f;

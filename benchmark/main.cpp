@@ -39,6 +39,8 @@ void register_igemm_i8_i8_rvv_benchmarks();
 void register_dwconv_f32_f32_rvv_benchmarks();
 void register_add_f32_f32_rvv_benchmarks();
 void register_sub_f32_f32_rvv_benchmarks();
+void register_mul_f32_f32_rvv_benchmarks();
+void register_div_f32_f32_rvv_benchmarks();
 #endif
 
 #ifdef TORQ_TILE_ENABLE_RVV_FP16
@@ -50,6 +52,8 @@ void register_igemmcl_f16_f16_rvv_benchmarks();
 void register_dwconv_f16_f16_rvv_benchmarks();
 void register_add_f16_f16_rvv_benchmarks();
 void register_sub_f16_f16_rvv_benchmarks();
+void register_mul_f16_f16_rvv_benchmarks();
+void register_div_f16_f16_rvv_benchmarks();
 #endif
 
 #ifdef TORQ_TILE_ENABLE_RVV_BF16
@@ -108,10 +112,14 @@ inline void register_elementwise_benchmarks()
 #ifdef TORQ_TILE_ENABLE_RVV
     register_add_f32_f32_rvv_benchmarks();
     register_sub_f32_f32_rvv_benchmarks();
+    register_mul_f32_f32_rvv_benchmarks();
+    register_div_f32_f32_rvv_benchmarks();
 #endif
 #ifdef TORQ_TILE_ENABLE_RVV_FP16
     register_add_f16_f16_rvv_benchmarks();
     register_sub_f16_f16_rvv_benchmarks();
+    register_mul_f16_f16_rvv_benchmarks();
+    register_div_f16_f16_rvv_benchmarks();
 #endif
 }
 

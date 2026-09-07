@@ -91,6 +91,10 @@ if(TORQ_TILE_ENABLE_RVV)
         elementwise/test_add_f32_f32_rvv.cpp)
     torq_tile_add_test(test_sub_f32_f32_rvv
         elementwise/test_sub_f32_f32_rvv.cpp)
+    torq_tile_add_test(test_mul_f32_f32_rvv
+        elementwise/test_mul_f32_f32_rvv.cpp)
+    torq_tile_add_test(test_div_f32_f32_rvv
+        elementwise/test_div_f32_f32_rvv.cpp)
     # --- Reduction F32 RVV variants ---
 endif()
 
@@ -118,6 +122,10 @@ if(TORQ_TILE_ENABLE_RVV_FP16)
         elementwise/test_add_f16_f16_rvv.cpp)
     torq_tile_add_test(test_sub_f16_f16_rvv
         elementwise/test_sub_f16_f16_rvv.cpp)
+    torq_tile_add_test(test_mul_f16_f16_rvv
+        elementwise/test_mul_f16_f16_rvv.cpp)
+    torq_tile_add_test(test_div_f16_f16_rvv
+        elementwise/test_div_f16_f16_rvv.cpp)
 endif()
 
 if(TORQ_TILE_ENABLE_RVV_BF16)

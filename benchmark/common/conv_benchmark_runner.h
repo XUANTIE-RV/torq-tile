@@ -415,5 +415,88 @@ inline void register_packed_convcl_benchmark(const char *name,
         ->ArgNames({"IC", "OC", "HW", "K"});
 }
 
+// ============================================================================
+// Function pointer types for mixed-packed conv-CL (channel last)
+//   A: im2col only (not packed); B: packed (transposed weight)
+// ============================================================================
+
+template <typename ClampT>
+struct MixedPackedConvClBenchFuncs
+{
+    size_t (*get_a_im2col_size)(size_t m, size_t k);
+    size_t (*get_b_packed_size)(size_t n, size_t k);
+    void (*run_bt_pack)(size_t n, size_t k, size_t ldb, size_t ldb_packed, size_t k_idx,
+                        const void *B, void *B_packed);
+    void (*run_im2col)(size_t group_idx, const void *activation, void *im2col_buf,
+                       const tqt_conv_params *params);
+    void (*run_conv)(size_t m, size_t n, size_t k, const void *A, size_t lda, size_t k_idx_a,
+                     const void *B_packed, size_t ldb, size_t k_idx_b, const void *C, size_t ldc,
+                     void *D, size_t ldd, const void *bias, ClampT clamp_min, ClampT clamp_max);
+};
+
+// ============================================================================
+// Mixed-packed Conv-CL benchmark (weight pre-packed, im2col + gemm; A not packed)
+// ============================================================================
+
+template <typename T, typename ClampT>
+inline void run_mixed_packed_convcl_benchmark(::benchmark::State &state,
+                                              const MixedPackedConvClBenchFuncs<ClampT> &funcs)
+{
+    const auto &cs = global_conv_shape();
+    tqt_conv_params params = cs.to_params();
+
+    const size_t m = cs.cl_m();
+    const size_t n = cs.cl_n();
+    const size_t k = cs.cl_k();
+
+    // Activation: CL layout [IH, IW, IC]
+    std::vector<T> activation(cs.ih * cs.iw * cs.ic);
+    fill_random<T>(activation.data(), activation.size());
+
+    // Weight: [OC_per_group, K] (transposed)
+    std::vector<T> weight(n * k);
+    fill_random<T>(weight.data(), weight.size());
+
+    // Pack weight (B) outside the timing loop
+    const size_t b_packed_size = funcs.get_b_packed_size(n, k);
+    std::vector<uint8_t> b_packed(b_packed_size);
+    funcs.run_bt_pack(n, k, k, k, 0, weight.data(), b_packed.data());
+
+    // im2col buffer for A (no packing): [M, K]
+    const size_t im2col_size = funcs.get_a_im2col_size(m, k);
+    std::vector<uint8_t> im2col_buf(im2col_size);
+
+    // Output
+    std::vector<T> output(m * n, static_cast<T>(0));
+
+    const ClampT clamp_min = static_cast<ClampT>(-FLT_MAX);
+    const ClampT clamp_max = static_cast<ClampT>(FLT_MAX);
+
+    for (auto _ : state) {
+        funcs.run_im2col(0, activation.data(), im2col_buf.data(), &params);
+        funcs.run_conv(m, n, k, im2col_buf.data(), k, 0, b_packed.data(), k, 0, nullptr, n,
+                       output.data(), n, nullptr, clamp_min, clamp_max);
+        ::benchmark::DoNotOptimize(output.data());
+    }
+
+    state.counters["GFLOPS"] =
+        ::benchmark::Counter(conv_flops(cs), ::benchmark::Counter::kIsIterationInvariantRate,
+                             ::benchmark::Counter::OneK::kIs1000);
+}
+
+template <typename T, typename ClampT>
+inline void register_mixed_packed_convcl_benchmark(const char *name,
+                                                   const MixedPackedConvClBenchFuncs<ClampT> &funcs)
+{
+    const auto &cs = global_conv_shape();
+    ::benchmark::RegisterBenchmark(name,
+                                   [funcs](::benchmark::State &state) {
+                                       run_mixed_packed_convcl_benchmark<T, ClampT>(state, funcs);
+                                   })
+        ->Args({static_cast<int64_t>(cs.ic), static_cast<int64_t>(cs.oc),
+                static_cast<int64_t>(cs.ih), static_cast<int64_t>(cs.kh)})
+        ->ArgNames({"IC", "OC", "HW", "K"});
+}
+
 }  // namespace benchmark
 }  // namespace torq_tile

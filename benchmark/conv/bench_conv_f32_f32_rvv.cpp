@@ -7,6 +7,7 @@
 #include "benchmark/common/conv_benchmark_runner.h"
 #include "src/conv/conv_f32_f32/convcf_mx1bias_clamp_f32_f32_f32/tqt_convcf_mx1bias_clamp_f32_f32_f32_8x3vl_rvv.h"
 #include "src/conv/conv_f32_f32/convcf_mx1bias_clamp_f32_f32p_f32p/tqt_convcf_mx1bias_clamp_f32_f32p_f32p_8x3vl_rvv.h"
+#include "src/conv/conv_f32_f32/convcl_1xnbias_clamp_f32_f32_f32p/tqt_convcl_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv.h"
 #include "src/conv/conv_f32_f32/convcl_1xnbias_clamp_f32_f32_f32t/tqt_convcl_1xnbias_clamp_f32_f32_f32t_8x3vl_rvv.h"
 #include "src/conv/conv_f32_f32/convcl_1xnbias_clamp_f32_f32p_f32p/tqt_convcl_1xnbias_clamp_f32_f32p_f32p_8x3vl_rvv.h"
 
@@ -72,6 +73,21 @@ static PackedConvClBenchFuncs<float> make_packed_convcl_f32_8x3vl_rvv()
 }
 
 // ============================================================================
+// Mixed-packed Conv-CL: convcl_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv
+// ============================================================================
+
+static MixedPackedConvClBenchFuncs<float> make_mixed_packed_convcl_f32_8x3vl_rvv()
+{
+    return {
+        tqt_get_a_im2col_size_convcl_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv,
+        tqt_get_b_packed_size_convcl_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv,
+        tqt_run_bt_pack_convcl_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv,
+        tqt_run_im2col_convcl_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv,
+        tqt_run_conv_convcl_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv,
+    };
+}
+
+// ============================================================================
 // Registration
 // ============================================================================
 
@@ -88,6 +104,10 @@ void register_conv_f32_f32_rvv_benchmarks()
 
     register_packed_convcl_benchmark<float, float>(
         "tqt_convcl_1xnbias_clamp_f32_f32p_f32p_8x3vl_rvv", make_packed_convcl_f32_8x3vl_rvv());
+
+    register_mixed_packed_convcl_benchmark<float, float>(
+        "tqt_convcl_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv",
+        make_mixed_packed_convcl_f32_8x3vl_rvv());
 }
 
 }  // namespace benchmark

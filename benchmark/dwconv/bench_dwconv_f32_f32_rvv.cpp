@@ -14,6 +14,7 @@
 #include "src/dwconv/dwconv_f32_f32/dwconvcf3x3s1_mx1bias_clamp_f32p_f32p_f32p/tqt_dwconvcf3x3s1_mx1bias_clamp_f32p_f32p_f32p_4x1x1vl_rvv.h"
 #include "src/dwconv/dwconv_f32_f32/dwconvcf3x3s2_mx1bias_clamp_f32p_f32p_f32p/tqt_dwconvcf3x3s2_mx1bias_clamp_f32p_f32p_f32p_2x1x1vl_rvv.h"
 #include "src/dwconv/dwconv_f32_f32/dwconvcf5x5s1_mx1bias_clamp_f32p_f32p_f32p/tqt_dwconvcf5x5s1_mx1bias_clamp_f32p_f32p_f32p_4x1x1vl_rvv.h"
+#include "src/dwconv/dwconv_f32_f32/dwconvcl3x3s1_1xnbias_clamp_f32_f32_f32p/tqt_dwconvcl3x3s1_1xnbias_clamp_f32_f32_f32p_4x1x1vl_rvv.h"
 #include "src/dwconv/dwconv_f32_f32/dwconvcl3x3s1_1xnbias_clamp_f32p_f32p_f32p/tqt_dwconvcl3x3s1_1xnbias_clamp_f32p_f32p_f32p_4x1x1vl_rvv.h"
 #include "src/dwconv/dwconv_f32_f32/dwconvcl3x3s2_1xnbias_clamp_f32p_f32p_f32p/tqt_dwconvcl3x3s2_1xnbias_clamp_f32p_f32p_f32p_2x1x1vl_rvv.h"
 #include "src/dwconv/dwconv_f32_f32/dwconvcl5x5s1_1xnbias_clamp_f32p_f32p_f32p/tqt_dwconvcl5x5s1_1xnbias_clamp_f32p_f32p_f32p_4x1x1vl_rvv.h"
@@ -182,6 +183,23 @@ static SpecPackedDwconvBenchFuncs<float> make_spec_packed_dwconvcl5x5s1_f32p_4x1
 }
 
 // ============================================================================
+// Specialized weight-packed dwconv-CL 3x3s1 (input/output raw NHWC)
+// ============================================================================
+
+static SpecWeightPackedDwconvBenchFuncs<float>
+make_spec_weight_packed_dwconvcl3x3s1_f32_4x1x1vl_rvv()
+{
+    return {
+        tqt_get_input_size_dwconvcl3x3s1_1xnbias_clamp_f32_f32_f32p_4x1x1vl_rvv,
+        tqt_get_output_size_dwconvcl3x3s1_1xnbias_clamp_f32_f32_f32p_4x1x1vl_rvv,
+        tqt_get_packed_weight_size_dwconvcl3x3s1_1xnbias_clamp_f32_f32_f32p_4x1x1vl_rvv,
+        tqt_get_oh_step_dwconvcl3x3s1_1xnbias_clamp_f32_f32_f32p_4x1x1vl_rvv,
+        tqt_run_pack_weight_dwconvcl3x3s1_1xnbias_clamp_f32_f32_f32p_4x1x1vl_rvv,
+        tqt_run_dwconv_dwconvcl3x3s1_1xnbias_clamp_f32_f32_f32p_4x1x1vl_rvv,
+    };
+}
+
+// ============================================================================
 // Registration
 // ============================================================================
 
@@ -226,6 +244,10 @@ void register_dwconv_f32_f32_rvv_benchmarks()
     register_spec_packed_dwconv_benchmark<float, float>(
         "tqt_dwconvcl5x5s1_1xnbias_clamp_f32p_f32p_f32p_4x1x1vl_rvv",
         make_spec_packed_dwconvcl5x5s1_f32p_4x1x1vl_rvv());
+
+    register_spec_weight_packed_dwconv_benchmark<float, float>(
+        "tqt_dwconvcl3x3s1_1xnbias_clamp_f32_f32_f32p_4x1x1vl_rvv",
+        make_spec_weight_packed_dwconvcl3x3s1_f32_4x1x1vl_rvv());
 }
 
 }  // namespace benchmark

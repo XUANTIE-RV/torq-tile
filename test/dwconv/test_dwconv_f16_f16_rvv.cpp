@@ -15,6 +15,7 @@
 #include "src/dwconv/dwconv_f16_f16/dwconvcf3x3s1_mx1bias_clamp_f16p_f16p_f16p/tqt_dwconvcf3x3s1_mx1bias_clamp_f16p_f16p_f16p_4x1x1vl_rvv.h"
 #include "src/dwconv/dwconv_f16_f16/dwconvcf3x3s2_mx1bias_clamp_f16p_f16p_f16p/tqt_dwconvcf3x3s2_mx1bias_clamp_f16p_f16p_f16p_2x1x1vl_rvv.h"
 #include "src/dwconv/dwconv_f16_f16/dwconvcf5x5s1_mx1bias_clamp_f16p_f16p_f16p/tqt_dwconvcf5x5s1_mx1bias_clamp_f16p_f16p_f16p_4x1x1vl_rvv.h"
+#include "src/dwconv/dwconv_f16_f16/dwconvcl3x3s1_1xnbias_clamp_f16_f16_f16p/tqt_dwconvcl3x3s1_1xnbias_clamp_f16_f16_f16p_4x1x1vl_rvv.h"
 #include "src/dwconv/dwconv_f16_f16/dwconvcl3x3s1_1xnbias_clamp_f16p_f16p_f16p/tqt_dwconvcl3x3s1_1xnbias_clamp_f16p_f16p_f16p_4x1x1vl_rvv.h"
 #include "src/dwconv/dwconv_f16_f16/dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p/tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_2x1x1vl_rvv.h"
 #include "src/dwconv/dwconv_f16_f16/dwconvcl5x5s1_1xnbias_clamp_f16p_f16p_f16p/tqt_dwconvcl5x5s1_1xnbias_clamp_f16p_f16p_f16p_4x1x1vl_rvv.h"
@@ -354,4 +355,27 @@ TEST_P(Test_dwconvcl5x5s1, Correctness)
                                            ConvLayout::kChannelLast);
 }
 INSTANTIATE_TEST_SUITE_P(Dwconv, Test_dwconvcl5x5s1, spec_5x5s1_params(),
+                         ConvTestParamNameGenerator());
+
+// --- Kernel #11: dwconvcl3x3s1 weight-packed (input/output raw NHWC) ---
+static SpecWeightPackedDwconvFuncs<float16_t> make_funcs_dwconvcl3x3s1_f16_f16_f16p()
+{
+    return {
+        tqt_get_input_size_dwconvcl3x3s1_1xnbias_clamp_f16_f16_f16p_4x1x1vl_rvv,
+        tqt_get_output_size_dwconvcl3x3s1_1xnbias_clamp_f16_f16_f16p_4x1x1vl_rvv,
+        tqt_get_packed_weight_size_dwconvcl3x3s1_1xnbias_clamp_f16_f16_f16p_4x1x1vl_rvv,
+        tqt_get_oh_step_dwconvcl3x3s1_1xnbias_clamp_f16_f16_f16p_4x1x1vl_rvv,
+        tqt_run_pack_weight_dwconvcl3x3s1_1xnbias_clamp_f16_f16_f16p_4x1x1vl_rvv,
+        tqt_run_dwconv_dwconvcl3x3s1_1xnbias_clamp_f16_f16_f16p_4x1x1vl_rvv,
+    };
+}
+class Test_dwconvcl3x3s1_f16_f16_f16p : public testing::TestWithParam<ConvTestParams>
+{
+};
+TEST_P(Test_dwconvcl3x3s1_f16_f16_f16p, Correctness)
+{
+    run_spec_weight_packed_dwconv_test<float16_t>(make_funcs_dwconvcl3x3s1_f16_f16_f16p(),
+                                                  GetParam(), ConvLayout::kChannelLast);
+}
+INSTANTIATE_TEST_SUITE_P(Dwconv, Test_dwconvcl3x3s1_f16_f16_f16p, spec_3x3s1_params(),
                          ConvTestParamNameGenerator());

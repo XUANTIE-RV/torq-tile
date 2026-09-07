@@ -248,5 +248,73 @@ inline void register_spec_packed_dwconv_benchmark(const char *name,
         ->ArgNames({"IC", "OC", "HW", "K"});
 }
 
+// ============================================================================
+// Function pointer types for specialized dwconv with weight-only packing
+//   input/output raw NHWC (cl), only weight packed; oh_step-sliced
+// ============================================================================
+
+template <typename ClampT>
+struct SpecWeightPackedDwconvBenchFuncs
+{
+    size_t (*get_input_size)(const tqt_conv_params *params);
+    size_t (*get_output_size)(const tqt_conv_params *params);
+    size_t (*get_packed_weight_size)(const tqt_conv_params *params);
+    size_t (*get_oh_step)();
+    void (*run_pack_weight)(const void *src, void *dst, const tqt_conv_params *params);
+    void (*run_dwconv)(size_t oh_start, size_t oh_end, const void *input, const void *packed_weight,
+                       const void *bias, void *output, const tqt_conv_params *params,
+                       ClampT clamp_min, ClampT clamp_max);
+};
+
+template <typename T, typename ClampT>
+inline void run_spec_weight_packed_dwconv_benchmark(
+    ::benchmark::State &state, const SpecWeightPackedDwconvBenchFuncs<ClampT> &funcs)
+{
+    const auto &cs = global_conv_shape();
+    tqt_conv_params p = build_dwconv_params(cs);
+    const size_t IC = p.input_channel, OC = p.output_channel;
+
+    std::vector<T> input(IC * p.input_shape[1] * p.input_shape[2], static_cast<T>(1.0f));
+    std::vector<T> weight(OC * p.kernel_shape[1] * p.kernel_shape[2], static_cast<T>(0.5f));
+    std::vector<T> bias(OC, static_cast<T>(0.0f));
+    std::vector<T> output(OC * p.output_shape[1] * p.output_shape[2]);
+
+    std::vector<uint8_t> packed_wt(funcs.get_packed_weight_size(&p));
+    funcs.run_pack_weight(weight.data(), packed_wt.data(), &p);
+
+    const size_t oh_step = funcs.get_oh_step();
+    const size_t OH = p.output_shape[1];
+    const ClampT clamp_min = static_cast<ClampT>(-FLT_MAX);
+    const ClampT clamp_max = static_cast<ClampT>(FLT_MAX);
+
+    for (auto _ : state) {
+        for (size_t oh = 0; oh < OH; oh += oh_step) {
+            const size_t oh_end = (oh + oh_step < OH) ? (oh + oh_step) : OH;
+            funcs.run_dwconv(oh, oh_end, input.data(), packed_wt.data(), bias.data(), output.data(),
+                             &p, clamp_min, clamp_max);
+        }
+        ::benchmark::DoNotOptimize(output.data());
+    }
+
+    state.counters["GFLOPS"] =
+        ::benchmark::Counter(dwconv_flops(cs), ::benchmark::Counter::kIsIterationInvariantRate,
+                             ::benchmark::Counter::OneK::kIs1000);
+}
+
+template <typename T, typename ClampT>
+inline void register_spec_weight_packed_dwconv_benchmark(
+    const char *name, const SpecWeightPackedDwconvBenchFuncs<ClampT> &funcs)
+{
+    const auto &cs = global_conv_shape();
+    ::benchmark::RegisterBenchmark(name,
+                                   [funcs](::benchmark::State &state) {
+                                       run_spec_weight_packed_dwconv_benchmark<T, ClampT>(state,
+                                                                                          funcs);
+                                   })
+        ->Args({static_cast<int64_t>(cs.ic), static_cast<int64_t>(cs.ic),
+                static_cast<int64_t>(cs.ih), static_cast<int64_t>(cs.kh)})
+        ->ArgNames({"IC", "OC", "HW", "K"});
+}
+
 }  // namespace benchmark
 }  // namespace torq_tile

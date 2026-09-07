@@ -92,6 +92,26 @@ struct SpecPackedDwconvFuncs
     RunDwconvFunc run_dwconv;
 };
 
+// Specialized dwconv with input/output raw (NHWC), only weight packed.
+template <typename ClampT>
+struct SpecWeightPackedDwconvFuncs
+{
+    using GetSizeFunc = size_t (*)(const tqt_conv_params *);
+    using GetOhStepFunc = size_t (*)(void);
+    using RunPackFunc = void (*)(const void *src, void *dst, const tqt_conv_params *params);
+    using RunDwconvFunc = void (*)(size_t oh_start, size_t oh_end, const void *input,
+                                   const void *packed_weight, const void *bias, void *output,
+                                   const tqt_conv_params *params, ClampT clamp_min,
+                                   ClampT clamp_max);
+
+    GetSizeFunc get_input_size;
+    GetSizeFunc get_output_size;
+    GetSizeFunc get_packed_weight_size;
+    GetOhStepFunc get_oh_step;
+    RunPackFunc run_pack_weight;
+    RunDwconvFunc run_dwconv;
+};
+
 // ============================================================================
 // Helpers: weight / output element-counts (single batch)
 // ============================================================================
@@ -391,6 +411,86 @@ void run_spec_packed_dwconv_test(const SpecPackedDwconvFuncs<T> &funcs, const Co
 
     std::vector<T> actual_output(out_elems, T(0));
     funcs.run_unpack_output(packed_out.data(), actual_output.data(), &p);
+
+    auto vr =
+        verify_gemm_result<T>(ref_output.data(), actual_output.data(), out_elems,
+                              DefaultThreshold<T>::abs_error, DefaultThreshold<T>::cosine_sim);
+    EXPECT_TRUE(vr.passed) << vr.error_message << " (max_abs=" << vr.max_abs_error
+                           << ", cos=" << vr.cosine_similarity << ")";
+}
+
+// ============================================================================
+// Runner: specialized dwconv with weight-only packing (input/output raw NHWC,
+// with oh_step slicing)
+// ============================================================================
+
+template <typename T>
+void run_spec_weight_packed_dwconv_test(const SpecWeightPackedDwconvFuncs<T> &funcs,
+                                        const ConvTestParams &tp, ConvLayout layout)
+{
+    tqt_conv_params p = tp.to_conv_params();
+
+    ASSERT_EQ(p.groups, p.input_channel);
+    ASSERT_EQ(p.output_channel % p.input_channel, 0u);
+    // Specialized kernels are 2D: KD=ID=OD=1, dilation=1.
+    ASSERT_EQ(p.kernel_shape[0], 1u);
+    ASSERT_EQ(p.input_shape[0], 1u);
+    ASSERT_EQ(p.output_shape[0], 1u);
+    ASSERT_EQ(p.dilation[0], 1u);
+    ASSERT_EQ(p.dilation[1], 1u);
+    ASSERT_EQ(p.dilation[2], 1u);
+    // This runner targets cl-family kernels (NHWC raw input/output).
+    ASSERT_EQ(layout, ConvLayout::kChannelLast);
+
+    const size_t in_elems = dwconv_input_elements(p);
+    const size_t wt_elems = dwconv_weight_elements(p);
+    const size_t bs_elems = dwconv_bias_elements(p);
+    const size_t out_elems = dwconv_output_elements(p);
+
+    UniformRandomGenerator<T> gen(
+        static_cast<typename std::conditional<std::is_integral<T>::value, T, float>::type>(-1),
+        static_cast<typename std::conditional<std::is_integral<T>::value, T, float>::type>(1),
+        /*seed=*/42);
+
+    std::vector<T> input_cf(in_elems);
+    std::vector<T> weight_cf(wt_elems);
+    std::vector<T> bias(bs_elems);
+    gen.fill_matrix(input_cf.data(), 1, in_elems);
+    gen.fill_matrix(weight_cf.data(), 1, wt_elems);
+    if (tp.has_bias) {
+        gen.fill_matrix(bias.data(), 1, bs_elems);
+    }
+    const T *bias_ptr = tp.has_bias ? bias.data() : nullptr;
+
+    std::vector<T> ref_output(out_elems, T(0));
+
+    // Convert to CL representation and run reference in CL layout
+    std::vector<T> input_cl(in_elems);
+    std::vector<T> weight_cl(wt_elems);
+    cf_to_cl<T>(input_cf.data(), input_cl.data(), p.input_channel, p.input_shape[0],
+                p.input_shape[1], p.input_shape[2]);
+    weight_cf_to_cl<T>(weight_cf.data(), weight_cl.data(), p.output_channel, p.kernel_shape[0],
+                       p.kernel_shape[1], p.kernel_shape[2]);
+    reference_dwconv<T>(input_cl.data(), weight_cl.data(), bias_ptr, ref_output.data(), &p,
+                        ConvLayout::kChannelLast, static_cast<T>(tp.clamp_min),
+                        static_cast<T>(tp.clamp_max));
+
+    // Pack weight only; input/output stay raw NHWC.
+    const size_t packed_wt_bytes = funcs.get_packed_weight_size(&p);
+    std::vector<uint8_t> packed_wt(packed_wt_bytes);
+    funcs.run_pack_weight(weight_cl.data(), packed_wt.data(), &p);
+
+    std::vector<T> actual_output(out_elems, T(0));
+
+    // Specialized: slice OH by get_oh_step()
+    const size_t oh_step = funcs.get_oh_step();
+    const size_t OH = p.output_shape[1];
+    for (size_t oh = 0; oh < OH; oh += oh_step) {
+        const size_t oh_end = std::min(oh + oh_step, OH);
+        funcs.run_dwconv(oh, oh_end, input_cl.data(), packed_wt.data(), bias_ptr,
+                         actual_output.data(), &p, static_cast<T>(tp.clamp_min),
+                         static_cast<T>(tp.clamp_max));
+    }
 
     auto vr =
         verify_gemm_result<T>(ref_output.data(), actual_output.data(), out_elems,

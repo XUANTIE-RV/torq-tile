@@ -14,6 +14,7 @@
 #include "src/dwconv/dwconv_f16_f16/dwconvcf3x3s1_mx1bias_clamp_f16p_f16p_f16p/tqt_dwconvcf3x3s1_mx1bias_clamp_f16p_f16p_f16p_4x1x1vl_rvv.h"
 #include "src/dwconv/dwconv_f16_f16/dwconvcf3x3s2_mx1bias_clamp_f16p_f16p_f16p/tqt_dwconvcf3x3s2_mx1bias_clamp_f16p_f16p_f16p_2x1x1vl_rvv.h"
 #include "src/dwconv/dwconv_f16_f16/dwconvcf5x5s1_mx1bias_clamp_f16p_f16p_f16p/tqt_dwconvcf5x5s1_mx1bias_clamp_f16p_f16p_f16p_4x1x1vl_rvv.h"
+#include "src/dwconv/dwconv_f16_f16/dwconvcl3x3s1_1xnbias_clamp_f16_f16_f16p/tqt_dwconvcl3x3s1_1xnbias_clamp_f16_f16_f16p_4x1x1vl_rvv.h"
 #include "src/dwconv/dwconv_f16_f16/dwconvcl3x3s1_1xnbias_clamp_f16p_f16p_f16p/tqt_dwconvcl3x3s1_1xnbias_clamp_f16p_f16p_f16p_4x1x1vl_rvv.h"
 #include "src/dwconv/dwconv_f16_f16/dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p/tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_2x1x1vl_rvv.h"
 #include "src/dwconv/dwconv_f16_f16/dwconvcl5x5s1_1xnbias_clamp_f16p_f16p_f16p/tqt_dwconvcl5x5s1_1xnbias_clamp_f16p_f16p_f16p_4x1x1vl_rvv.h"
@@ -182,6 +183,23 @@ static SpecPackedDwconvBenchFuncs<float16_t> make_spec_packed_dwconvcl5x5s1_f16p
 }
 
 // ============================================================================
+// Specialized weight-packed dwconv-CL 3x3s1 (input/output raw NHWC)
+// ============================================================================
+
+static SpecWeightPackedDwconvBenchFuncs<float16_t>
+make_spec_weight_packed_dwconvcl3x3s1_f16_4x1x1vl_rvv()
+{
+    return {
+        tqt_get_input_size_dwconvcl3x3s1_1xnbias_clamp_f16_f16_f16p_4x1x1vl_rvv,
+        tqt_get_output_size_dwconvcl3x3s1_1xnbias_clamp_f16_f16_f16p_4x1x1vl_rvv,
+        tqt_get_packed_weight_size_dwconvcl3x3s1_1xnbias_clamp_f16_f16_f16p_4x1x1vl_rvv,
+        tqt_get_oh_step_dwconvcl3x3s1_1xnbias_clamp_f16_f16_f16p_4x1x1vl_rvv,
+        tqt_run_pack_weight_dwconvcl3x3s1_1xnbias_clamp_f16_f16_f16p_4x1x1vl_rvv,
+        tqt_run_dwconv_dwconvcl3x3s1_1xnbias_clamp_f16_f16_f16p_4x1x1vl_rvv,
+    };
+}
+
+// ============================================================================
 // Registration
 // ============================================================================
 
@@ -226,6 +244,10 @@ void register_dwconv_f16_f16_rvv_benchmarks()
     register_spec_packed_dwconv_benchmark<float16_t, float16_t>(
         "tqt_dwconvcl5x5s1_1xnbias_clamp_f16p_f16p_f16p_4x1x1vl_rvv",
         make_spec_packed_dwconvcl5x5s1_f16p_4x1x1vl_rvv());
+
+    register_spec_weight_packed_dwconv_benchmark<float16_t, float16_t>(
+        "tqt_dwconvcl3x3s1_1xnbias_clamp_f16_f16_f16p_4x1x1vl_rvv",
+        make_spec_weight_packed_dwconvcl3x3s1_f16_4x1x1vl_rvv());
 }
 
 }  // namespace benchmark

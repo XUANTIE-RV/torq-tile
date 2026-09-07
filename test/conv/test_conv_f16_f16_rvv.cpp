@@ -8,6 +8,7 @@
 
 #include "src/conv/conv_f16_f16/convcf_mx1bias_clamp_f16_f16_f16/tqt_convcf_mx1bias_clamp_f16_f16_f16_8x3vl_rvv.h"
 #include "src/conv/conv_f16_f16/convcf_mx1bias_clamp_f16_f16p_f16p/tqt_convcf_mx1bias_clamp_f16_f16p_f16p_8x3vl_rvv.h"
+#include "src/conv/conv_f16_f16/convcl_1xnbias_clamp_f16_f16_f16p/tqt_convcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv.h"
 #include "src/conv/conv_f16_f16/convcl_1xnbias_clamp_f16_f16_f16t/tqt_convcl_1xnbias_clamp_f16_f16_f16t_8x3vl_rvv.h"
 #include "src/conv/conv_f16_f16/convcl_1xnbias_clamp_f16_f16p_f16p/tqt_convcl_1xnbias_clamp_f16_f16p_f16p_8x3vl_rvv.h"
 #include "test/common/conv_test_runner.h"
@@ -152,4 +153,35 @@ TEST_P(Test_convcl_1xnbias_clamp_f16_f16p_f16p_8x3vl_rvv, Correctness)
 }
 
 INSTANTIATE_TEST_SUITE_P(ConvTests, Test_convcl_1xnbias_clamp_f16_f16p_f16p_8x3vl_rvv,
+                         common_conv_test_values(), ConvTestParamNameGenerator());
+
+// ============================================================================
+// ConvCL MixedPacked (1xnbias, f16_f16_f16p) — A im2col only, B packed
+// ============================================================================
+
+static MixedPackedConvClFuncs<float16_t> make_convcl_mixed_packed_funcs()
+{
+    return {
+        tqt_get_m_step_convcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv,
+        tqt_get_n_step_convcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv,
+        tqt_get_a_im2col_size_convcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv,
+        tqt_get_b_packed_size_convcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv,
+        tqt_run_bt_pack_convcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv,
+        tqt_run_im2col_convcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv,
+        tqt_run_conv_convcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv,
+    };
+}
+
+class Test_convcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv
+    : public testing::TestWithParam<ConvTestParams>
+{
+};
+
+TEST_P(Test_convcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv, Correctness)
+{
+    run_mixed_packed_convcl_test<float16_t, float16_t>(GetParam(),
+                                                       make_convcl_mixed_packed_funcs());
+}
+
+INSTANTIATE_TEST_SUITE_P(ConvTests, Test_convcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv,
                          common_conv_test_values(), ConvTestParamNameGenerator());

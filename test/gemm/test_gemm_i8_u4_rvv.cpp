@@ -42,8 +42,11 @@ make_qsi8d256_qau4c32_test_funcs()
 TEST(GemmI8U4Rvv, Qsi8d256Qau4c32)
 {
     const auto funcs = make_qsi8d256_qau4c32_test_funcs();
-    const size_t n = funcs.get_n_step() + 3;
-    run_packed_qsi8_block_quantized_gemm_test(5, n, 512, funcs);
+    for (size_t rows = 1; rows <= 5; ++rows) {
+        for (size_t columns : {size_t{1}, funcs.get_n_step(), funcs.get_n_step() + 3}) {
+            run_packed_qsi8_block_quantized_gemm_test(rows, columns, 512, funcs);
+        }
+    }
 }
 
 TEST(GemmI8U4Rvv, ClampSpecialValues_Qsi8d256Qau4c32)
@@ -55,11 +58,9 @@ TEST(GemmI8U4Rvv, ClampSpecialValues_Qsi8d256Qau4c32)
         for (size_t columns :
              {size_t{1}, tqt_get_n_step_gemm_1xnbias_clamp_f32_qsi8d256p_qau4c32p_4x1vl_rvv(),
               tqt_get_n_step_gemm_1xnbias_clamp_f32_qsi8d256p_qau4c32p_4x1vl_rvv() + 3}) {
-            run_packed_qsi8_block_quantized_gemm_test(rows, columns, 512, funcs, false);
+            run_packed_qsi8_block_quantized_gemm_test(rows, columns, 512, funcs);
         }
     }
-    // Small first panels expose a pre-existing split-K origin bug in these RVV kernels.
-    // Keep their full-K probes above and exercise split-K after a complete first panel.
     const size_t m_step = tqt_get_m_step_gemm_1xnbias_clamp_f32_qsi8d256p_qau4c32p_4x1vl_rvv();
     const size_t n_step = tqt_get_n_step_gemm_1xnbias_clamp_f32_qsi8d256p_qau4c32p_4x1vl_rvv();
     for (size_t tail = 1; tail <= m_step; ++tail) {

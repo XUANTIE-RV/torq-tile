@@ -533,10 +533,9 @@ TEST(GemmI8I8Rvv, PackedNonzeroKOrigin)
 #endif
 }
 
-TEST(GemmI8I8Rvv, Qsi8d256Qsi8c16)
+static void run_qsi8d256_qsi8c16_test(size_t m, size_t n)
 {
-    const size_t n = tqt_get_n_step_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_4x1vl_rvv() + 3;
-    auto data = make_qsi8_block_quantized_gemm_test_data(n, 512, 256, 16, false, 31);
+    auto data = make_qsi8_block_quantized_gemm_test_data(n, 512, 256, 16, false, 31, m);
     std::vector<int8_t> a_packed(data.m * data.k), b_packed(data.n * data.k);
     std::vector<float> output(data.m * data.n);
     tqt_run_a_pack_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_4x1vl_rvv(
@@ -574,46 +573,25 @@ TEST(GemmI8I8Rvv, Qsi8d256Qsi8c16)
     check_qsi8_block_quantized_gemm_result(output, data.reference);
 }
 
+TEST(GemmI8I8Rvv, Qsi8d256Qsi8c16)
+{
+    const size_t n_step = tqt_get_n_step_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_4x1vl_rvv();
+    for (size_t rows = 1; rows <= 5; ++rows) {
+        for (size_t columns : {size_t{1}, n_step, n_step + 3}) {
+            run_qsi8d256_qsi8c16_test(rows, columns);
+        }
+    }
+}
+
 TEST(GemmI8I8Rvv, ClampSpecialValues_Qsi8d256Qsi8c16)
 {
     ScopedGemmClampProbe probe;
-    const size_t n = tqt_get_n_step_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_4x1vl_rvv() + 3;
-    auto data = make_qsi8_block_quantized_gemm_test_data(n, 512, 256, 16, false, 31);
-    std::vector<int8_t> a_packed(data.m * data.k), b_packed(data.n * data.k);
-    std::vector<float> output(data.m * data.n);
-    tqt_run_a_pack_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_4x1vl_rvv(
-        data.m, data.k, data.k, data.k, 0, data.a.data(), a_packed.data());
-    tqt_run_bt_pack_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_4x1vl_rvv(
-        data.n, data.k, data.k, data.k, 0, data.b.data(), b_packed.data());
-    const tqt_qsi8d256_qsi8c16_params params = {data.scale_a.data(), data.k / 256,
-                                                data.scale_b.data(), data.k / 16};
-    clamp_test_run<tqt_run_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_4x1vl_rvv, float, 13, 11, 12,
-                   14, ClampSource::kColumnBias, false, 5, true>()(
-        data.m, data.n, data.k, a_packed.data(), data.k, 0, b_packed.data(), data.k, 0,
-        data.c.data(), data.n, output.data(), data.n, data.bias.data(),
-        -std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity(), &params);
-    check_qsi8_block_quantized_gemm_result(output, data.reference);
-
-    std::vector<float> partial(data.m * data.n);
-    const size_t split = 256;
-    clamp_test_run<tqt_run_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_4x1vl_rvv, float, 13, 11, 12,
-                   14, ClampSource::kColumnBias, false, 5, true>()(
-        data.m, data.n, split, a_packed.data(), data.k, 0, b_packed.data(), data.k, 0,
-        data.c.data(), data.n, partial.data(), data.n, nullptr,
-        -std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity(), &params);
-    const size_t a_offset =
-        tqt_get_a_packed_offset_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_4x1vl_rvv(0, split,
-                                                                                    data.k, data.m);
-    const size_t b_offset =
-        tqt_get_b_packed_offset_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_4x1vl_rvv(0, split,
-                                                                                    data.k, data.n);
-    clamp_test_run<tqt_run_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_4x1vl_rvv, float, 13, 11, 12,
-                   14, ClampSource::kColumnBias, false, 5, true>()(
-        data.m, data.n, data.k - split, (uint8_t *)a_packed.data() + a_offset, data.k, split,
-        (uint8_t *)b_packed.data() + b_offset, data.k, split, partial.data(), data.n, output.data(),
-        data.n, data.bias.data(), -std::numeric_limits<float>::infinity(),
-        std::numeric_limits<float>::infinity(), &params);
-    check_qsi8_block_quantized_gemm_result(output, data.reference);
+    const size_t n_step = tqt_get_n_step_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_4x1vl_rvv();
+    for (size_t rows = 1; rows <= 5; ++rows) {
+        for (size_t columns : {size_t{1}, n_step, n_step + 3}) {
+            run_qsi8d256_qsi8c16_test(rows, columns);
+        }
+    }
 }
 
 TEST(GemmI8I8Rvv, Qsi8d32Qsi8c32AndSplitK)

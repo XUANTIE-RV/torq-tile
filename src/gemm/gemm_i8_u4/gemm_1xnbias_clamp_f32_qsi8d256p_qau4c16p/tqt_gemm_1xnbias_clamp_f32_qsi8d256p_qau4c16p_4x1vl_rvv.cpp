@@ -151,12 +151,12 @@ void tqt_run_gemm_1xnbias_clamp_f32_qsi8d256p_qau4c16p_4x1vl_rvv(
     for (size_t m_idx = 0; m_idx < m; m_idx += m_step) {
         const size_t mr = TQT_MIN(m - m_idx, m_step);
         const int8_t *a_tile = a_base + m_idx * lda;
-        if (k_idx_a != 0 && mr != m_step)
+        if (m_idx != 0 && k_idx_a != 0 && mr != m_step)
             a_tile -= k_idx_a * (m_step - mr);
         for (size_t n_idx = 0; n_idx < n; n_idx += n_step) {
             const size_t nr = TQT_MIN(n - n_idx, n_step);
             const uint8_t *b_tile = b_base + n_idx * ldb_bytes;
-            if (k_idx_b != 0 && nr != n_step)
+            if (n_idx != 0 && k_idx_b != 0 && nr != n_step)
                 b_tile -= (k_idx_b / 2) * (n_step - nr);
             tqt_compute_tile_kernel_gemm_qsi8d256_qau4c16_4x1vl_rvv(
                 mr, nr, k, k_idx_a, (float *)D + m_idx * ldd + n_idx, a_tile, b_tile,

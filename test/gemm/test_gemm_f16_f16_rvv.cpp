@@ -14,9 +14,11 @@
 #include "src/gemm/gemm_f16_f16/gemm_1xnbias_clamp_f16_f16_f16p/tqt_gemm_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv.h"
 #include "src/gemm/gemm_f16_f16/gemm_1xnbias_clamp_f16_f16_f16t/tqt_gemm_1xnbias_clamp_f16_f16_f16t_2x8vl_rvv.h"
 #include "src/gemm/gemm_f16_f16/gemm_1xnbias_clamp_f16_f16_f16t/tqt_gemm_1xnbias_clamp_f16_f16_f16t_4x4vl_rvv.h"
+#include "src/gemm/gemm_f16_f16/gemm_1xnbias_clamp_f16_f16_f16t/tqt_gemm_1xnbias_clamp_f16_f16_f16t_8x1vl_f32acc_rvv.h"
 #include "src/gemm/gemm_f16_f16/gemm_1xnbias_clamp_f16_f16_f16t/tqt_gemm_1xnbias_clamp_f16_f16_f16t_8x3vl_rvv.h"
 #include "src/gemm/gemm_f16_f16/gemm_1xnbias_clamp_f16_f16p_f16p/tqt_gemm_1xnbias_clamp_f16_f16p_f16p_2x8vl_rvv.h"
 #include "src/gemm/gemm_f16_f16/gemm_1xnbias_clamp_f16_f16p_f16p/tqt_gemm_1xnbias_clamp_f16_f16p_f16p_4x4vl_rvv.h"
+#include "src/gemm/gemm_f16_f16/gemm_1xnbias_clamp_f16_f16p_f16p/tqt_gemm_1xnbias_clamp_f16_f16p_f16p_8x1vl_f32acc_rvv.h"
 #include "src/gemm/gemm_f16_f16/gemm_1xnbias_clamp_f16_f16p_f16p/tqt_gemm_1xnbias_clamp_f16_f16p_f16p_8x3vl_rvv.h"
 #include "src/gemm/gemm_f16_f16/gemm_mx1bias_clamp_f16_f16_f16/tqt_gemm_mx1bias_clamp_f16_f16_f16_8x3vl_rvv.h"
 #include "src/gemm/gemm_f16_f16/gemm_mx1bias_clamp_f16_f16p_f16p/tqt_gemm_mx1bias_clamp_f16_f16p_f16p_8x3vl_rvv.h"
@@ -450,4 +452,76 @@ TEST_P(Test_gemm_1xnbias_clamp_f16_f16p_f16p_2x8vl_rvv, Correctness)
 }
 
 INSTANTIATE_TEST_SUITE_P(GemmTests, Test_gemm_1xnbias_clamp_f16_f16p_f16p_2x8vl_rvv,
+                         common_test_values(), GemmTestParamNameGenerator());
+
+// ============================================================================
+// FP16 8x1vl with fp32 widening accumulator (B Transposed)
+// ============================================================================
+
+static NonPackedGemmFuncs<float16_t> make_gemm_1xnbias_clamp_f16_f16_f16t_8x1vl_f32acc_rvv_funcs()
+{
+    return {
+        tqt_get_m_step_gemm_1xnbias_clamp_f16_f16_f16t_8x1vl_f32acc_rvv,
+        tqt_get_n_step_gemm_1xnbias_clamp_f16_f16_f16t_8x1vl_f32acc_rvv,
+        tqt_get_a_offset_gemm_1xnbias_clamp_f16_f16_f16t_8x1vl_f32acc_rvv,
+        tqt_get_b_offset_gemm_1xnbias_clamp_f16_f16_f16t_8x1vl_f32acc_rvv,
+        tqt_get_c_offset_gemm_1xnbias_clamp_f16_f16_f16t_8x1vl_f32acc_rvv,
+        tqt_get_bias_offset_gemm_1xnbias_clamp_f16_f16_f16t_8x1vl_f32acc_rvv,
+        tqt_get_d_offset_gemm_1xnbias_clamp_f16_f16_f16t_8x1vl_f32acc_rvv,
+        tqt_get_d_size_gemm_1xnbias_clamp_f16_f16_f16t_8x1vl_f32acc_rvv,
+        tqt_run_gemm_1xnbias_clamp_f16_f16_f16t_8x1vl_f32acc_rvv,
+    };
+}
+
+class Test_gemm_1xnbias_clamp_f16_f16_f16t_8x1vl_f32acc_rvv
+    : public testing::TestWithParam<GemmTestParams>
+{
+};
+
+TEST_P(Test_gemm_1xnbias_clamp_f16_f16_f16t_8x1vl_f32acc_rvv, Correctness)
+{
+    auto funcs = make_gemm_1xnbias_clamp_f16_f16_f16t_8x1vl_f32acc_rvv_funcs();
+    run_nonpacked_gemm_test<float16_t, float16_t, BLayout::kTransposed, BiasMode::k1xN>(GetParam(),
+                                                                                        funcs);
+}
+
+INSTANTIATE_TEST_SUITE_P(GemmTests, Test_gemm_1xnbias_clamp_f16_f16_f16t_8x1vl_f32acc_rvv,
+                         common_test_values(), GemmTestParamNameGenerator());
+
+// ============================================================================
+// FP16 8x1vl with fp32 widening accumulator, Packed (A+B)
+// ============================================================================
+
+static PackedGemmFuncs<float16_t> make_gemm_1xnbias_clamp_f16_f16p_f16p_8x1vl_f32acc_rvv_funcs()
+{
+    return {
+        tqt_get_m_step_gemm_1xnbias_clamp_f16_f16p_f16p_8x1vl_f32acc_rvv,
+        tqt_get_n_step_gemm_1xnbias_clamp_f16_f16p_f16p_8x1vl_f32acc_rvv,
+        tqt_get_a_packed_offset_gemm_1xnbias_clamp_f16_f16p_f16p_8x1vl_f32acc_rvv,
+        tqt_get_b_packed_offset_gemm_1xnbias_clamp_f16_f16p_f16p_8x1vl_f32acc_rvv,
+        tqt_get_c_offset_gemm_1xnbias_clamp_f16_f16p_f16p_8x1vl_f32acc_rvv,
+        tqt_get_bias_offset_gemm_1xnbias_clamp_f16_f16p_f16p_8x1vl_f32acc_rvv,
+        tqt_get_d_offset_gemm_1xnbias_clamp_f16_f16p_f16p_8x1vl_f32acc_rvv,
+        tqt_get_d_size_gemm_1xnbias_clamp_f16_f16p_f16p_8x1vl_f32acc_rvv,
+        tqt_get_a_packed_size_gemm_1xnbias_clamp_f16_f16p_f16p_8x1vl_f32acc_rvv,
+        tqt_get_b_packed_size_gemm_1xnbias_clamp_f16_f16p_f16p_8x1vl_f32acc_rvv,
+        tqt_run_a_pack_gemm_1xnbias_clamp_f16_f16p_f16p_8x1vl_f32acc_rvv,
+        tqt_run_b_pack_gemm_1xnbias_clamp_f16_f16p_f16p_8x1vl_f32acc_rvv,
+        tqt_run_bt_pack_gemm_1xnbias_clamp_f16_f16p_f16p_8x1vl_f32acc_rvv,
+        tqt_run_gemm_1xnbias_clamp_f16_f16p_f16p_8x1vl_f32acc_rvv,
+    };
+}
+
+class Test_gemm_1xnbias_clamp_f16_f16p_f16p_8x1vl_f32acc_rvv
+    : public testing::TestWithParam<GemmTestParams>
+{
+};
+
+TEST_P(Test_gemm_1xnbias_clamp_f16_f16p_f16p_8x1vl_f32acc_rvv, Correctness)
+{
+    auto funcs = make_gemm_1xnbias_clamp_f16_f16p_f16p_8x1vl_f32acc_rvv_funcs();
+    run_packed_gemm_test<float16_t, float16_t, BiasMode::k1xN>(GetParam(), funcs);
+}
+
+INSTANTIATE_TEST_SUITE_P(GemmTests, Test_gemm_1xnbias_clamp_f16_f16p_f16p_8x1vl_f32acc_rvv,
                          common_test_values(), GemmTestParamNameGenerator());

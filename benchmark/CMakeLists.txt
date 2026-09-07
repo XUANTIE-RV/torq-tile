@@ -41,6 +41,9 @@ if(TORQ_TILE_ENABLE_RVV)
         activation/bench_relu_f32_f32_rvv.cpp
         activation/bench_gelu_f32_f32_rvv.cpp
         activation/bench_silu_f32_f32_rvv.cpp
+        activation/bench_swiglu_f32_f32_f32_rvv.cpp
+        activation/bench_reglu_f32_f32_f32_rvv.cpp
+        activation/bench_geglu_f32_f32_f32_rvv.cpp
     )
 endif()
 
@@ -68,6 +71,9 @@ if(TORQ_TILE_ENABLE_RVV_FP16)
         activation/bench_relu_f16_f16_rvv.cpp
         activation/bench_gelu_f16_f16_rvv.cpp
         activation/bench_silu_f16_f16_rvv.cpp
+        activation/bench_swiglu_f16_f16_f16_rvv.cpp
+        activation/bench_reglu_f16_f16_f16_rvv.cpp
+        activation/bench_geglu_f16_f16_f16_rvv.cpp
     )
 endif()
 

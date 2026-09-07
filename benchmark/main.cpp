@@ -54,6 +54,9 @@ void register_mean_f32_f32_rvv_benchmarks();
 void register_relu_f32_f32_rvv_benchmarks();
 void register_gelu_f32_f32_rvv_benchmarks();
 void register_silu_f32_f32_rvv_benchmarks();
+void register_swiglu_f32_f32_f32_rvv_benchmarks();
+void register_reglu_f32_f32_f32_rvv_benchmarks();
+void register_geglu_f32_f32_f32_rvv_benchmarks();
 #endif
 
 #ifdef TORQ_TILE_ENABLE_RVV_FP16
@@ -73,6 +76,9 @@ void register_mean_f16_f16_rvv_benchmarks();
 void register_relu_f16_f16_rvv_benchmarks();
 void register_gelu_f16_f16_rvv_benchmarks();
 void register_silu_f16_f16_rvv_benchmarks();
+void register_swiglu_f16_f16_f16_rvv_benchmarks();
+void register_reglu_f16_f16_f16_rvv_benchmarks();
+void register_geglu_f16_f16_f16_rvv_benchmarks();
 #endif
 
 #ifdef TORQ_TILE_ENABLE_RVV_BF16
@@ -171,11 +177,17 @@ inline void register_activation_benchmarks()
     register_relu_f32_f32_rvv_benchmarks();
     register_gelu_f32_f32_rvv_benchmarks();
     register_silu_f32_f32_rvv_benchmarks();
+    register_swiglu_f32_f32_f32_rvv_benchmarks();
+    register_reglu_f32_f32_f32_rvv_benchmarks();
+    register_geglu_f32_f32_f32_rvv_benchmarks();
 #endif
 #ifdef TORQ_TILE_ENABLE_RVV_FP16
     register_relu_f16_f16_rvv_benchmarks();
     register_gelu_f16_f16_rvv_benchmarks();
     register_silu_f16_f16_rvv_benchmarks();
+    register_swiglu_f16_f16_f16_rvv_benchmarks();
+    register_reglu_f16_f16_f16_rvv_benchmarks();
+    register_geglu_f16_f16_f16_rvv_benchmarks();
 #endif
 }
 

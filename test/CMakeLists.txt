@@ -127,6 +127,12 @@ if(TORQ_TILE_ENABLE_RVV)
         activation/test_gelu_f32_f32_rvv.cpp)
     torq_tile_add_test(test_silu_f32_f32_rvv
         activation/test_silu_f32_f32_rvv.cpp)
+    torq_tile_add_test(test_swiglu_f32_f32_f32_rvv
+        activation/test_swiglu_f32_f32_f32_rvv.cpp)
+    torq_tile_add_test(test_reglu_f32_f32_f32_rvv
+        activation/test_reglu_f32_f32_f32_rvv.cpp)
+    torq_tile_add_test(test_geglu_f32_f32_f32_rvv
+        activation/test_geglu_f32_f32_f32_rvv.cpp)
 endif()
 
 if(TORQ_TILE_ENABLE_RVV_F64)
@@ -172,6 +178,12 @@ if(TORQ_TILE_ENABLE_RVV_FP16)
         activation/test_gelu_f16_f16_rvv.cpp)
     torq_tile_add_test(test_silu_f16_f16_rvv
         activation/test_silu_f16_f16_rvv.cpp)
+    torq_tile_add_test(test_swiglu_f16_f16_f16_rvv
+        activation/test_swiglu_f16_f16_f16_rvv.cpp)
+    torq_tile_add_test(test_reglu_f16_f16_f16_rvv
+        activation/test_reglu_f16_f16_f16_rvv.cpp)
+    torq_tile_add_test(test_geglu_f16_f16_f16_rvv
+        activation/test_geglu_f16_f16_f16_rvv.cpp)
 endif()
 
 if(TORQ_TILE_ENABLE_RVV_BF16)

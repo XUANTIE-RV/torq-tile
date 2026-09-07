@@ -122,6 +122,9 @@ set(TORQ_TILE_RVV_SOURCES
     src/activation/relu_f32_f32/relu_f32_f32/tqt_relu_f32_f32_1x8vl_rvv.cpp
     src/activation/gelu_f32_f32/gelu_f32_f32/tqt_gelu_f32_f32_1x4vl_rvv.cpp
     src/activation/silu_f32_f32/silu_f32_f32/tqt_silu_f32_f32_1x4vl_rvv.cpp
+    src/activation/swiglu_f32_f32_f32/swiglu_f32_f32_f32/tqt_swiglu_f32_f32_f32_1x4vl_rvv.cpp
+    src/activation/reglu_f32_f32_f32/reglu_f32_f32_f32/tqt_reglu_f32_f32_f32_1x8vl_rvv.cpp
+    src/activation/geglu_f32_f32_f32/geglu_f32_f32_f32/tqt_geglu_f32_f32_f32_1x4vl_rvv.cpp
     # INT8 RVV
     src/gemm/gemm_i8_i8/gemm_clamp_i32_i8_i8/tqt_gemm_clamp_i32_i8_i8_4x1vl_rvv.cpp
     src/gemm/gemm_i8_i8/gemm_clamp_i32_i8p_i8p/tqt_gemm_clamp_i32_i8p_i8p_4x1vl_rvv.cpp
@@ -246,6 +249,9 @@ set(TORQ_TILE_RVV_FP16_SOURCES
     src/activation/relu_f16_f16/relu_f16_f16/tqt_relu_f16_f16_1x8vl_rvv.cpp
     src/activation/gelu_f16_f16/gelu_f16_f16/tqt_gelu_f16_f16_1x2vl_rvv.cpp
     src/activation/silu_f16_f16/silu_f16_f16/tqt_silu_f16_f16_1x2vl_rvv.cpp
+    src/activation/swiglu_f16_f16_f16/swiglu_f16_f16_f16/tqt_swiglu_f16_f16_f16_1x2vl_rvv.cpp
+    src/activation/reglu_f16_f16_f16/reglu_f16_f16_f16/tqt_reglu_f16_f16_f16_1x8vl_rvv.cpp
+    src/activation/geglu_f16_f16_f16/geglu_f16_f16_f16/tqt_geglu_f16_f16_f16_1x2vl_rvv.cpp
 )
 
 # RVV BF16 (RISC-V Vector + Zvfbfwma) kernel files

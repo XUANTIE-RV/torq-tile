@@ -104,6 +104,12 @@ set(TORQ_TILE_RVV_SOURCES
     src/dwconv/dwconv_f32_f32/dwconvcl3x3s1_1xnbias_clamp_f32p_f32p_f32p/tqt_dwconvcl3x3s1_1xnbias_clamp_f32p_f32p_f32p_4x1x1vl_rvv.cpp
     src/dwconv/dwconv_f32_f32/dwconvcl3x3s2_1xnbias_clamp_f32p_f32p_f32p/tqt_dwconvcl3x3s2_1xnbias_clamp_f32p_f32p_f32p_2x1x1vl_rvv.cpp
     src/dwconv/dwconv_f32_f32/dwconvcl5x5s1_1xnbias_clamp_f32p_f32p_f32p/tqt_dwconvcl5x5s1_1xnbias_clamp_f32p_f32p_f32p_4x1x1vl_rvv.cpp
+    # Elementwise F32 RVV
+    src/elementwise/add_f32_f32/addvv_f32_f32_f32/tqt_addvv_f32_f32_f32_8vl_rvv.cpp
+    src/elementwise/add_f32_f32/addvs_f32_f32_f32/tqt_addvs_f32_f32_f32_8vl_rvv.cpp
+    src/elementwise/sub_f32_f32/subvv_f32_f32_f32/tqt_subvv_f32_f32_f32_8vl_rvv.cpp
+    src/elementwise/sub_f32_f32/subvs_f32_f32_f32/tqt_subvs_f32_f32_f32_8vl_rvv.cpp
+    # Reduction F32 RVV
     # INT8 RVV
     src/gemm/gemm_i8_i8/gemm_clamp_i32_i8_i8/tqt_gemm_clamp_i32_i8_i8_4x1vl_rvv.cpp
     src/gemm/gemm_i8_i8/gemm_clamp_i32_i8p_i8p/tqt_gemm_clamp_i32_i8p_i8p_4x1vl_rvv.cpp
@@ -193,6 +199,11 @@ set(TORQ_TILE_RVV_FP16_SOURCES
     src/dwconv/dwconv_f16_f16/dwconvcl3x3s1_1xnbias_clamp_f16p_f16p_f16p/tqt_dwconvcl3x3s1_1xnbias_clamp_f16p_f16p_f16p_4x1x1vl_rvv.cpp
     src/dwconv/dwconv_f16_f16/dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p/tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_2x1x1vl_rvv.cpp
     src/dwconv/dwconv_f16_f16/dwconvcl5x5s1_1xnbias_clamp_f16p_f16p_f16p/tqt_dwconvcl5x5s1_1xnbias_clamp_f16p_f16p_f16p_4x1x1vl_rvv.cpp
+    # Elementwise F16 RVV
+    src/elementwise/add_f16_f16/addvv_f16_f16_f16/tqt_addvv_f16_f16_f16_8vl_rvv.cpp
+    src/elementwise/add_f16_f16/addvs_f16_f16_f16/tqt_addvs_f16_f16_f16_8vl_rvv.cpp
+    src/elementwise/sub_f16_f16/subvv_f16_f16_f16/tqt_subvv_f16_f16_f16_8vl_rvv.cpp
+    src/elementwise/sub_f16_f16/subvs_f16_f16_f16/tqt_subvs_f16_f16_f16_8vl_rvv.cpp
 )
 
 # RVV BF16 (RISC-V Vector + Zvfbfwma) kernel files

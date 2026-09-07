@@ -37,6 +37,8 @@ void register_igemmcf_f32_f32_rvv_benchmarks();
 void register_igemmcl_f32_f32_rvv_benchmarks();
 void register_igemm_i8_i8_rvv_benchmarks();
 void register_dwconv_f32_f32_rvv_benchmarks();
+void register_add_f32_f32_rvv_benchmarks();
+void register_sub_f32_f32_rvv_benchmarks();
 #endif
 
 #ifdef TORQ_TILE_ENABLE_RVV_FP16
@@ -46,6 +48,8 @@ void register_conv_f16_f16_rvv_benchmarks();
 void register_igemmcf_f16_f16_rvv_benchmarks();
 void register_igemmcl_f16_f16_rvv_benchmarks();
 void register_dwconv_f16_f16_rvv_benchmarks();
+void register_add_f16_f16_rvv_benchmarks();
+void register_sub_f16_f16_rvv_benchmarks();
 #endif
 
 #ifdef TORQ_TILE_ENABLE_RVV_BF16
@@ -96,6 +100,24 @@ inline void register_conv_benchmarks()
 #endif
 #ifdef TORQ_TILE_ENABLE_RVV_BF16
     register_conv_bf16_bf16_rvv_benchmarks();
+#endif
+}
+
+inline void register_elementwise_benchmarks()
+{
+#ifdef TORQ_TILE_ENABLE_RVV
+    register_add_f32_f32_rvv_benchmarks();
+    register_sub_f32_f32_rvv_benchmarks();
+#endif
+#ifdef TORQ_TILE_ENABLE_RVV_FP16
+    register_add_f16_f16_rvv_benchmarks();
+    register_sub_f16_f16_rvv_benchmarks();
+#endif
+}
+
+inline void register_reduction_benchmarks()
+{
+#ifdef TORQ_TILE_ENABLE_RVV
 #endif
 }
 
@@ -193,6 +215,8 @@ int main(int argc, char **argv)
     // Register all benchmarks
     torq_tile::benchmark::register_gemm_benchmarks();
     torq_tile::benchmark::register_conv_benchmarks();
+    torq_tile::benchmark::register_elementwise_benchmarks();
+    torq_tile::benchmark::register_reduction_benchmarks();
 
     // Initialize and run Google Benchmark
     ::benchmark::Initialize(&argc, argv);

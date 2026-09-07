@@ -13,6 +13,7 @@ add_library(torq_tile_test_common STATIC
     common/reference_sgemm.cpp
     common/reference_conv.cpp
     common/reference_dwconv.cpp
+    common/reference_elementwise.cpp
     common/verify.cpp
 )
 
@@ -85,6 +86,12 @@ if(TORQ_TILE_ENABLE_RVV)
         conv/test_conv_i8_i8_rvv.cpp)
     torq_tile_add_test(test_igemm_i8_i8_rvv
         conv/test_igemm_i8_i8_rvv.cpp)
+    # --- Elementwise F32 RVV variants ---
+    torq_tile_add_test(test_add_f32_f32_rvv
+        elementwise/test_add_f32_f32_rvv.cpp)
+    torq_tile_add_test(test_sub_f32_f32_rvv
+        elementwise/test_sub_f32_f32_rvv.cpp)
+    # --- Reduction F32 RVV variants ---
 endif()
 
 if(TORQ_TILE_ENABLE_RVV_F64)
@@ -107,6 +114,10 @@ if(TORQ_TILE_ENABLE_RVV_FP16)
     # --- DWConv F16 RVV variants ---
     torq_tile_add_test(test_dwconv_f16_f16_rvv
         dwconv/test_dwconv_f16_f16_rvv.cpp)
+    torq_tile_add_test(test_add_f16_f16_rvv
+        elementwise/test_add_f16_f16_rvv.cpp)
+    torq_tile_add_test(test_sub_f16_f16_rvv
+        elementwise/test_sub_f16_f16_rvv.cpp)
 endif()
 
 if(TORQ_TILE_ENABLE_RVV_BF16)

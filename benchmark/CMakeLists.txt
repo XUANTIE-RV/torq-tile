@@ -24,6 +24,8 @@ if(TORQ_TILE_ENABLE_RVV)
         conv/bench_igemm_f32_f32_rvv.cpp
         conv/bench_igemm_i8_i8_rvv.cpp
         dwconv/bench_dwconv_f32_f32_rvv.cpp
+        elementwise/bench_add_f32_f32_rvv.cpp
+        elementwise/bench_sub_f32_f32_rvv.cpp
     )
 endif()
 
@@ -41,6 +43,8 @@ if(TORQ_TILE_ENABLE_RVV_FP16)
         conv/bench_conv_f16_f16_rvv.cpp
         conv/bench_igemm_f16_f16_rvv.cpp
         dwconv/bench_dwconv_f16_f16_rvv.cpp
+        elementwise/bench_add_f16_f16_rvv.cpp
+        elementwise/bench_sub_f16_f16_rvv.cpp
     )
 endif()
 

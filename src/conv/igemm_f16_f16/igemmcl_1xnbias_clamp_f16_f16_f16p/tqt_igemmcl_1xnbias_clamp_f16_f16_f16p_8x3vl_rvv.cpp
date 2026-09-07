@@ -12,6 +12,7 @@
 
 #include "src/common/tqt_common.h"
 #include "src/common/tqt_gemm_pack_rvv.h"
+#include "src/conv/igemm_f16_f16/tqt_kernel_igemm_f16_f16_8x3vl_rvv.h"
 #include "src/gemm/gemm_f16_f16/tqt_kernel_gemm_f16_f16_8x3vl_rvv.h"
 
 static const size_t VLENB = csrr_vlenb();
@@ -136,26 +137,27 @@ static void igemmcl_packed_kernel(size_t IC, size_t IC_stride, size_t kd_start, 
             }
             for (size_t kw = 0; kw < KW; kw++) {
                 const float16_t *b_bases[8] = {nullptr};
+                bool all_valid = true;
                 for (size_t i = 0; i < MR; i++) {
                     int iw_val = (int)(ow_arr[i] * SW + kw * DW) - (int)PW;
                     if (!flag_h[i] && iw_val >= 0 && iw_val < (int)IW) {
                         b_bases[i] = input_group + id_arr[i] * IH * IW * IC_stride +
                                      ih_arr[i] * IW * IC_stride + iw_val * IC_stride;
+                    } else {
+                        all_valid = false;
                     }
                 }
 
-                for (size_t ic = 0; ic < IC; ic++) {
-                    float16_t a_data[8] = {0};
-                    for (size_t i = 0; i < MR; i++) {
-                        if (b_bases[i]) {
-                            a_data[i] = b_bases[i][ic];
-                        }
-                    }
-                    tqt_load_a_kernel_gemm_f16_f16_8x3vl_rvv<MR>(a_data, 1);
-                    // Packed weight: contiguous load
+                auto load_weights = [&]() {
                     tqt_load_b_kernel_gemm_f16_f16_8x3vl_rvv<NR>(vl, w_ptr, vlmax);
-                    tqt_vfmacc_kernel_gemm_f16_f16_8x3vl_rvv<MR, NR>(vl);
                     w_ptr += NR * vl;
+                };
+                if (all_valid) {
+                    tqt_igemmcl_fma_loop_f16_f16_8x3vl_rvv<MR, NR, false>(IC, b_bases, vl,
+                                                                          load_weights);
+                } else {
+                    tqt_igemmcl_fma_loop_f16_f16_8x3vl_rvv<MR, NR, true>(IC, b_bases, vl,
+                                                                         load_weights);
                 }
             }
         }

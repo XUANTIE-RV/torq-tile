@@ -11,6 +11,7 @@
 #include "tqt_igemmcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dx_qai8_1vlx4_rvv.h"
 
 #include "src/common/tqt_common.h"
+#include "src/conv/igemm_i8_i8/tqt_kernel_igemm_i8_i8_4x1vl_rvv.h"
 #include "src/conv/igemm_i8_i8/tqt_kernel_igemmcf_i8_i8_1vlx4_rvv.h"
 #include "src/gemm/gemm_i8_i8/tqt_kernel_gemm_i8_i8_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i8/tqt_utils_i8_i8.h"
@@ -115,19 +116,30 @@ static void igemmcf_kernel(size_t ic_start, size_t ic_end, int8_t *D, const int8
                     flag_h[i] = flag_d[i] || (ih[i] < 0 || ih[i] >= (int)IH);
                 }
                 for (size_t kw = 0; kw < KW; kw++) {
-                    int8_t b_data[4] = {0};
-                    for (size_t i = 0; i < NR; i++) {
+                    auto load_input = [&](size_t i) {
                         int iw = (int)(ow_arr[i] * SW + kw * DW) - (int)PW;
                         if (!flag_h[i] && iw >= 0 && iw < (int)IW) {
-                            b_data[i] = b_base[id[i] * IH * IW + ih[i] * IW + iw];
+                            return (int32_t)b_base[id[i] * IH * IW + ih[i] * IW + iw];
                         }
-                    }
-                    const int8_t *b_ptrs[4] = {&b_data[0], &b_data[1], &b_data[2], &b_data[3]};
+                        return int32_t{0};
+                    };
+                    int32_t a0 = 0;
+                    int32_t a1 = 0;
+                    int32_t a2 = 0;
+                    int32_t a3 = 0;
+                    if constexpr (NR >= 1)
+                        a0 = load_input(0);
+                    if constexpr (NR >= 2)
+                        a1 = load_input(1);
+                    if constexpr (NR >= 3)
+                        a2 = load_input(2);
+                    if constexpr (NR >= 4)
+                        a3 = load_input(3);
 
                     // Load weight vector (OC direction, strided for non-packed) into v0
                     tqt_load_bt_kernel_gemm_i8_i8_4x1vl_rvv(vl, w_ptr, ldw);
                     // Widening multiply-accumulate: NR spatial scalars x 1 OC vector
-                    tqt_vmacc_kernel_gemm_i8_i8_4x1vl_rvv<NR>(vl, b_ptrs);
+                    tqt_vmacc_direct_kernel_igemm_i8_i8_4x1vl_rvv<NR>(vl, a0, a1, a2, a3);
                     w_ptr += 1;
                 }
             }

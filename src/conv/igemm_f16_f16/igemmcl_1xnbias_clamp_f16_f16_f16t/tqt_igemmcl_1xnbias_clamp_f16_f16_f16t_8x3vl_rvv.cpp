@@ -11,6 +11,7 @@
 #include "tqt_igemmcl_1xnbias_clamp_f16_f16_f16t_8x3vl_rvv.h"
 
 #include "src/common/tqt_common.h"
+#include "src/conv/igemm_f16_f16/tqt_kernel_igemm_f16_f16_8x3vl_rvv.h"
 #include "src/gemm/gemm_f16_f16/tqt_kernel_gemm_f16_f16_8x3vl_rvv.h"
 
 static const size_t VLENB = csrr_vlenb();
@@ -121,29 +122,27 @@ static void igemmcl_kernel(size_t IC, size_t IC_stride, size_t kd_start, size_t 
                 // CL: input[id, ih, iw, ic] = base + id*IH*IW*IC + ih*IW*IC + iw*IC + ic
                 // Base address (without ic) is stable for the entire IC loop.
                 const float16_t *b_bases[8] = {nullptr};
+                bool all_valid = true;
                 for (size_t i = 0; i < MR; i++) {
                     int iw_val = (int)(ow_arr[i] * SW + kw * DW) - (int)PW;
                     if (!flag_h[i] && iw_val >= 0 && iw_val < (int)IW) {
                         b_bases[i] = input_group + id_arr[i] * IH * IW * IC_stride +
                                      ih_arr[i] * IW * IC_stride + iw_val * IC_stride;
+                    } else {
+                        all_valid = false;
                     }
                 }
 
-                // IC inner loop — boundary check already done, no branches here
-                for (size_t ic = 0; ic < IC; ic++) {
-                    float16_t a_data[8] = {0};
-                    for (size_t i = 0; i < MR; i++) {
-                        if (b_bases[i]) {
-                            a_data[i] = b_bases[i][ic];
-                        }
-                    }
-                    // Load MR input scalars into ft0..ft(MR-1)
-                    tqt_load_a_kernel_gemm_f16_f16_8x3vl_rvv<MR>(a_data, 1);
-                    // Load NR weight vectors (transposed B, strided) into v0..v(NR-1)
+                auto load_weights = [&]() {
                     tqt_load_bt_kernel_gemm_f16_f16_8x3vl_rvv<NR>(vl, w_ptr, ldw);
-                    // FMA
-                    tqt_vfmacc_kernel_gemm_f16_f16_8x3vl_rvv<MR, NR>(vl);
                     w_ptr += 1;
+                };
+                if (all_valid) {
+                    tqt_igemmcl_fma_loop_f16_f16_8x3vl_rvv<MR, NR, false>(IC, b_bases, vl,
+                                                                          load_weights);
+                } else {
+                    tqt_igemmcl_fma_loop_f16_f16_8x3vl_rvv<MR, NR, true>(IC, b_bases, vl,
+                                                                         load_weights);
                 }
             }
         }

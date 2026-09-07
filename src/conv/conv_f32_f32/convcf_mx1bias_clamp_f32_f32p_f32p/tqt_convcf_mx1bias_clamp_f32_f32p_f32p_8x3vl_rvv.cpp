@@ -130,9 +130,9 @@ static void b_im2colpack_cf_fill(float *dst, size_t sub_n, size_t col_start,
                         if (id_in < 0 || id_in >= (int)ID || ih_in < 0 || ih_in >= (int)IH) {
                             memset(row_dst + wp, 0, cnt * sizeof(float));
                         } else {
-                            // Contiguous vector copy when stride==1 && dilation==1
-                            if (SW == 1 && DW == 1) {
-                                int iw_s = (int)(ow_v + kw) - (int)PW;
+                            // Contiguous vector copy when stride == 1
+                            if (SW == 1) {
+                                int iw_s = (int)(ow_v + kw * DW) - (int)PW;
                                 size_t pl = (iw_s < 0) ? TQT_MIN(cnt, (size_t)(-iw_s)) : 0;
                                 int iw_e = iw_s + (int)cnt - 1;
                                 size_t pr = (iw_e >= (int)IW)
@@ -158,7 +158,7 @@ static void b_im2colpack_cf_fill(float *dst, size_t sub_n, size_t col_start,
                                 if (pr)
                                     memset(row_dst + wp + cnt - pr, 0, pr * sizeof(float));
                             } else {
-                                // Non-unit stride/dilation: scalar fallback
+                                // Non-unit stride: scalar fallback
                                 for (size_t i = 0; i < cnt; ++i) {
                                     int iw_in = (int)((ow_v + i) * SW + kw * DW) - (int)PW;
                                     if (iw_in >= 0 && iw_in < (int)IW)

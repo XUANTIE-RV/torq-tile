@@ -11,6 +11,7 @@
 #include "tqt_igemmcf_mx1bias_clamp_f32_f32_f32_3vlx8_rvv.h"
 
 #include "src/common/tqt_common.h"
+#include "src/conv/igemm_f32_f32/tqt_kernel_igemm_f32_f32_8x3vl_rvv.h"
 #include "src/conv/igemm_f32_f32/tqt_kernel_igemmcf_f32_f32_3vlx8_rvv.h"
 
 static const size_t VLENB = csrr_vlenb();
@@ -115,19 +116,42 @@ static void igemmcf_kernel(size_t K_inner, size_t ic_start, size_t ic_end, float
                     flag_h[i] = flag_d[i] || (ih[i] < 0 || ih[i] >= (int)IH);
                 }
                 for (size_t kw = 0; kw < KW; kw++) {
-                    float b_data[8] = {0};
-                    for (size_t i = 0; i < NR; i++) {
+                    auto load_input = [&](size_t i) {
                         int iw = (int)(ow_arr[i] * SW + kw * DW) - (int)PW;
                         if (!flag_h[i] && iw >= 0 && iw < (int)IW) {
-                            b_data[i] = b_base[id[i] * IH * IW + ih[i] * IW + iw];
+                            return b_base[id[i] * IH * IW + ih[i] * IW + iw];
                         }
-                    }
-                    // Load NR input scalars into ft0..ft(NR-1)
-                    tqt_load_a_kernel_gemm_f32_f32_8x3vl_rvv<NR>(b_data, 1);
+                        return 0.0f;
+                    };
+                    float a0 = 0.0f;
+                    float a1 = 0.0f;
+                    float a2 = 0.0f;
+                    float a3 = 0.0f;
+                    float a4 = 0.0f;
+                    float a5 = 0.0f;
+                    float a6 = 0.0f;
+                    float a7 = 0.0f;
+                    if constexpr (NR >= 1)
+                        a0 = load_input(0);
+                    if constexpr (NR >= 2)
+                        a1 = load_input(1);
+                    if constexpr (NR >= 3)
+                        a2 = load_input(2);
+                    if constexpr (NR >= 4)
+                        a3 = load_input(3);
+                    if constexpr (NR >= 5)
+                        a4 = load_input(4);
+                    if constexpr (NR >= 6)
+                        a5 = load_input(5);
+                    if constexpr (NR >= 7)
+                        a6 = load_input(6);
+                    if constexpr (NR >= 8)
+                        a7 = load_input(7);
                     // Load MR weight vectors (strided) into v0..v(MR-1)
                     tqt_load_bt_kernel_gemm_f32_f32_8x3vl_rvv<MR>(vl, w_ptr, ldw);
-                    // FMA: ft[nr] * v[mr] -> acc[nr*3+mr]
-                    tqt_vfmacc_kernel_gemm_f32_f32_8x3vl_rvv<NR, MR>(vl);
+                    // FMA: a[nr] * v[mr] -> acc[nr*3+mr]
+                    tqt_vfmacc_direct_kernel_igemm_f32_f32_8x3vl_rvv<NR, MR>(vl, a0, a1, a2, a3, a4,
+                                                                             a5, a6, a7);
                     w_ptr += 1;
                 }
             }
@@ -254,8 +278,8 @@ void tqt_run_igemm_igemmcf_mx1bias_clamp_f32_f32_f32_3vlx8_rvv(
             const size_t actual_m = TQT_MIN(m - m_idx, m_step);
 
             const float *w_ptr = (const float *)A + m_idx * lda + k_idx_a;
-            const float *bias_ptr = bias ? (const float *)bias + m_idx : NULL;
-            const float *c_ptr = C ? (const float *)C + m_idx * ldc + (global_n) : NULL;
+            const float *bias_ptr = bias ? (const float *)bias + m_idx : nullptr;
+            const float *c_ptr = C ? (const float *)C + m_idx * ldc + (global_n) : nullptr;
             float *d_ptr = (float *)D + m_idx * ldd + (global_n);
 
             // M tail handling (symmetric to GEMM N tail handling)
@@ -276,8 +300,8 @@ void tqt_run_igemm_igemmcf_mx1bias_clamp_f32_f32_f32_3vlx8_rvv(
             size_t remain_m = actual_m - size_m;
             if (remain_m > 0) {
                 const float *w_remain = w_ptr + size_m * lda;
-                const float *bias_remain = bias_ptr ? bias_ptr + size_m : NULL;
-                const float *c_remain = c_ptr ? c_ptr + size_m * ldc : NULL;
+                const float *bias_remain = bias_ptr ? bias_ptr + size_m : nullptr;
+                const float *c_remain = c_ptr ? c_ptr + size_m * ldc : nullptr;
                 float *d_remain = d_ptr + size_m * ldd;
                 igemmcf_dispatch(remain_m, actual_n, K_inner, ic_start, ic_end, d_remain, w_remain,
                                  input_group, c_remain, bias_remain, ldd, lda, ldc, clamp_min,

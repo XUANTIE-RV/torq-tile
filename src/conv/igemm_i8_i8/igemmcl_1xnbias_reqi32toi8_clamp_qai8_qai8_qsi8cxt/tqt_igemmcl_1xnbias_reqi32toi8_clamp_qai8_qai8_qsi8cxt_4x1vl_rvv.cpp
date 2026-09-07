@@ -11,6 +11,7 @@
 #include "tqt_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt_4x1vl_rvv.h"
 
 #include "src/common/tqt_common.h"
+#include "src/conv/igemm_i8_i8/tqt_kernel_igemm_i8_i8_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i8/tqt_kernel_gemm_i8_i8_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i8/tqt_utils_i8_i8.h"
 
@@ -113,29 +114,25 @@ static void igemmcl_kernel(size_t IC, size_t IC_stride, size_t KD, size_t KH, si
                 // Precompute base addresses for MR spatial positions.
                 // CL: input[id, ih, iw, ic] = base + id*IH*IW*IC + ih*IW*IC + iw*IC + ic
                 const int8_t *b_bases[4] = {nullptr};
+                bool all_valid = true;
                 for (size_t i = 0; i < MR; i++) {
                     int iw_val = (int)(ow_arr[i] * SW + kw * DW) - (int)PW;
                     if (!flag_h[i] && iw_val >= 0 && iw_val < (int)IW) {
                         b_bases[i] = input_group + id_arr[i] * IH * IW * IC_stride +
                                      ih_arr[i] * IW * IC_stride + iw_val * IC_stride;
+                    } else {
+                        all_valid = false;
                     }
                 }
 
-                // IC inner loop — boundary check already done, no branches here
-                for (size_t ic = 0; ic < IC; ic++) {
-                    int8_t a_data[4] = {0};
-                    for (size_t i = 0; i < MR; i++) {
-                        if (b_bases[i]) {
-                            a_data[i] = b_bases[i][ic];
-                        }
-                    }
-                    const int8_t *a_ptrs[4] = {&a_data[0], &a_data[1], &a_data[2], &a_data[3]};
-
-                    // Load weight vector (transposed B, strided) into v0
+                auto load_weights = [&]() {
                     tqt_load_bt_kernel_gemm_i8_i8_4x1vl_rvv(vl, w_ptr, ldw);
-                    // Widening multiply-accumulate
-                    tqt_vmacc_kernel_gemm_i8_i8_4x1vl_rvv<MR>(vl, a_ptrs);
                     w_ptr += 1;
+                };
+                if (all_valid) {
+                    tqt_igemmcl_fma_loop_i8_i8_4x1vl_rvv<MR, false>(IC, b_bases, vl, load_weights);
+                } else {
+                    tqt_igemmcl_fma_loop_i8_i8_4x1vl_rvv<MR, true>(IC, b_bases, vl, load_weights);
                 }
             }
         }

@@ -65,6 +65,9 @@ if(TORQ_TILE_ENABLE_RVV)
     # by __riscv_zfh/__riscv_zvfh and __riscv_zvfbfwma feature macros.
     torq_tile_add_test(test_gemm_i8_i4_rvv
         gemm/test_gemm_i8_i4_rvv.cpp)
+    # --- Gemm i8_i2 RVV variants ---
+    torq_tile_add_test(test_gemm_i8_i2_rvv
+        gemm/test_gemm_i8_i2_rvv.cpp)
     # --- Conv F32 RVV variants ---
     torq_tile_add_test(test_conv_f32_f32_rvv
         conv/test_conv_f32_f32_rvv.cpp)

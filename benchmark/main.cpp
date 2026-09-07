@@ -29,6 +29,7 @@ namespace benchmark
 void register_gemm_f32_f32_rvv_benchmarks();
 void register_gemm_i8_i8_rvv_benchmarks();
 void register_gemm_i8_i4_rvv_benchmarks();
+void register_gemm_i8_i2_rvv_benchmarks();
 void register_conv_f32_f32_rvv_benchmarks();
 void register_conv_i8_i8_rvv_benchmarks();
 void register_igemmcf_f32_f32_rvv_benchmarks();
@@ -56,6 +57,7 @@ inline void register_gemm_benchmarks()
     register_gemm_f32_f32_rvv_benchmarks();
     register_gemm_i8_i8_rvv_benchmarks();
     register_gemm_i8_i4_rvv_benchmarks();
+    register_gemm_i8_i2_rvv_benchmarks();
 #endif
 #ifdef TORQ_TILE_ENABLE_RVV_FP16
     register_gemm_f16_f16_rvv_benchmarks();

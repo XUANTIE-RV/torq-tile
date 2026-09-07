@@ -85,7 +85,7 @@ static inline void tqt_dwconv_3x3s1_packed_kernel_f32_rvv(size_t oh_start, size_
         const float *in_block = packed_input + ic1 * C0 * in_spatial;
         const float *wt_block = packed_weight + channel_offset * kernel_size;
         float *out_block = packed_output + channel_offset * out_spatial;
-        const float *bias_block = (bias != NULL) ? (bias + channel_offset) : NULL;
+        const float *bias_block = (bias != nullptr) ? (bias + channel_offset) : nullptr;
 
         // Preload bias and 9 weight vectors held across all (oh, ow) iterations.
         vfloat32m1_t v_bias =

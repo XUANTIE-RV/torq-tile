@@ -1033,3 +1033,5 @@ static inline void tqt_store_widen_f32_kernel_gemm_f16_i4_8x2vl_rvv(size_t vl, f
             asm volatile("vse32.v v2, (%0)" : : "r"(d_row + 1 * stride_col) : "memory");
     }
 }
+
+#undef TQT_VZERO_FP16_W4A16

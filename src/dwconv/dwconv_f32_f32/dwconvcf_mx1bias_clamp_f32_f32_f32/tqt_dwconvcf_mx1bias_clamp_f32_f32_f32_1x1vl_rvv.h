@@ -28,10 +28,11 @@ size_t tqt_get_output_size_dwconvcf_mx1bias_clamp_f32_f32_f32_1x1vl_rvv(
 ///
 /// @param input   [IC, ID, IH, IW] activation tensor, single batch.
 /// @param weight  [OC, 1, KD, KH, KW] PyTorch dwconv weight.
-/// @param bias    [OC] or NULL.
+/// @param bias    [OC] or nullptr.
 /// @param output  [OC, OD, OH, OW] output buffer, single batch.
 /// @param params  Convolution parameters; params->groups must equal params->input_channel.
-/// @param clamp_min,clamp_max  Output element-wise clamp range.
+/// @param clamp_min  Minimum output element-wise clamp value.
+/// @param clamp_max  Maximum output element-wise clamp value.
 void tqt_run_dwconv_dwconvcf_mx1bias_clamp_f32_f32_f32_1x1vl_rvv(const void *input,
                                                                  const void *weight,
                                                                  const void *bias, void *output,

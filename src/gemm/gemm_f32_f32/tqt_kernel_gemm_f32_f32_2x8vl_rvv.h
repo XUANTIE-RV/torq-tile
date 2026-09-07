@@ -227,3 +227,5 @@ static inline void tqt_store_kernel_gemm_f32_f32_2x8vl_rvv(size_t vl, float *D, 
     if constexpr (MR >= 2)
         asm volatile("vse32.v v24, (%0)" : : "r"(D + 1 * stride_row) : "memory");
 }
+
+#undef TQT_VZERO_FP32_M8

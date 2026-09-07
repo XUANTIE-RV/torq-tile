@@ -15,7 +15,7 @@
 
 #include "src/common/tqt_common.h"
 
-/// Register allocation for 8x3vl GEMM kernel:
+/// Register allocation for 4x1vl GEMM kernel:
 ///   a0-a3:   A[0-3]
 ///   v0:      B matrix columns (int8 lmul=1)
 ///   v8-v15:  Temp int16 (int16 lmul=2)

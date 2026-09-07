@@ -73,7 +73,7 @@ void tqt_run_dwconv_dwconvcl_1xnbias_clamp_f16_f16_f16t_1x1vl_rvv(
                         const size_t oc = oc_off + ic;
 
                         vfloat16m1_t acc;
-                        if (bias_base != NULL) {
+                        if (bias_base != nullptr) {
                             acc = __riscv_vle16_v_f16m1(bias_base + oc, vl);
                         } else {
                             acc = __riscv_vfmv_v_f_f16m1((float16_t)0.0f, vl);

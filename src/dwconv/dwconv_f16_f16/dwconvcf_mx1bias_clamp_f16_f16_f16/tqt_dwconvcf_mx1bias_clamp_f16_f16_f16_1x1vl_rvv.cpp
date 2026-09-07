@@ -33,7 +33,7 @@ void tqt_run_dwconv_dwconvcf_mx1bias_clamp_f16_f16_f16_1x1vl_rvv(
 
     const float16_t *in_base = (const float16_t *)input;
     const float16_t *wt_base = (const float16_t *)weight;
-    const float16_t *bias_base = (const float16_t *)bias;  // may be NULL
+    const float16_t *bias_base = (const float16_t *)bias;  // may be nullptr
     float16_t *out_base = (float16_t *)output;
 
     const size_t IC = params->input_channel;
@@ -69,7 +69,7 @@ void tqt_run_dwconv_dwconvcf_mx1bias_clamp_f16_f16_f16_1x1vl_rvv(
         const float16_t *in_ic = in_base + ic * in_spatial;
         const float16_t *wt_oc = wt_base + oc * kernel_size;
         float16_t *out_oc = out_base + oc * out_spatial;
-        const float16_t bias_val = (bias_base != NULL) ? bias_base[oc] : (float16_t)0.0f;
+        const float16_t bias_val = (bias_base != nullptr) ? bias_base[oc] : (float16_t)0.0f;
 
         for (size_t od = 0; od < OD; ++od) {
             for (size_t oh = 0; oh < OH; ++oh) {

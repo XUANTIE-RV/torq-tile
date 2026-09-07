@@ -17,7 +17,7 @@ extern "C" {
 // Generic dwconv (channel-first, NCDHW), Mx1 bias, clamp, FP32, non-packed.
 //   input  layout: [IC, ID, IH, IW]   (single batch)
 //   weight layout: [OC, 1, KD, KH, KW] (PyTorch dwconv convention)
-//   bias   layout: [OC] or NULL
+//   bias   layout: [OC] or nullptr
 //   output layout: [OC, OD, OH, OW]
 // Constraints (asserted at runtime):
 //   params->groups == params->input_channel  (dwconv requirement)

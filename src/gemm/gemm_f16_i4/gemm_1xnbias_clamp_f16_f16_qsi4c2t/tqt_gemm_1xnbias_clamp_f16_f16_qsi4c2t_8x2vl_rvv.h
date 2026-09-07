@@ -65,11 +65,11 @@ size_t tqt_get_d_size_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv(size_t m, siz
 /// @param[in]  k_idx_b   K index in B buffer (reserved for K-tiling).
 /// @param[in]  scale_b   Scale matrix [n, k/bl] f16 row-major.
 /// @param[in]  ldsb      Leading dimension of scale_b (in f16 elements, = k/bl).
-/// @param[in]  C         Input matrix C [m, n] f16 (optional, can be NULL).
+/// @param[in]  C         Input matrix C [m, n] f16 (optional, can be nullptr).
 /// @param[in]  ldc       Leading dimension of C.
 /// @param[out] D         Output matrix D [m, n] f16.
 /// @param[in]  ldd       Leading dimension of D.
-/// @param[in]  bias      Bias vector [1, n] f16 (optional, can be NULL).
+/// @param[in]  bias      Bias vector [1, n] f16 (optional, can be nullptr).
 /// @param[in]  clamp_min Minimum clamp value.
 /// @param[in]  clamp_max Maximum clamp value.
 void tqt_run_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv(

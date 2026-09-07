@@ -149,7 +149,7 @@ void tqt_run_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv(
 
             const int8_t *a_ptr = A_ptr + m_idx * lda;
             const int8_t *b_ptr = B_ptr + n_idx * ldb;
-            const float16_t *bias_tile_ptr = bias_ptr ? bias_ptr + n_idx : NULL;
+            const float16_t *bias_tile_ptr = bias_ptr ? bias_ptr + n_idx : nullptr;
             float16_t *d_ptr = D_ptr + m_idx * ldd + n_idx;
 
             // Per-row scale_a / -zero_point_a for this tile (MR active rows)

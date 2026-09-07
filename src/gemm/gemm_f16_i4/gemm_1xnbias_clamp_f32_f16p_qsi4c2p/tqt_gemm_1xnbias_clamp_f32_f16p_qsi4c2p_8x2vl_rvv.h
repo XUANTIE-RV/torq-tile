@@ -89,11 +89,11 @@ void tqt_run_bt_pack_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv(size_t n, siz
 /// @param[in]  k_idx_b   K index in B buffer (for sub-buffer scenarios).
 /// @param[in]  scale_b   Scale matrix [n, k/bl] f16 row-major.
 /// @param[in]  ldsb      Leading dimension of scale_b (in f16 elements, = k/bl).
-/// @param[in]  C         Input matrix C [m, n] f32 (optional, can be NULL).
+/// @param[in]  C         Input matrix C [m, n] f32 (optional, can be nullptr).
 /// @param[in]  ldc       Leading dimension of C (in f32 elements).
 /// @param[out] D         Output matrix D [m, n] f32.
 /// @param[in]  ldd       Leading dimension of D (in f32 elements).
-/// @param[in]  bias      Bias vector [1, n] f32 (optional, can be NULL).
+/// @param[in]  bias      Bias vector [1, n] f32 (optional, can be nullptr).
 /// @param[in]  clamp_min Minimum clamp value (f32).
 /// @param[in]  clamp_max Maximum clamp value (f32).
 void tqt_run_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv(

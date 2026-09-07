@@ -66,11 +66,11 @@ void tqt_run_a_pack_igemmcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8_1vlx4_rvv
 /// @param[in]  A_packed Packed weight matrix [OC/vl, K, vl] (int8).
 /// @param[in]  lda   Leading dimension of A (= K).
 /// @param[in]  k_idx_a  K offset in weight (unused, must be 0).
-/// @param[in]  C     Accumulation buffer (int32) or NULL (unused for i8 igemm).
+/// @param[in]  C     Accumulation buffer (int32) or nullptr (unused for i8 igemm).
 /// @param[in]  ldc   Leading dimension of C.
 /// @param[out] D     Output buffer [OC, OD, OH, OW] (int8).
 /// @param[in]  ldd   Leading dimension of D (= OD * OH * OW).
-/// @param[in]  bias  Bias vector [OC] (int32) or NULL.
+/// @param[in]  bias  Bias vector [OC] (int32) or nullptr.
 /// @param[in]  clamp_min Minimum clamp value (int8).
 /// @param[in]  clamp_max Maximum clamp value (int8).
 /// @param[in]  conv_params Convolution parameters (shapes, strides, padding, etc.).

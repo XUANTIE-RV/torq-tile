@@ -84,7 +84,7 @@ static inline void tqt_dwconv_3x3s1_packed_kernel_f16_rvv(
         const float16_t *in_block = packed_input + ic1 * C0 * in_spatial;
         const float16_t *wt_block = packed_weight + channel_offset * kernel_size;
         float16_t *out_block = packed_output + channel_offset * out_spatial;
-        const float16_t *bias_block = (bias != NULL) ? (bias + channel_offset) : NULL;
+        const float16_t *bias_block = (bias != nullptr) ? (bias + channel_offset) : nullptr;
 
         // Preload bias and 9 weight vectors held across all (oh, ow) iterations.
         vfloat16m1_t v_bias = bias_block ? __riscv_vle16_v_f16m1(bias_block, vl)

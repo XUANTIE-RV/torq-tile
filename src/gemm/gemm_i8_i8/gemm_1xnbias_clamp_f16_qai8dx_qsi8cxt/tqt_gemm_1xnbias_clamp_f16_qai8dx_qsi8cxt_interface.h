@@ -9,6 +9,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "src/common/tqt_common.h"
 #include "src/gemm/gemm_i8_i8/tqt_params_i8_i8.h"
 
 #ifdef __cplusplus
@@ -42,7 +43,7 @@ typedef size_t (*tqt_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_get_d_offset_func_t)(
 typedef size_t (*tqt_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_get_d_size_func_t)(size_t m, size_t n);
 
 /// Micro-kernel core function ("run" method)
-/// Note: C residual is currently not supported and must be NULL.
+/// Note: C residual is currently not supported and must be nullptr.
 typedef void (*tqt_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_run_gemm_func_t)(
     size_t m, size_t n, size_t k, const void *A, size_t lda, size_t k_idx_a, const void *B,
     size_t ldb, size_t k_idx_b, const void *C, size_t ldc, void *D, size_t ldd, const void *bias,

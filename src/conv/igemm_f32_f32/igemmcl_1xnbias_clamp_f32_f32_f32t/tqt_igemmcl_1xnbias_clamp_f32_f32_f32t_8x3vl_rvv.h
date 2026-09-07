@@ -45,11 +45,11 @@ size_t tqt_get_d_size_igemmcl_1xnbias_clamp_f32_f32_f32t_8x3vl_rvv(size_t m, siz
 /// @param[in]  B     Weight matrix [OC, K] row-major (transposed B).
 /// @param[in]  ldb   Leading dimension of B (= K).
 /// @param[in]  k_idx_b  K offset in weight (must be aligned to IC).
-/// @param[in]  C     Accumulation buffer or NULL.
+/// @param[in]  C     Accumulation buffer or nullptr.
 /// @param[in]  ldc   Leading dimension of C (= OC).
 /// @param[out] D     Output buffer [OD*OH*OW, OC].
 /// @param[in]  ldd   Leading dimension of D (= OC).
-/// @param[in]  bias  Bias vector [OC] or NULL.
+/// @param[in]  bias  Bias vector [OC] or nullptr.
 /// @param[in]  clamp_min Minimum clamp value.
 /// @param[in]  clamp_max Maximum clamp value.
 /// @param[in]  params Convolution parameters.

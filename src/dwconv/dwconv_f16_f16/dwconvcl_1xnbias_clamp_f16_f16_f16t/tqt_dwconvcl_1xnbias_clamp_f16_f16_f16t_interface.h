@@ -16,7 +16,7 @@ extern "C" {
 // Generic dwconv (channel-last, NDHWC), 1xN bias, clamp, FP16, non-packed.
 //   input  layout: [ID, IH, IW, IC]
 //   weight layout: [KD, KH, KW, 1, OC]   (HWIO style)
-//   bias   layout: [OC] or NULL
+//   bias   layout: [OC] or nullptr
 //   output layout: [OD, OH, OW, OC]
 // Constraints: groups == IC, OC % IC == 0, oc = ic + m * IC.
 

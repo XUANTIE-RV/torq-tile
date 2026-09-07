@@ -182,8 +182,8 @@ void tqt_run_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt_4x1vl_rvv(
 
             const int8_t *a_ptr = A_ptr + m_idx * lda;
             const int8_t *b_ptr = B_ptr + n_idx * ldb;
-            const int32_t *c_ptr = C_ptr ? C_ptr + m_idx * ldc + n_idx : NULL;
-            const int32_t *bias_tile_ptr = bias_ptr ? bias_ptr + n_idx : NULL;
+            const int32_t *c_ptr = C_ptr ? C_ptr + m_idx * ldc + n_idx : nullptr;
+            const int32_t *bias_tile_ptr = bias_ptr ? bias_ptr + n_idx : nullptr;
             int8_t *d_ptr = D_ptr + m_idx * ldd + n_idx;
 
             const int32_t *mult_ptr = mult + n_idx;

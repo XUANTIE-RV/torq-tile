@@ -135,7 +135,7 @@ void tqt_run_gemm_clamp_i32_i8_i8_4x1vl_rvv(size_t m, size_t n, size_t k, const 
 
             const int8_t *a_ptr = A_ptr + m_idx * lda;
             const int8_t *b_ptr = B_ptr + n_idx;
-            const int32_t *c_ptr = C_ptr ? C_ptr + m_idx * ldc + n_idx : NULL;
+            const int32_t *c_ptr = C_ptr ? C_ptr + m_idx * ldc + n_idx : nullptr;
             int32_t *d_ptr = D_ptr + m_idx * ldd + n_idx;
 
             size_t mr_idx = actual_m - 1;

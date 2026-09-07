@@ -145,8 +145,8 @@ void tqt_run_gemm_1xnbias_clamp_bf16_bf16_bf16_8x1vl_rvv(size_t m, size_t n, siz
 
             const bfloat16_t *a_ptr = (const bfloat16_t *)A + m_idx * lda;
             const bfloat16_t *b_ptr = (const bfloat16_t *)B + n_idx;
-            const bfloat16_t *c_ptr = C ? (const bfloat16_t *)C + m_idx * ldc + n_idx : NULL;
-            const bfloat16_t *bias_ptr = bias ? (const bfloat16_t *)bias + n_idx : NULL;
+            const bfloat16_t *c_ptr = C ? (const bfloat16_t *)C + m_idx * ldc + n_idx : nullptr;
+            const bfloat16_t *bias_ptr = bias ? (const bfloat16_t *)bias + n_idx : nullptr;
             bfloat16_t *d_ptr = (bfloat16_t *)D + m_idx * ldd + n_idx;
 
             size_t mr_idx = actual_m - 1;

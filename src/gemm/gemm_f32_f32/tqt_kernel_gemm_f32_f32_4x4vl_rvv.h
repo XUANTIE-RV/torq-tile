@@ -287,3 +287,5 @@ static inline void tqt_store_kernel_gemm_f32_f32_4x4vl_rvv(size_t vl, float *D, 
     if constexpr (MR >= 4)
         asm volatile("vse32.v v28, (%0)" : : "r"(D + 3 * stride_row) : "memory");
 }
+
+#undef TQT_VZERO_FP32_M4

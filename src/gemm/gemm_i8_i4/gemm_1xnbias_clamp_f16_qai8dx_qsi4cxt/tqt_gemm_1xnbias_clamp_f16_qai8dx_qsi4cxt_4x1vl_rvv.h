@@ -28,7 +28,7 @@ extern "C" {
 ///     stored as [n, k/2] uint8 with two nibbles per byte (lo = k+0, hi = k+1)
 ///     using ZP=8 unsigned encoding (signed [-8,7] stored as [0,15]).
 ///   - bias is f16[n] broadcast across rows.
-///   - C is f16[m, n] (optional, can be NULL).
+///   - C is f16[m, n] (optional, can be nullptr).
 ///   - D is f16[m, n].
 ///
 /// Algorithm (per output cell):
@@ -73,11 +73,11 @@ size_t tqt_get_d_size_gemm_1xnbias_clamp_f16_qai8dx_qsi4cxt_4x1vl_rvv(size_t m, 
 ///                        stored as [n, k/2] uint8.
 /// @param[in]  ldb       Leading dimension of B (in int4 elements, = k).
 /// @param[in]  k_idx_b   K index in B buffer (reserved for K-tiling).
-/// @param[in]  C         Input matrix C [m, n] f16 (optional, can be NULL).
+/// @param[in]  C         Input matrix C [m, n] f16 (optional, can be nullptr).
 /// @param[in]  ldc       Leading dimension of C (in f16 elements).
 /// @param[out] D         Output matrix D [m, n] f16.
 /// @param[in]  ldd       Leading dimension of D (in f16 elements).
-/// @param[in]  bias      Bias vector [1, n] f16 (optional, can be NULL).
+/// @param[in]  bias      Bias vector [1, n] f16 (optional, can be nullptr).
 /// @param[in]  clamp_min Minimum clamp value.
 /// @param[in]  clamp_max Maximum clamp value.
 /// @param[in]  params    Quantization parameters (scale_a[m], zp_a[m], scale_b[n]).

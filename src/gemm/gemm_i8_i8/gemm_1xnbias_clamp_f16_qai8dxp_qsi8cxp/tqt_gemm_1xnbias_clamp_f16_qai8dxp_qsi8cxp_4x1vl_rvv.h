@@ -26,7 +26,7 @@ extern "C" {
 /// Tile: m_step = 4, n_step = vlmax (RLEN/8 bytes).
 /// Inner loop: vsext.vf2 + vwmacc.vx (SEW=16) with per-row LHS zero-point correction.
 ///
-/// C residual is currently not supported and must be NULL.
+/// C residual is currently not supported and must be nullptr.
 
 /// Gets m step value.
 ///
@@ -180,17 +180,17 @@ void tqt_run_bt_pack_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv(size_t n, 
 /// @param[in]  B_packed Packed B buffer.
 /// @param[in]  ldb Leading dimension of packed B.
 /// @param[in]  k_idx_b K index in B buffer (sub-buffer support).
-/// @param[in]  C Residual matrix (currently must be NULL).
+/// @param[in]  C Residual matrix (currently must be nullptr).
 /// @param[in]  ldc Leading dimension of C (unused).
 /// @param[out] D Output matrix D [m, n] in row-major format (fp16).
 /// @param[in]  ldd Leading dimension of D.
-/// @param[in]  bias Bias vector [1, n] (fp16), broadcast across all rows. May be NULL.
+/// @param[in]  bias Bias vector [1, n] (fp16), broadcast across all rows. May be nullptr.
 /// @param[in]  clamp_min Minimum value for clamping (fp16).
 /// @param[in]  clamp_max Maximum value for clamping (fp16).
 /// @param[in]  params Quantization parameters (per-row scale_a/zero_point_a, per-channel scale_b).
 ///
 /// @note D is in row-major format.
-/// @note C residual is currently not supported and must be NULL.
+/// @note C residual is currently not supported and must be nullptr.
 void tqt_run_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv(
     size_t m, size_t n, size_t k, const void *A_packed, size_t lda, size_t k_idx_a,
     const void *B_packed, size_t ldb, size_t k_idx_b, const void *C, size_t ldc, void *D,

@@ -117,7 +117,7 @@ static inline void tqt_dwconv_5x5s1_packed_kernel_f32_rvv(size_t oh_start, size_
         const float *in_block = packed_input + ic1 * C0 * in_spatial;
         const float *wt_block = packed_weight + channel_offset * kernel_size;
         float *out_block = packed_output + channel_offset * out_spatial;
-        const float *bias_block = (bias != NULL) ? (bias + channel_offset) : NULL;
+        const float *bias_block = (bias != nullptr) ? (bias + channel_offset) : nullptr;
 
         vfloat32m1_t v_bias =
             bias_block ? __riscv_vle32_v_f32m1(bias_block, vl) : __riscv_vfmv_v_f_f32m1(0.0f, vl);

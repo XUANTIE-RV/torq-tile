@@ -75,7 +75,7 @@ void tqt_run_dwconv_dwconvcl_1xnbias_clamp_f32_f32_f32t_1x1vl_rvv(const void *in
                         const size_t oc = oc_off + ic;
 
                         vfloat32m1_t acc;
-                        if (bias_base != NULL) {
+                        if (bias_base != nullptr) {
                             acc = __riscv_vle32_v_f32m1(bias_base + oc, vl);
                         } else {
                             acc = __riscv_vfmv_v_f_f32m1(0.0f, vl);

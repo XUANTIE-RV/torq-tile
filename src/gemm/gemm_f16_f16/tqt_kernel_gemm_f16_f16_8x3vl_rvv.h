@@ -1042,3 +1042,5 @@ static inline void tqt_epilogue_vfmacc_kernel_gemm_f16_f16_8x3vl_rvv()
             asm volatile("vfmacc.vf v31, ft7, v2" ::: "v31");
     }
 }
+
+#undef TQT_VZERO_FP16

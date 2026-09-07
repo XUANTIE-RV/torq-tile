@@ -94,11 +94,11 @@ size_t tqt_get_d_size_igemmcf_mx1bias_clamp_f32_f32_f32_3vlx8_rvv(size_t m, size
 /// @param[in]  A     Weight matrix [OC, K] in row-major format.
 /// @param[in]  lda   Leading dimension of A (= K).
 /// @param[in]  k_idx_a  K offset in weight (must be aligned to KD*KH*KW).
-/// @param[in]  C     Accumulation buffer or NULL (used when k_idx_b > 0).
+/// @param[in]  C     Accumulation buffer or nullptr (used when k_idx_b > 0).
 /// @param[in]  ldc   Leading dimension of C (= OD * OH * OW).
 /// @param[out] D     Output buffer [OC, OD, OH, OW].
 /// @param[in]  ldd   Leading dimension of D (= OD * OH * OW).
-/// @param[in]  bias  Bias vector [OC] or NULL.
+/// @param[in]  bias  Bias vector [OC] or nullptr.
 /// @param[in]  clamp_min Minimum clamp value (applied on last K chunk).
 /// @param[in]  clamp_max Maximum clamp value (applied on last K chunk).
 /// @param[in]  params Convolution parameters (kernel shape, stride, dilation, pad).

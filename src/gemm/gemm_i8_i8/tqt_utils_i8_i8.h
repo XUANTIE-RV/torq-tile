@@ -15,15 +15,15 @@ extern "C" {
 
 static int64_t integer_from_exp(double input, int32_t *shift)
 {
-    uint64_t kSignMask = 0x8000000000000000LL;
-    uint64_t kExponentMask = 0x7ff0000000000000LL;
-    int32_t kExponentShift = 52;
-    int32_t kExponentBias = 1023;
-    uint32_t kExponentIsBadNum = 0x7ff;
-    uint64_t kFractionMask = 0x000fffffffc00000LL;
-    uint32_t kFractionShift = 22;
-    uint32_t kFractionRoundingMask = 0x003fffff;
-    uint32_t kFractionRoundingThreshold = 0x00200000;
+    const uint64_t sign_mask = 0x8000000000000000LL;
+    const uint64_t exponent_mask = 0x7ff0000000000000LL;
+    const int32_t exponent_shift = 52;
+    const int32_t exponent_bias = 1023;
+    const uint32_t exponent_is_bad_num = 0x7ff;
+    const uint64_t fraction_mask = 0x000fffffffc00000LL;
+    const uint32_t fraction_shift = 22;
+    const uint32_t fraction_rounding_mask = 0x003fffff;
+    const uint32_t fraction_rounding_threshold = 0x00200000;
 
     // We want to access the bits of the input double value directly, which is
     // tricky to do safely, so use a union to handle the casting.
@@ -38,7 +38,7 @@ static int64_t integer_from_exp(double input, int32_t *shift)
 
     // If the bitfield is all zeros apart from the sign bit, this is a normalized
     // zero value, so return standard values for this special case.
-    if ((u & ~kSignMask) == 0) {
+    if ((u & ~sign_mask) == 0) {
         *shift = 0;
         return 0;
     }
@@ -46,15 +46,15 @@ static int64_t integer_from_exp(double input, int32_t *shift)
     // Deal with NaNs and Infs, which are always indicated with a fixed pattern in
     // the exponent, and distinguished by whether the fractions are zero or
     // non-zero.
-    const uint32_t exponent_part = ((u & kExponentMask) >> kExponentShift);
-    if (exponent_part == kExponentIsBadNum) {
+    const uint32_t exponent_part = ((u & exponent_mask) >> exponent_shift);
+    if (exponent_part == exponent_is_bad_num) {
         *shift = 0x7fffffff;
-        if (u & kFractionMask) {
+        if (u & fraction_mask) {
             // NaN, so just return zero (with the exponent set to INT_MAX).
             return 0;
         } else {
             // Infinity, so return +/- INT_MAX.
-            if (u & kSignMask) {
+            if (u & sign_mask) {
                 return 0x8000000000000000;
             } else {
                 return 0x7fffffffffffffff;
@@ -67,22 +67,22 @@ static int64_t integer_from_exp(double input, int32_t *shift)
     // always returns values between 0.5 and 1.0 though, whereas the exponent
     // assumes 1.0 to 2.0 is the standard range, so I add on one to match that
     // interface.
-    *shift = (exponent_part - kExponentBias) + 1;
+    *shift = (exponent_part - exponent_bias) + 1;
 
     // There's an implicit high bit in the double format definition, so make sure
     // we include that at the top, and then reconstruct the rest of the fractional
     // value from the remaining fragments.
-    int64_t fraction = 0x40000000 + ((u & kFractionMask) >> kFractionShift);
+    int64_t fraction = 0x40000000 + ((u & fraction_mask) >> fraction_shift);
 
     // We're cutting off some bits at the bottom, so to exactly match the standard
     // frexp implementation here we'll apply rounding by adding one to the least
     // significant bit of the result if the discarded portion is over half of the
     // maximum.
-    if ((u & kFractionRoundingMask) > kFractionRoundingThreshold) {
+    if ((u & fraction_rounding_mask) > fraction_rounding_threshold) {
         fraction += 1;
     }
     // Negate the fraction if the sign bit was set.
-    if (u & kSignMask) {
+    if (u & sign_mask) {
         fraction *= -1;
     }
 

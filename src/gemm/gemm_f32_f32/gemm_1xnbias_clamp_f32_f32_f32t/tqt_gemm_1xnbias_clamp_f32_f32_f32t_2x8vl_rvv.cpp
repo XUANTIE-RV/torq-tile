@@ -167,8 +167,8 @@ void tqt_run_gemm_1xnbias_clamp_f32_f32_f32t_2x8vl_rvv(size_t m, size_t n, size_
             const float *a_ptr = (const float *)A + m_idx * lda;
             // For transposed B, start at row n_idx (B[n_idx, ...])
             const float *b_ptr = (const float *)B + n_idx * ldb;
-            const float *c_ptr = C ? (const float *)C + m_idx * ldc + n_idx : NULL;
-            const float *bias_ptr = bias ? (const float *)bias + n_idx : NULL;
+            const float *c_ptr = C ? (const float *)C + m_idx * ldc + n_idx : nullptr;
+            const float *bias_ptr = bias ? (const float *)bias + n_idx : nullptr;
             float *d_ptr = (float *)D + m_idx * ldd + n_idx;
 
             gemm_mrxnr_8vl_rvv(actual_m, actual_n, k, d_ptr, a_ptr, b_ptr, c_ptr, bias_ptr, ldd,

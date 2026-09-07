@@ -23,10 +23,16 @@ extern "C" {
 
 typedef size_t (*tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_get_output_size_func_t)(
     const tqt_conv_params *params);
-typedef size_t (*tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_get_packed_size_func_t)(
+typedef size_t (*tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_get_packed_input_size_func_t)(
+    const tqt_conv_params *params);
+typedef size_t (*tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_get_packed_weight_size_func_t)(
     const tqt_conv_params *params);
 typedef size_t (*tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_get_oh_step_func_t)(void);
-typedef void (*tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_run_pack_func_t)(
+typedef void (*tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_run_pack_input_func_t)(
+    const void *src, void *dst, const tqt_conv_params *params);
+typedef void (*tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_run_pack_weight_func_t)(
+    const void *src, void *dst, const tqt_conv_params *params);
+typedef void (*tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_run_unpack_output_func_t)(
     const void *src, void *dst, const tqt_conv_params *params);
 typedef void (*tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_run_dwconv_func_t)(
     size_t oh_start, size_t oh_end, const void *packed_input, const void *packed_weight,
@@ -36,12 +42,14 @@ typedef void (*tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_run_dwconv_func_t)
 struct tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_ukernel
 {
     tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_get_output_size_func_t get_output_size;
-    tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_get_packed_size_func_t get_packed_input_size;
-    tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_get_packed_size_func_t get_packed_weight_size;
+    tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_get_packed_input_size_func_t
+        get_packed_input_size;
+    tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_get_packed_weight_size_func_t
+        get_packed_weight_size;
     tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_get_oh_step_func_t get_oh_step;
-    tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_run_pack_func_t run_pack_input;
-    tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_run_pack_func_t run_pack_weight;
-    tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_run_pack_func_t run_unpack_output;
+    tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_run_pack_input_func_t run_pack_input;
+    tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_run_pack_weight_func_t run_pack_weight;
+    tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_run_unpack_output_func_t run_unpack_output;
     tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_run_dwconv_func_t run_dwconv;
 };
 

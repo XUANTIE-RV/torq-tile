@@ -58,11 +58,11 @@ size_t tqt_get_d_size_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt_4x1vl_r
 /// @param[in]  B     Weight matrix [OC, K] row-major (transposed B) (int8).
 /// @param[in]  ldb   Leading dimension of B (= K).
 /// @param[in]  k_idx_b  K offset in weight (must be aligned to IC).
-/// @param[in]  C     Accumulation buffer (int32) or NULL (unused for i8 igemm).
+/// @param[in]  C     Accumulation buffer (int32) or nullptr (unused for i8 igemm).
 /// @param[in]  ldc   Leading dimension of C.
 /// @param[out] D     Output buffer [OD*OH*OW, OC] (int8).
 /// @param[in]  ldd   Leading dimension of D (= OC).
-/// @param[in]  bias  Bias vector [OC] (int32) or NULL.
+/// @param[in]  bias  Bias vector [OC] (int32) or nullptr.
 /// @param[in]  clamp_min Minimum clamp value (int8).
 /// @param[in]  clamp_max Maximum clamp value (int8).
 /// @param[in]  conv_params Convolution parameters (shapes, strides, padding, etc.).

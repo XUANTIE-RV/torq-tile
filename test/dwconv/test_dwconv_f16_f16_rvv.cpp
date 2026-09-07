@@ -68,7 +68,9 @@ static auto spec_3x3s1_params()
         ConvTestParams(8, 8, 8, 16, 16, 3, 3, "Spec3x3s1NoPad"),
         ConvTestParams(8, 8, 8, 16, 16, 3, 3, "Spec3x3s1NoBias").set_bias(false).set_pad(1, 1),
         ConvTestParams(15, 15, 15, 16, 16, 3, 3, "Spec3x3s1Tail").set_pad(1, 1),
-        ConvTestParams(8, 16, 8, 16, 16, 3, 3, "Spec3x3s1DM2").set_pad(1, 1));
+        ConvTestParams(8, 16, 8, 16, 16, 3, 3, "Spec3x3s1DM2").set_pad(1, 1),
+        ConvTestParams(8, 8, 8, 4, 1, 3, 3, "Spec3x3s1OW1").set_pad(1, 1),
+        ConvTestParams(8, 8, 8, 5, 2, 3, 3, "Spec3x3s1OW2").set_pad(1, 1));
 }
 
 static auto spec_3x3s2_params()

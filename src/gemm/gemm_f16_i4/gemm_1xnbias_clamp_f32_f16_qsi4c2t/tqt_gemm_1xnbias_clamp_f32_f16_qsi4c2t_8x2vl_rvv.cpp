@@ -197,8 +197,8 @@ void tqt_run_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv(
             const float16_t *a_ptr = (const float16_t *)A + m_idx * lda;
             const uint8_t *b_ptr = (const uint8_t *)B + n_idx * b_byte_stride;
             const float16_t *scale_ptr = (const float16_t *)scale_b + n_idx * ldsb;
-            const float *c_ptr = C ? (const float *)C + m_idx * ldc + n_idx : NULL;
-            const float *bias_ptr = bias ? (const float *)bias + n_idx : NULL;
+            const float *c_ptr = C ? (const float *)C + m_idx * ldc + n_idx : nullptr;
+            const float *bias_ptr = bias ? (const float *)bias + n_idx : nullptr;
             float *d_ptr = (float *)D + m_idx * ldd + n_idx;
 
             size_t size_n = 0;

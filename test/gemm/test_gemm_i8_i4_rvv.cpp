@@ -30,6 +30,12 @@
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qai8dx_qsi4cxt/tqt_gemm_1xnbias_clamp_f16_qai8dx_qsi4cxt_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qai8dxp_qsi4cxp/tqt_gemm_1xnbias_clamp_f16_qai8dxp_qsi4cxp_4x1vl_rvv.h"
 // W4A8 block-quantized F16
+#include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qai8dx_qsi4c2t/tqt_gemm_1xnbias_clamp_f16_qai8dx_qsi4c2t_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qai8dxp_qsi4c2p/tqt_gemm_1xnbias_clamp_f16_qai8dxp_qsi4c2p_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qsi8d2_qai4c2t/tqt_gemm_1xnbias_clamp_f16_qsi8d2_qai4c2t_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qsi8d2_qsi4c2t/tqt_gemm_1xnbias_clamp_f16_qsi8d2_qsi4c2t_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qsi8d2p_qai4c2p/tqt_gemm_1xnbias_clamp_f16_qsi8d2p_qai4c2p_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qsi8d2p_qsi4c2p/tqt_gemm_1xnbias_clamp_f16_qsi8d2p_qsi4c2p_4x1vl_rvv.h"
 #endif  // __riscv_zfh && __riscv_zvfh
 
 #if defined(__riscv_zvfbfwma)
@@ -278,6 +284,10 @@ W4A8_BQ_DEFINE_PACKED_TEST(1xnbias_clamp_f32_qai8dxp_qsi4c2p, float,
                            run_w4a8_bq_qai8dxp_qsi4c2p_test, W4A8BQ_Qai8dx_Qsi4c2_PackedFuncs);
 
 #if defined(__riscv_zfh) && defined(__riscv_zvfh)
+W4A8_BQ_DEFINE_UNPACKED_TEST(1xnbias_clamp_f16_qai8dx_qsi4c2t, float16_t,
+                             run_w4a8_bq_qai8dx_qsi4c2t_test, W4A8BQ_Qai8dx_Qsi4c2_Funcs);
+W4A8_BQ_DEFINE_PACKED_TEST(1xnbias_clamp_f16_qai8dxp_qsi4c2p, float16_t,
+                           run_w4a8_bq_qai8dxp_qsi4c2p_test, W4A8BQ_Qai8dx_Qsi4c2_PackedFuncs);
 #endif  // __riscv_zfh && __riscv_zvfh
 
 #if defined(__riscv_zvfbfwma)
@@ -293,6 +303,10 @@ W4A8_BQ_DEFINE_PACKED_TEST(1xnbias_clamp_f32_qsi8d2p_qsi4c2p, float,
                            run_w4a8_bq_qsi8d2p_qsi4c2p_test, W4A8BQ_Qsi8d2_Qsi4c2_PackedFuncs);
 
 #if defined(__riscv_zfh) && defined(__riscv_zvfh)
+W4A8_BQ_DEFINE_UNPACKED_TEST(1xnbias_clamp_f16_qsi8d2_qsi4c2t, float16_t,
+                             run_w4a8_bq_qsi8d2_qsi4c2t_test, W4A8BQ_Qsi8d2_Qsi4c2_Funcs);
+W4A8_BQ_DEFINE_PACKED_TEST(1xnbias_clamp_f16_qsi8d2p_qsi4c2p, float16_t,
+                           run_w4a8_bq_qsi8d2p_qsi4c2p_test, W4A8BQ_Qsi8d2_Qsi4c2_PackedFuncs);
 #endif  // __riscv_zfh && __riscv_zvfh
 
 #if defined(__riscv_zvfbfwma)
@@ -308,6 +322,10 @@ W4A8_BQ_DEFINE_PACKED_TEST(1xnbias_clamp_f32_qsi8d2p_qai4c2p, float,
                            run_w4a8_bq_qsi8d2p_qai4c2p_test, W4A8BQ_Qsi8d2_Qai4c2_PackedFuncs);
 
 #if defined(__riscv_zfh) && defined(__riscv_zvfh)
+W4A8_BQ_DEFINE_UNPACKED_TEST(1xnbias_clamp_f16_qsi8d2_qai4c2t, float16_t,
+                             run_w4a8_bq_qsi8d2_qai4c2t_test, W4A8BQ_Qsi8d2_Qai4c2_Funcs);
+W4A8_BQ_DEFINE_PACKED_TEST(1xnbias_clamp_f16_qsi8d2p_qai4c2p, float16_t,
+                           run_w4a8_bq_qsi8d2p_qai4c2p_test, W4A8BQ_Qsi8d2_Qai4c2_PackedFuncs);
 #endif  // __riscv_zfh && __riscv_zvfh
 
 #if defined(__riscv_zvfbfwma)

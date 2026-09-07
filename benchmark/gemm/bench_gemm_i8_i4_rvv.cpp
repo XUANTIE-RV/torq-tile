@@ -27,6 +27,12 @@
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qai8dx_qsi4cxt/tqt_gemm_1xnbias_clamp_f16_qai8dx_qsi4cxt_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qai8dxp_qsi4cxp/tqt_gemm_1xnbias_clamp_f16_qai8dxp_qsi4cxp_4x1vl_rvv.h"
 // W4A8 BQ F16
+#include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qai8dx_qsi4c2t/tqt_gemm_1xnbias_clamp_f16_qai8dx_qsi4c2t_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qai8dxp_qsi4c2p/tqt_gemm_1xnbias_clamp_f16_qai8dxp_qsi4c2p_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qsi8d2_qai4c2t/tqt_gemm_1xnbias_clamp_f16_qsi8d2_qai4c2t_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qsi8d2_qsi4c2t/tqt_gemm_1xnbias_clamp_f16_qsi8d2_qsi4c2t_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qsi8d2p_qai4c2p/tqt_gemm_1xnbias_clamp_f16_qsi8d2p_qai4c2p_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qsi8d2p_qsi4c2p/tqt_gemm_1xnbias_clamp_f16_qsi8d2p_qsi4c2p_4x1vl_rvv.h"
 #endif  // __riscv_zfh && __riscv_zvfh
 #if defined(__riscv_zvfbfwma)
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_bf16_qai8dx_qsi4cxt/tqt_gemm_1xnbias_clamp_bf16_qai8dx_qsi4cxt_4x1vl_rvv.h"
@@ -842,6 +848,10 @@ MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbias_clamp_f32_qai8dx_qsi4c2t, float, W4A8BQ_Qai8d
 MAKE_W4A8BQ_PACKED_FUNCS(1xnbias_clamp_f32_qai8dxp_qsi4c2p, float,
                          W4A8BQ_Qai8dx_Qsi4c2_PackedBenchFuncs)
 #if defined(__riscv_zfh) && defined(__riscv_zvfh)
+MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbias_clamp_f16_qai8dx_qsi4c2t, float16_t,
+                           W4A8BQ_Qai8dx_Qsi4c2_BenchFuncs)
+MAKE_W4A8BQ_PACKED_FUNCS(1xnbias_clamp_f16_qai8dxp_qsi4c2p, float16_t,
+                         W4A8BQ_Qai8dx_Qsi4c2_PackedBenchFuncs)
 #endif  // __riscv_zfh && __riscv_zvfh
 #if defined(__riscv_zvfbfwma)
 #endif  // __riscv_zvfbfwma
@@ -851,6 +861,10 @@ MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbias_clamp_f32_qsi8d2_qsi4c2t, float, W4A8BQ_Qsi8d
 MAKE_W4A8BQ_PACKED_FUNCS(1xnbias_clamp_f32_qsi8d2p_qsi4c2p, float,
                          W4A8BQ_Qsi8d2_Qsi4c2_PackedBenchFuncs)
 #if defined(__riscv_zfh) && defined(__riscv_zvfh)
+MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbias_clamp_f16_qsi8d2_qsi4c2t, float16_t,
+                           W4A8BQ_Qsi8d2_Qsi4c2_BenchFuncs)
+MAKE_W4A8BQ_PACKED_FUNCS(1xnbias_clamp_f16_qsi8d2p_qsi4c2p, float16_t,
+                         W4A8BQ_Qsi8d2_Qsi4c2_PackedBenchFuncs)
 #endif  // __riscv_zfh && __riscv_zvfh
 #if defined(__riscv_zvfbfwma)
 #endif  // __riscv_zvfbfwma
@@ -860,6 +874,10 @@ MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbias_clamp_f32_qsi8d2_qai4c2t, float, W4A8BQ_Qsi8d
 MAKE_W4A8BQ_PACKED_FUNCS(1xnbias_clamp_f32_qsi8d2p_qai4c2p, float,
                          W4A8BQ_Qsi8d2_Qai4c2_PackedBenchFuncs)
 #if defined(__riscv_zfh) && defined(__riscv_zvfh)
+MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbias_clamp_f16_qsi8d2_qai4c2t, float16_t,
+                           W4A8BQ_Qsi8d2_Qai4c2_BenchFuncs)
+MAKE_W4A8BQ_PACKED_FUNCS(1xnbias_clamp_f16_qsi8d2p_qai4c2p, float16_t,
+                         W4A8BQ_Qsi8d2_Qai4c2_PackedBenchFuncs)
 #endif  // __riscv_zfh && __riscv_zvfh
 #if defined(__riscv_zvfbfwma)
 #endif  // __riscv_zvfbfwma
@@ -879,6 +897,11 @@ void register_gemm_i8_i4_blockquant_rvv_benchmarks()
     register_w4a8bq_qai8dx_qsi4c2_packed<float>("gemm_1xnbias_clamp_f32_qai8dxp_qsi4c2p_4x1vl_rvv",
                                                 make_funcs_1xnbias_clamp_f32_qai8dxp_qsi4c2p());
 #if defined(__riscv_zfh) && defined(__riscv_zvfh)
+    register_w4a8bq_qai8dx_qsi4c2<float16_t>("gemm_1xnbias_clamp_f16_qai8dx_qsi4c2t_4x1vl_rvv",
+                                             make_funcs_1xnbias_clamp_f16_qai8dx_qsi4c2t());
+    register_w4a8bq_qai8dx_qsi4c2_packed<float16_t>(
+        "gemm_1xnbias_clamp_f16_qai8dxp_qsi4c2p_4x1vl_rvv",
+        make_funcs_1xnbias_clamp_f16_qai8dxp_qsi4c2p());
 #endif  // __riscv_zfh && __riscv_zvfh
 #if defined(__riscv_zvfbfwma)
 #endif  // __riscv_zvfbfwma
@@ -889,6 +912,11 @@ void register_gemm_i8_i4_blockquant_rvv_benchmarks()
     register_w4a8bq_qsi8d2_qsi4c2_packed<float>("gemm_1xnbias_clamp_f32_qsi8d2p_qsi4c2p_4x1vl_rvv",
                                                 make_funcs_1xnbias_clamp_f32_qsi8d2p_qsi4c2p());
 #if defined(__riscv_zfh) && defined(__riscv_zvfh)
+    register_w4a8bq_qsi8d2_qsi4c2<float16_t>("gemm_1xnbias_clamp_f16_qsi8d2_qsi4c2t_4x1vl_rvv",
+                                             make_funcs_1xnbias_clamp_f16_qsi8d2_qsi4c2t());
+    register_w4a8bq_qsi8d2_qsi4c2_packed<float16_t>(
+        "gemm_1xnbias_clamp_f16_qsi8d2p_qsi4c2p_4x1vl_rvv",
+        make_funcs_1xnbias_clamp_f16_qsi8d2p_qsi4c2p());
 #endif  // __riscv_zfh && __riscv_zvfh
 #if defined(__riscv_zvfbfwma)
 #endif  // __riscv_zvfbfwma
@@ -899,6 +927,11 @@ void register_gemm_i8_i4_blockquant_rvv_benchmarks()
     register_w4a8bq_qsi8d2_qai4c2_packed<float>("gemm_1xnbias_clamp_f32_qsi8d2p_qai4c2p_4x1vl_rvv",
                                                 make_funcs_1xnbias_clamp_f32_qsi8d2p_qai4c2p());
 #if defined(__riscv_zfh) && defined(__riscv_zvfh)
+    register_w4a8bq_qsi8d2_qai4c2<float16_t>("gemm_1xnbias_clamp_f16_qsi8d2_qai4c2t_4x1vl_rvv",
+                                             make_funcs_1xnbias_clamp_f16_qsi8d2_qai4c2t());
+    register_w4a8bq_qsi8d2_qai4c2_packed<float16_t>(
+        "gemm_1xnbias_clamp_f16_qsi8d2p_qai4c2p_4x1vl_rvv",
+        make_funcs_1xnbias_clamp_f16_qsi8d2p_qai4c2p());
 #endif  // __riscv_zfh && __riscv_zvfh
 #if defined(__riscv_zvfbfwma)
 #endif  // __riscv_zvfbfwma

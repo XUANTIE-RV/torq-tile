@@ -26,7 +26,7 @@ using namespace torq_tile::test;
 // ============================================================================
 // Test param sets
 //
-// dwconv constraint: groups == IC. We use 4 categories of test params:
+// dwconv constraint: groups == IC. We use 5 categories of test params:
 //   - generic_basic : dm=1 + various spatial / KxK / stride / dilation / pad / 1D / 3D
 //   - generic_dm    : dm > 1 cases (dm=2, dm=3) and tail_vl (IC not multiple of vlmax)
 //   - spec_3x3s1    : KH=KW=3, stride=1, dilation=1, 2D only

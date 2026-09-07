@@ -16,7 +16,7 @@
 #include "benchmark/common/conv_benchmark_runner.h"
 
 // ============================================================================
-// Forward declarations: each bench_gemm_*.cpp provides a registration function
+// Forward declarations: each bench_*.cpp provides a registration function
 // Conditionally declared based on architecture feature flags
 // ============================================================================
 
@@ -54,9 +54,9 @@ void register_mean_f32_f32_rvv_benchmarks();
 void register_relu_f32_f32_rvv_benchmarks();
 void register_gelu_f32_f32_rvv_benchmarks();
 void register_silu_f32_f32_rvv_benchmarks();
-void register_swiglu_f32_f32_f32_rvv_benchmarks();
 void register_reglu_f32_f32_f32_rvv_benchmarks();
 void register_geglu_f32_f32_f32_rvv_benchmarks();
+void register_swiglu_f32_f32_f32_rvv_benchmarks();
 #endif
 
 #ifdef TORQ_TILE_ENABLE_RVV_FP16
@@ -76,9 +76,9 @@ void register_mean_f16_f16_rvv_benchmarks();
 void register_relu_f16_f16_rvv_benchmarks();
 void register_gelu_f16_f16_rvv_benchmarks();
 void register_silu_f16_f16_rvv_benchmarks();
-void register_swiglu_f16_f16_f16_rvv_benchmarks();
 void register_reglu_f16_f16_f16_rvv_benchmarks();
 void register_geglu_f16_f16_f16_rvv_benchmarks();
+void register_swiglu_f16_f16_f16_rvv_benchmarks();
 #endif
 
 #ifdef TORQ_TILE_ENABLE_RVV_BF16
@@ -177,17 +177,17 @@ inline void register_activation_benchmarks()
     register_relu_f32_f32_rvv_benchmarks();
     register_gelu_f32_f32_rvv_benchmarks();
     register_silu_f32_f32_rvv_benchmarks();
-    register_swiglu_f32_f32_f32_rvv_benchmarks();
     register_reglu_f32_f32_f32_rvv_benchmarks();
     register_geglu_f32_f32_f32_rvv_benchmarks();
+    register_swiglu_f32_f32_f32_rvv_benchmarks();
 #endif
 #ifdef TORQ_TILE_ENABLE_RVV_FP16
     register_relu_f16_f16_rvv_benchmarks();
     register_gelu_f16_f16_rvv_benchmarks();
     register_silu_f16_f16_rvv_benchmarks();
-    register_swiglu_f16_f16_f16_rvv_benchmarks();
     register_reglu_f16_f16_f16_rvv_benchmarks();
     register_geglu_f16_f16_f16_rvv_benchmarks();
+    register_swiglu_f16_f16_f16_rvv_benchmarks();
 #endif
 }
 
@@ -207,6 +207,11 @@ static void print_usage(const char *program_name)
                  "  -m M    Set M dimension (default: 128)\n"
                  "  -n N    Set N dimension (default: 128)\n"
                  "  -k K    Set K dimension (default: 128)\n"
+                 "\n"
+                 "M/N/K are shared by the GEMM, activation, reduction and elementwise\n"
+                 "benchmarks, and each op reads only the dimensions it needs: GEMM uses\n"
+                 "M/N/K, activation and reduction use M/N, elementwise uses N. The conv and\n"
+                 "dwconv benchmarks ignore M/N/K and use their own built-in conv shape.\n"
                  "\n"
                  "All other flags are passed to Google Benchmark.\n"
                  "Example:\n"
@@ -274,7 +279,9 @@ int main(int argc, char **argv)
     const auto &shape = torq_tile::benchmark::global_gemm_shape();
     const auto &conv_shape = torq_tile::benchmark::global_conv_shape();
     std::fprintf(stdout, "TORQ-Tile Benchmark\n");
-    std::fprintf(stdout, "  GEMM shape: M=%zu, N=%zu, K=%zu\n", shape.m, shape.n, shape.k);
+    std::fprintf(stdout, "  Shared M/N/K shape: M=%zu, N=%zu, K=%zu\n", shape.m, shape.n, shape.k);
+    std::fprintf(stdout,
+                 "    (GEMM uses M/N/K; activation and reduction use M/N; elementwise uses N)\n");
     std::fprintf(stdout,
                  "  Conv shape: IC=%zu, OC=%zu, IH=%zu, IW=%zu, KH=%zu, KW=%zu, "
                  "stride=%zu, pad=%zu\n",

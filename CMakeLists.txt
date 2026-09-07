@@ -285,7 +285,7 @@ set(TORQ_TILE_RVV_BF16_SOURCES
     src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_bf16_qsi8d2p_qai4c2p/tqt_gemm_1xnbias_clamp_bf16_qsi8d2p_qai4c2p_4x1vl_rvv.cpp
 )
 
-# RVV F64 kernel files
+# RVV F64 (RISC-V Vector with ELEN >= 64) kernel files
 set(TORQ_TILE_RVV_F64_SOURCES
     src/gemm/gemm_f64_f64/dgemm_f64_f64_f64/tqt_dgemm_f64_f64_f64_8x3vl_rvv.cpp
     src/gemm/gemm_f64_f64/dgemm_f64_f64_f64t/tqt_dgemm_f64_f64_f64t_8x3vl_rvv.cpp
@@ -314,6 +314,7 @@ if(TORQ_TILE_ENABLE_RVV_BF16)
     list(APPEND TORQ_TILE_ALL_SOURCES ${TORQ_TILE_RVV_BF16_SOURCES})
 endif()
 
+# Add RVV F64 sources if detected
 if(TORQ_TILE_ENABLE_RVV_F64)
     list(APPEND TORQ_TILE_ALL_SOURCES ${TORQ_TILE_RVV_F64_SOURCES})
 endif()

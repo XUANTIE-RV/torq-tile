@@ -64,10 +64,11 @@ if(TORQ_TILE_ENABLE_RVV)
     # --- Gemm INT8 RVV variants ---
     torq_tile_add_test(test_gemm_i8_i8_rvv
         gemm/test_gemm_i8_i8_rvv.cpp)
+    # --- Gemm UINT8 RVV variants ---
     torq_tile_add_test(test_gemm_u8_u8_rvv
         gemm/test_gemm_u8_u8_rvv.cpp)
     # --- Gemm W4A8 (per-channel qai8dx/qsi4cx + block-quantized
-    #     qai8dx|qsi8d2 × qsi4c2|qai4c2) RVV variants ---
+    #     qai8dx|qsi8d2 × qsi4c2|qai4c2 + qsi8d32p × qsi4c32p) RVV variants ---
     # F32 paths are always compiled; F16/BF16 paths are gated inside the TU
     # by __riscv_zfh/__riscv_zvfh and __riscv_zvfbfwma feature macros.
     torq_tile_add_test(test_gemm_i8_i4_rvv
@@ -127,15 +128,16 @@ if(TORQ_TILE_ENABLE_RVV)
         activation/test_gelu_f32_f32_rvv.cpp)
     torq_tile_add_test(test_silu_f32_f32_rvv
         activation/test_silu_f32_f32_rvv.cpp)
-    torq_tile_add_test(test_swiglu_f32_f32_f32_rvv
-        activation/test_swiglu_f32_f32_f32_rvv.cpp)
     torq_tile_add_test(test_reglu_f32_f32_f32_rvv
         activation/test_reglu_f32_f32_f32_rvv.cpp)
     torq_tile_add_test(test_geglu_f32_f32_f32_rvv
         activation/test_geglu_f32_f32_f32_rvv.cpp)
+    torq_tile_add_test(test_swiglu_f32_f32_f32_rvv
+        activation/test_swiglu_f32_f32_f32_rvv.cpp)
 endif()
 
 if(TORQ_TILE_ENABLE_RVV_F64)
+    # --- DGEMM F64 RVV variants (BLAS-style) ---
     torq_tile_add_test(test_gemm_f64_f64_rvv
         gemm/test_gemm_f64_f64_rvv.cpp)
 endif()
@@ -157,6 +159,7 @@ if(TORQ_TILE_ENABLE_RVV_FP16)
     # --- DWConv F16 RVV variants ---
     torq_tile_add_test(test_dwconv_f16_f16_rvv
         dwconv/test_dwconv_f16_f16_rvv.cpp)
+    # --- Elementwise F16 RVV variants ---
     torq_tile_add_test(test_add_f16_f16_rvv
         elementwise/test_add_f16_f16_rvv.cpp)
     torq_tile_add_test(test_sub_f16_f16_rvv
@@ -178,12 +181,12 @@ if(TORQ_TILE_ENABLE_RVV_FP16)
         activation/test_gelu_f16_f16_rvv.cpp)
     torq_tile_add_test(test_silu_f16_f16_rvv
         activation/test_silu_f16_f16_rvv.cpp)
-    torq_tile_add_test(test_swiglu_f16_f16_f16_rvv
-        activation/test_swiglu_f16_f16_f16_rvv.cpp)
     torq_tile_add_test(test_reglu_f16_f16_f16_rvv
         activation/test_reglu_f16_f16_f16_rvv.cpp)
     torq_tile_add_test(test_geglu_f16_f16_f16_rvv
         activation/test_geglu_f16_f16_f16_rvv.cpp)
+    torq_tile_add_test(test_swiglu_f16_f16_f16_rvv
+        activation/test_swiglu_f16_f16_f16_rvv.cpp)
 endif()
 
 if(TORQ_TILE_ENABLE_RVV_BF16)
@@ -192,6 +195,7 @@ if(TORQ_TILE_ENABLE_RVV_BF16)
     # --- Gemm BF16 RVV variants ---
     torq_tile_add_test(test_gemm_bf16_bf16_rvv
         gemm/test_gemm_bf16_bf16_rvv.cpp)
+    # --- Conv BF16 RVV variants ---
     torq_tile_add_test(test_conv_bf16_bf16_rvv
         conv/test_conv_bf16_bf16_rvv.cpp)
 endif()

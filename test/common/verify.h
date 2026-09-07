@@ -26,7 +26,12 @@ struct VerificationResult
     size_t num_errors;
 };
 
-/// Verify GEMM results using absolute error threshold and cosine similarity.
+/// Verify micro-kernel output against a reference using absolute error threshold and cosine
+/// similarity.
+///
+/// Despite the `gemm` in its name, this helper is descriptor-agnostic: it compares two flat
+/// arrays of equal length. The GEMM, conv, dwconv, elementwise, reduction and activation
+/// runners all use it, so changing its comparison semantics affects every op family's tests.
 ///
 /// @param reference         Reference output data
 /// @param actual            Actual output data from micro-kernel

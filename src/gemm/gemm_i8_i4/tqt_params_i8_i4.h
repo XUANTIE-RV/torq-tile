@@ -13,19 +13,41 @@
 extern "C" {
 #endif
 
-/// Quantization parameters for qai8dx (A) x qsi4cx (B) -> f16/f32 (D)
+/// Quantization parameters for qai8dx (A) x qsi4cx (B) -> f16/f32/bf16 (D)
 ///
 /// A is per-dimension (per-row) asymmetric quantized int8:
 ///   - scale_a:       [m] per-row scales (m taken from the run_* m argument)
 ///   - zero_point_a:  [m] per-row zero points
 /// B is per-channel (per-column) symmetric quantized int4:
 ///   - scale_b:       [n] per-channel scales (n taken from the run_* n argument)
-/// D is float (f16 or f32), no quantization.
+/// D is float (f16, f32, or bf16), no quantization.
 struct tqt_qai8dx_qsi4cx_params
 {
     const float *scale_a;
     const int32_t *zero_point_a;
     const float *scale_b;
+};
+
+/// Quantization parameters for qai8dx (A) x qsi4cx (B) -> qai8 (D, requantized int8)
+///
+/// A is per-row (per-dimension) asymmetric quantized int8:
+///   - scale_a:       [m] per-row scales
+///   - zero_point_a:  [m] per-row zero points
+/// B is per-channel (per-column) symmetric quantized int4:
+///   - scale_b:       [n] per-channel scales
+/// D is per-tensor asymmetric quantized int8 (requantize path):
+///   - scale_d:       scalar output scale
+///   - zero_point_d:  scalar output zero point
+/// The i32 accumulator is dequantized to fp32 (scale_a[m] * scale_b[n]), the
+/// optional fp32 C / 1xN bias are added in real domain, then the result is
+/// requantized to int8 via (round(D_real / scale_d) + zero_point_d) and clamped.
+struct tqt_qai8_qai8dx_qsi4cx_params
+{
+    const float *scale_a;
+    const int32_t *zero_point_a;
+    const float *scale_b;
+    float scale_d;
+    int32_t zero_point_d;
 };
 
 /// Quantization parameters for qai8dx (A) x qsi4c2 (B, block-quantized) -> f16/f32/bf16 (D)

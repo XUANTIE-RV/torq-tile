@@ -136,6 +136,8 @@ set(TORQ_TILE_RVV_SOURCES
     src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f32_qai8dxp_qsi4c2p/tqt_gemm_1xnbias_clamp_f32_qai8dxp_qsi4c2p_4x1vl_rvv.cpp
     src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f32_qsi8d2_qai4c2t/tqt_gemm_1xnbias_clamp_f32_qsi8d2_qai4c2t_4x1vl_rvv.cpp
     src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f32_qsi8d2p_qai4c2p/tqt_gemm_1xnbias_clamp_f32_qsi8d2p_qai4c2p_4x1vl_rvv.cpp
+    src/gemm/gemm_i8_i4/gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dx_qsi4cxt/tqt_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dx_qsi4cxt_4x1vl_rvv.cpp
+    src/gemm/gemm_i8_i4/gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp/tqt_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp_4x1vl_rvv.cpp
     # W2A8 RVV
     src/gemm/gemm_i8_i2/gemm_1xnbias_clamp_f32_qai8dx_qsi2cxt/tqt_gemm_1xnbias_clamp_f32_qai8dx_qsi2cxt_4x1vl_rvv.cpp
     src/gemm/gemm_i8_i2/gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp/tqt_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv.cpp

@@ -2083,6 +2083,220 @@ inline void run_w4a8_packed_gemm_test(const GemmTestParams &params,
 }
 
 // ============================================================================
+// W4A8 per-channel requantized int8 output (qai8dx × qsi4cxt -> qai8):
+// Funcs structs + runners
+// ----------------------------------------------------------------------------
+// A per-row asym int8, B per-channel sym int4, optional f32 C / 1xN f32 bias,
+// requantized int8 output via tqt_qai8_qai8dx_qsi4cx_params (scale_a[m],
+// zp_a[m], scale_b[n], scale_d, zero_point_d). The real-domain reference reuses
+// ref_qai8dx_qsi4c2 (bl == k); the int8 kernel output is dequantized back to
+// fp32 for a cosine + abs-error comparison (same style as the i8_i8 reqi32toi8
+// runner), which tolerates the inherent ±1 requantization rounding.
+// ============================================================================
+
+struct W4A8ReqI8GemmFuncs
+{
+    using GetMStepFunc = size_t (*)(void);
+    using GetNStepFunc = size_t (*)(void);
+    using RunGemmFunc = void (*)(size_t m, size_t n, size_t k, const void *A, size_t lda,
+                                 size_t k_idx_a, const void *B, size_t ldb, size_t k_idx_b,
+                                 const void *C, size_t ldc, void *D, size_t ldd, const void *bias,
+                                 int8_t clamp_min, int8_t clamp_max,
+                                 const struct tqt_qai8_qai8dx_qsi4cx_params *params);
+
+    GetMStepFunc get_m_step;
+    GetNStepFunc get_n_step;
+    RunGemmFunc run_gemm;
+};
+
+struct W4A8ReqI8PackedGemmFuncs
+{
+    using GetMStepFunc = size_t (*)(void);
+    using GetNStepFunc = size_t (*)(void);
+    using GetAPackedSizeFunc = size_t (*)(size_t m, size_t k);
+    using GetBPackedSizeFunc = size_t (*)(size_t n, size_t k);
+    using RunAPackFunc = void (*)(size_t m, size_t k, size_t lda, size_t lda_packed, size_t k_idx,
+                                  const void *A, void *A_packed);
+    using RunBtPackFunc = void (*)(size_t n, size_t k, size_t ldb, size_t ldb_packed, size_t k_idx,
+                                   const void *B, void *B_packed);
+    using RunGemmFunc = void (*)(size_t m, size_t n, size_t k, const void *A_packed, size_t lda,
+                                 size_t k_idx_a, const void *B_packed, size_t ldb, size_t k_idx_b,
+                                 const void *C, size_t ldc, void *D, size_t ldd, const void *bias,
+                                 int8_t clamp_min, int8_t clamp_max,
+                                 const struct tqt_qai8_qai8dx_qsi4cx_params *params);
+
+    GetMStepFunc get_m_step;
+    GetNStepFunc get_n_step;
+    GetAPackedSizeFunc get_a_packed_size;
+    GetBPackedSizeFunc get_b_packed_size;
+    RunAPackFunc run_a_pack;
+    RunBtPackFunc run_bt_pack;
+    RunGemmFunc run_gemm;
+};
+
+inline void run_w4a8_reqi8_gemm_test(const GemmTestParams &params, const W4A8ReqI8GemmFuncs &funcs)
+{
+    const size_t m = params.m;
+    const size_t n = params.n;
+    const size_t k = params.k;
+    const size_t lda = k;
+    const size_t ldb = k;
+    const size_t ldc = n;
+    const size_t ldd = n;
+
+    UniformRandomGenerator<float> gen(-1.0f, 1.0f, 42);
+    std::vector<float> A_fp32(m * k);
+    std::vector<float> B_fp32(n * k);
+    gen.fill_matrix(A_fp32.data(), m, k);
+    gen.fill_matrix(B_fp32.data(), n, k);
+
+    std::vector<int8_t> A_i8(m * k);
+    std::vector<float> scale_a(m);
+    std::vector<int32_t> zp_a(m);
+    quantize_a_qai8dx(A_fp32.data(), m, k, A_i8.data(), scale_a.data(), zp_a.data());
+
+    std::vector<uint8_t> B_packed(n * (k / 2), 0);
+    std::vector<float> scale_b(n);
+    quantize_b_qsi4c2(B_fp32.data(), n, k, k, B_packed.data(), scale_b.data(), 1);
+
+    std::vector<float> C_fp32;
+    std::vector<float> bias_fp32;
+    if (params.has_c) {
+        C_fp32.resize(m * n);
+        UniformRandomGenerator<float> c_gen(-2.0f, 2.0f, 42);
+        c_gen.fill_matrix(C_fp32.data(), m, n);
+    }
+    if (params.has_bias) {
+        bias_fp32.resize(n);
+        UniformRandomGenerator<float> bias_gen(-0.5f, 0.5f, 7);
+        bias_gen.fill_matrix(bias_fp32.data(), 1, n);
+    }
+
+    // Real-domain reference (no clamp in real domain; int8 clamp applied later).
+    std::vector<float> D_ref_fp32(m * n);
+    ref_qai8dx_qsi4c2(m, n, k, k, A_i8.data(), B_packed.data(), scale_a.data(), zp_a.data(),
+                      scale_b.data(), 1, params.has_c ? C_fp32.data() : nullptr,
+                      params.has_bias ? bias_fp32.data() : nullptr, D_ref_fp32.data(), -FLT_MAX,
+                      FLT_MAX);
+
+    // Derive output quantization params (asymmetric int8) from the real reference.
+    float scale_d;
+    int32_t zp_d;
+    compute_asym_quant_params_i8(D_ref_fp32.data(), m * n, scale_d, zp_d);
+
+    struct tqt_qai8_qai8dx_qsi4cx_params qparams;
+    qparams.scale_a = scale_a.data();
+    qparams.zero_point_a = zp_a.data();
+    qparams.scale_b = scale_b.data();
+    qparams.scale_d = scale_d;
+    qparams.zero_point_d = zp_d;
+
+    const int8_t clamp_min = -128;
+    const int8_t clamp_max = 127;
+    std::vector<int8_t> D_i8(m * n, 0);
+    funcs.run_gemm(m, n, k, A_i8.data(), lda, 0, B_packed.data(), ldb, 0,
+                   params.has_c ? C_fp32.data() : nullptr, ldc, D_i8.data(), ldd,
+                   params.has_bias ? bias_fp32.data() : nullptr, clamp_min, clamp_max, &qparams);
+
+    // Dequantize the int8 kernel output and compare with the fp32 reference.
+    std::vector<float> D_act_fp32(m * n);
+    dequantize_matrix_i8(D_i8.data(), D_act_fp32.data(), m * n, scale_d, zp_d);
+
+    const float tolerance = 1.0f;
+    const float cosine_threshold = 0.999f;
+    auto result = verify_gemm_result<float>(D_ref_fp32.data(), D_act_fp32.data(), m * n, tolerance,
+                                            cosine_threshold);
+    EXPECT_TRUE(result.passed) << result.error_message << "\n  Shape: M=" << m << " N=" << n
+                               << " K=" << k << "\n  Config: " << params.name
+                               << "\n  Max abs error: " << result.max_abs_error
+                               << "\n  Cosine similarity: " << result.cosine_similarity;
+}
+
+inline void run_w4a8_reqi8_packed_gemm_test(const GemmTestParams &params,
+                                            const W4A8ReqI8PackedGemmFuncs &funcs)
+{
+    const size_t m = params.m;
+    const size_t n = params.n;
+    const size_t k = params.k;
+    const size_t lda = k;
+    const size_t ldb = k;
+    const size_t ldc = n;
+    const size_t ldd = n;
+
+    UniformRandomGenerator<float> gen(-1.0f, 1.0f, 42);
+    std::vector<float> A_fp32(m * k);
+    std::vector<float> B_fp32(n * k);
+    gen.fill_matrix(A_fp32.data(), m, k);
+    gen.fill_matrix(B_fp32.data(), n, k);
+
+    std::vector<int8_t> A_i8(m * k);
+    std::vector<float> scale_a(m);
+    std::vector<int32_t> zp_a(m);
+    quantize_a_qai8dx(A_fp32.data(), m, k, A_i8.data(), scale_a.data(), zp_a.data());
+
+    std::vector<uint8_t> B_int4(n * (k / 2), 0);
+    std::vector<float> scale_b(n);
+    quantize_b_qsi4c2(B_fp32.data(), n, k, k, B_int4.data(), scale_b.data(), 1);
+
+    std::vector<float> C_fp32;
+    std::vector<float> bias_fp32;
+    if (params.has_c) {
+        C_fp32.resize(m * n);
+        UniformRandomGenerator<float> c_gen(-2.0f, 2.0f, 42);
+        c_gen.fill_matrix(C_fp32.data(), m, n);
+    }
+    if (params.has_bias) {
+        bias_fp32.resize(n);
+        UniformRandomGenerator<float> bias_gen(-0.5f, 0.5f, 7);
+        bias_gen.fill_matrix(bias_fp32.data(), 1, n);
+    }
+
+    std::vector<float> D_ref_fp32(m * n);
+    ref_qai8dx_qsi4c2(m, n, k, k, A_i8.data(), B_int4.data(), scale_a.data(), zp_a.data(),
+                      scale_b.data(), 1, params.has_c ? C_fp32.data() : nullptr,
+                      params.has_bias ? bias_fp32.data() : nullptr, D_ref_fp32.data(), -FLT_MAX,
+                      FLT_MAX);
+
+    float scale_d;
+    int32_t zp_d;
+    compute_asym_quant_params_i8(D_ref_fp32.data(), m * n, scale_d, zp_d);
+
+    struct tqt_qai8_qai8dx_qsi4cx_params qparams;
+    qparams.scale_a = scale_a.data();
+    qparams.zero_point_a = zp_a.data();
+    qparams.scale_b = scale_b.data();
+    qparams.scale_d = scale_d;
+    qparams.zero_point_d = zp_d;
+
+    const size_t a_packed_size = funcs.get_a_packed_size(m, k);
+    const size_t b_packed_size = funcs.get_b_packed_size(n, k);
+    std::vector<uint8_t> A_packed(a_packed_size);
+    std::vector<uint8_t> B_packed(b_packed_size);
+
+    funcs.run_a_pack(m, k, lda, k, 0, A_i8.data(), A_packed.data());
+    funcs.run_bt_pack(n, k, ldb, k, 0, B_int4.data(), B_packed.data());
+
+    const int8_t clamp_min = -128;
+    const int8_t clamp_max = 127;
+    std::vector<int8_t> D_i8(m * n, 0);
+    funcs.run_gemm(m, n, k, A_packed.data(), lda, 0, B_packed.data(), ldb, 0,
+                   params.has_c ? C_fp32.data() : nullptr, ldc, D_i8.data(), ldd,
+                   params.has_bias ? bias_fp32.data() : nullptr, clamp_min, clamp_max, &qparams);
+
+    std::vector<float> D_act_fp32(m * n);
+    dequantize_matrix_i8(D_i8.data(), D_act_fp32.data(), m * n, scale_d, zp_d);
+
+    const float tolerance = 1.0f;
+    const float cosine_threshold = 0.999f;
+    auto result = verify_gemm_result<float>(D_ref_fp32.data(), D_act_fp32.data(), m * n, tolerance,
+                                            cosine_threshold);
+    EXPECT_TRUE(result.passed) << result.error_message << "\n  Shape: M=" << m << " N=" << n
+                               << " K=" << k << "\n  Config: " << params.name
+                               << "\n  Max abs error: " << result.max_abs_error
+                               << "\n  Cosine similarity: " << result.cosine_similarity;
+}
+
+// ============================================================================
 // W4A8 block-quantized: Funcs templates
 // ----------------------------------------------------------------------------
 // 3 input categories × {unpacked, packed} = 6 Funcs structs.

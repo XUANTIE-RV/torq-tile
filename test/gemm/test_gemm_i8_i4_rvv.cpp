@@ -15,6 +15,10 @@
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f32_qai8dx_qsi4cxt/tqt_gemm_1xnbias_clamp_f32_qai8dx_qsi4cxt_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f32_qai8dxp_qsi4cxp/tqt_gemm_1xnbias_clamp_f32_qai8dxp_qsi4cxp_4x1vl_rvv.h"
 
+// --- W4A8 per-channel requantized int8 output (qai8dx × qsi4cxt -> qai8) ---
+#include "src/gemm/gemm_i8_i4/gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dx_qsi4cxt/tqt_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dx_qsi4cxt_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp/tqt_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp_4x1vl_rvv.h"
+
 // --- W4A8 block-quantized: Class 1 qai8dx × qsi4c2 (F32 always) ---
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f32_qai8dx_qsi4c2t/tqt_gemm_1xnbias_clamp_f32_qai8dx_qsi4c2t_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f32_qai8dxp_qsi4c2p/tqt_gemm_1xnbias_clamp_f32_qai8dxp_qsi4c2p_4x1vl_rvv.h"
@@ -221,6 +225,68 @@ TEST_P(Test_gemm_1xnbias_clamp_f32_qai8dxp_qsi4cxp_4x1vl_rvv, Correctness)
 }
 
 INSTANTIATE_TEST_SUITE_P(GemmTests, Test_gemm_1xnbias_clamp_f32_qai8dxp_qsi4cxp_4x1vl_rvv,
+                         common_w4a8_test_values(), GemmTestParamNameGenerator());
+
+// ============================================================================
+// W4A8 per-channel requantized int8 output (qai8dx × qsi4cxt -> qai8)
+// ============================================================================
+
+// ---------- gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dx_qsi4cxt_4x1vl_rvv (a_bt) ----------
+static W4A8ReqI8GemmFuncs make_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dx_qsi4cxt_4x1vl_rvv_funcs()
+{
+    W4A8ReqI8GemmFuncs funcs;
+    funcs.get_m_step = tqt_get_m_step_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dx_qsi4cxt_4x1vl_rvv;
+    funcs.get_n_step = tqt_get_n_step_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dx_qsi4cxt_4x1vl_rvv;
+    funcs.run_gemm = tqt_run_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dx_qsi4cxt_4x1vl_rvv;
+    return funcs;
+}
+
+class Test_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dx_qsi4cxt_4x1vl_rvv
+    : public testing::TestWithParam<GemmTestParams>
+{
+};
+
+TEST_P(Test_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dx_qsi4cxt_4x1vl_rvv, Correctness)
+{
+    auto funcs = make_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dx_qsi4cxt_4x1vl_rvv_funcs();
+    run_w4a8_reqi8_gemm_test(GetParam(), funcs);
+}
+
+INSTANTIATE_TEST_SUITE_P(GemmTests,
+                         Test_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dx_qsi4cxt_4x1vl_rvv,
+                         common_w4a8_test_values(), GemmTestParamNameGenerator());
+
+// ---------- gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp_4x1vl_rvv (ap_bp) ----------
+static W4A8ReqI8PackedGemmFuncs
+make_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp_4x1vl_rvv_funcs()
+{
+    W4A8ReqI8PackedGemmFuncs funcs;
+    funcs.get_m_step = tqt_get_m_step_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp_4x1vl_rvv;
+    funcs.get_n_step = tqt_get_n_step_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp_4x1vl_rvv;
+    funcs.get_a_packed_size =
+        tqt_get_a_packed_size_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp_4x1vl_rvv;
+    funcs.get_b_packed_size =
+        tqt_get_b_packed_size_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp_4x1vl_rvv;
+    funcs.run_a_pack = tqt_run_a_pack_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp_4x1vl_rvv;
+    funcs.run_bt_pack =
+        tqt_run_bt_pack_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp_4x1vl_rvv;
+    funcs.run_gemm = tqt_run_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp_4x1vl_rvv;
+    return funcs;
+}
+
+class Test_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp_4x1vl_rvv
+    : public testing::TestWithParam<GemmTestParams>
+{
+};
+
+TEST_P(Test_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp_4x1vl_rvv, Correctness)
+{
+    auto funcs = make_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp_4x1vl_rvv_funcs();
+    run_w4a8_reqi8_packed_gemm_test(GetParam(), funcs);
+}
+
+INSTANTIATE_TEST_SUITE_P(GemmTests,
+                         Test_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp_4x1vl_rvv,
                          common_w4a8_test_values(), GemmTestParamNameGenerator());
 
 #if defined(__riscv_zvfbfwma)

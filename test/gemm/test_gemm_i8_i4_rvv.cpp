@@ -149,6 +149,10 @@ static W4A8PackedGemmFuncs<float16_t> make_gemm_1xnbias_clamp_f16_qai8dxp_qsi4cx
     W4A8PackedGemmFuncs<float16_t> funcs;
     funcs.get_m_step = tqt_get_m_step_gemm_1xnbias_clamp_f16_qai8dxp_qsi4cxp_4x1vl_rvv;
     funcs.get_n_step = tqt_get_n_step_gemm_1xnbias_clamp_f16_qai8dxp_qsi4cxp_4x1vl_rvv;
+    funcs.get_a_packed_offset =
+        tqt_get_a_packed_offset_gemm_1xnbias_clamp_f16_qai8dxp_qsi4cxp_4x1vl_rvv;
+    funcs.get_b_packed_offset =
+        tqt_get_b_packed_offset_gemm_1xnbias_clamp_f16_qai8dxp_qsi4cxp_4x1vl_rvv;
     funcs.get_a_packed_size =
         tqt_get_a_packed_size_gemm_1xnbias_clamp_f16_qai8dxp_qsi4cxp_4x1vl_rvv;
     funcs.get_b_packed_size =
@@ -204,6 +208,10 @@ static W4A8PackedGemmFuncs<float> make_gemm_1xnbias_clamp_f32_qai8dxp_qsi4cxp_4x
     W4A8PackedGemmFuncs<float> funcs;
     funcs.get_m_step = tqt_get_m_step_gemm_1xnbias_clamp_f32_qai8dxp_qsi4cxp_4x1vl_rvv;
     funcs.get_n_step = tqt_get_n_step_gemm_1xnbias_clamp_f32_qai8dxp_qsi4cxp_4x1vl_rvv;
+    funcs.get_a_packed_offset =
+        tqt_get_a_packed_offset_gemm_1xnbias_clamp_f32_qai8dxp_qsi4cxp_4x1vl_rvv;
+    funcs.get_b_packed_offset =
+        tqt_get_b_packed_offset_gemm_1xnbias_clamp_f32_qai8dxp_qsi4cxp_4x1vl_rvv;
     funcs.get_a_packed_size =
         tqt_get_a_packed_size_gemm_1xnbias_clamp_f32_qai8dxp_qsi4cxp_4x1vl_rvv;
     funcs.get_b_packed_size =
@@ -264,6 +272,10 @@ make_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp_4x1vl_rvv_funcs()
     W4A8ReqI8PackedGemmFuncs funcs;
     funcs.get_m_step = tqt_get_m_step_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp_4x1vl_rvv;
     funcs.get_n_step = tqt_get_n_step_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp_4x1vl_rvv;
+    funcs.get_a_packed_offset =
+        tqt_get_a_packed_offset_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp_4x1vl_rvv;
+    funcs.get_b_packed_offset =
+        tqt_get_b_packed_offset_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp_4x1vl_rvv;
     funcs.get_a_packed_size =
         tqt_get_a_packed_size_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp_4x1vl_rvv;
     funcs.get_b_packed_size =
@@ -322,6 +334,10 @@ make_gemm_1xnbias_clamp_bf16_qai8dxp_qsi4cxp_4x1vl_rvv_funcs()
     W4A8PackedGemmFuncs<bfloat16_t> funcs;
     funcs.get_m_step = tqt_get_m_step_gemm_1xnbias_clamp_bf16_qai8dxp_qsi4cxp_4x1vl_rvv;
     funcs.get_n_step = tqt_get_n_step_gemm_1xnbias_clamp_bf16_qai8dxp_qsi4cxp_4x1vl_rvv;
+    funcs.get_a_packed_offset =
+        tqt_get_a_packed_offset_gemm_1xnbias_clamp_bf16_qai8dxp_qsi4cxp_4x1vl_rvv;
+    funcs.get_b_packed_offset =
+        tqt_get_b_packed_offset_gemm_1xnbias_clamp_bf16_qai8dxp_qsi4cxp_4x1vl_rvv;
     funcs.get_a_packed_size =
         tqt_get_a_packed_size_gemm_1xnbias_clamp_bf16_qai8dxp_qsi4cxp_4x1vl_rvv;
     funcs.get_b_packed_size =

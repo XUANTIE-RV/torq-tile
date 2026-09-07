@@ -212,20 +212,12 @@ void tqt_run_gemm_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8p_4x1vl_rvv(
             const size_t actual_m = TQT_MIN(m - m_idx, m_step);
             const size_t actual_n = TQT_MIN(n - n_idx, n_step);
 
-            const int8_t *a_ptr;
-            const int8_t *b_ptr;
-            if (actual_m == m_step || k_idx_a == 0) {
-                a_ptr = (const int8_t *)A_packed + m_idx * lda;
-            } else {
-                a_ptr = (const int8_t *)A_packed + m_idx * lda - k_idx_a * (m_step - actual_m);
-            }
-            if (actual_n == n_step || k_idx_b == 0) {
-                b_ptr = (const int8_t *)B_packed + n_idx * ldb;
-            } else {
-                b_ptr = (const int8_t *)B_packed + n_idx * ldb - k_idx_b * (n_step - actual_n);
-            }
-            const int32_t *c_ptr = C_ptr ? C_ptr + m_idx * ldc + n_idx : NULL;
-            const int32_t *bias_tile_ptr = bias_ptr ? bias_ptr + m_idx : NULL;
+            const int8_t *a_ptr = (const int8_t *)A_packed + m_idx * lda + k_idx_a * actual_m -
+                                  k_idx_a * TQT_MIN(m, m_step);
+            const int8_t *b_ptr = (const int8_t *)B_packed + n_idx * ldb + k_idx_b * actual_n -
+                                  k_idx_b * TQT_MIN(n, n_step);
+            const int32_t *c_ptr = C_ptr ? C_ptr + m_idx * ldc + n_idx : nullptr;
+            const int32_t *bias_tile_ptr = bias_ptr ? bias_ptr + m_idx : nullptr;
             int8_t *d_ptr = D_ptr + m_idx * ldd + n_idx;
 
             const int32_t *mult_ptr = mult + m_idx;

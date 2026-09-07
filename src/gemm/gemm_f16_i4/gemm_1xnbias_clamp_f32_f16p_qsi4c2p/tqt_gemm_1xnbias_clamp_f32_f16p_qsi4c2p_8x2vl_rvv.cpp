@@ -51,8 +51,8 @@ size_t tqt_get_b_packed_offset_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv(siz
     // B is int4, ldb is in int4 elements. Packed as uint8: ldb_e8 = ldb/2
     // offset in bytes = n_idx * (ldb/2) + (k_idx/2) * min(actual_n, n_step)
     const size_t ldb_e8 = ldb / 2;
-    const size_t n_step_e8 = n_step;  // n_step in int4 elements = n_step in e8 bytes (same count)
-    return n_idx * ldb_e8 + (k_idx / 2) * TQT_MIN(actual_n, n_step_e8);
+    return n_idx * ldb_e8 +
+           (k_idx / 2) * tqt_gemm_pack_2vl_first_n(TQT_MIN(actual_n, n_step), vlmax);
 }
 
 size_t tqt_get_scale_b_offset_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv(size_t n_idx,
@@ -227,7 +227,11 @@ void tqt_run_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv(
     const void *C, size_t ldc, void *D, size_t ldd, const void *bias, float clamp_min,
     float clamp_max)
 {
+    TQT_ASSUME(k_idx_b % bl == 0);
+    TQT_ASSUME(k_idx_b % 2 == 0);
     const size_t ldb_e8 = ldb / 2;
+    const size_t origin_m = TQT_MIN(m, m_step);
+    const size_t origin_n = tqt_gemm_pack_2vl_first_n(TQT_MIN(n, n_step), vlmax);
 
     for (size_t m_idx = 0; m_idx < m; m_idx += m_step) {
         for (size_t n_idx = 0; n_idx < n; n_idx += n_step) {
@@ -235,20 +239,16 @@ void tqt_run_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv(
             const size_t actual_n = TQT_MIN(n - n_idx, n_step);
 
             // Packed A: [m/8, k, 8] layout
-            const float16_t *a_ptr;
-            if (actual_m == m_step || k_idx_a == 0) {
-                a_ptr = (const float16_t *)A_packed + m_idx * lda;
-            } else {
-                a_ptr = (const float16_t *)A_packed + m_idx * lda - k_idx_a * (m_step - actual_m);
+            const float16_t *a_ptr = (const float16_t *)A_packed + m_idx * lda;
+            if (actual_m < origin_m) {
+                a_ptr -= k_idx_a * (origin_m - actual_m);
             }
 
             // Packed B: [n/(n_step), k/2, n_step] uint8 layout
-            const uint8_t *b_ptr;
-            if (actual_n == n_step || k_idx_b == 0) {
-                b_ptr = (const uint8_t *)B_packed + n_idx * ldb_e8;
-            } else {
-                b_ptr = (const uint8_t *)B_packed + n_idx * ldb_e8 -
-                        (k_idx_b / 2) * (n_step - actual_n);
+            const size_t first_n = tqt_gemm_pack_2vl_first_n(actual_n, vlmax);
+            const uint8_t *b_ptr = (const uint8_t *)B_packed + n_idx * ldb_e8;
+            if (first_n < origin_n) {
+                b_ptr -= (k_idx_b / 2) * (origin_n - first_n);
             }
 
             const float16_t *scale_ptr = (const float16_t *)scale_b + n_idx * ldsb;
@@ -268,7 +268,9 @@ void tqt_run_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv(
             }
             size_t remain_n = actual_n - size_n;
             if (remain_n > 0) {
-                b_ptr += size_n * ldb_e8;
+                if (size_n > 0) {
+                    b_ptr += size_n * ldb_e8 - (k_idx_b / 2) * (size_n - remain_n);
+                }
                 scale_ptr += size_n * ldsb;
                 if (C)
                     c_ptr += size_n;

@@ -562,6 +562,44 @@ inline void run_packed_clamp_i32_i8_gemm_test(const GemmTestParams &params,
                                << "\n  Cosine similarity: " << result.cosine_similarity;
 }
 
+/// Verify packed int8 split-K accumulation with a getter-selected non-zero K origin.
+inline void run_packed_clamp_i32_i8_split_k_test(size_t m, size_t n, size_t k, size_t split,
+                                                 const PackedGemmFuncs<int32_t> &funcs)
+{
+    ASSERT_GT(split, 0U);
+    ASSERT_LT(split, k);
+
+    std::vector<int8_t> A(m * k), B(k * n);
+    for (size_t i = 0; i < A.size(); ++i)
+        A[i] = static_cast<int8_t>((i * 5 + 1) % 7 - 3);
+    for (size_t i = 0; i < B.size(); ++i)
+        B[i] = static_cast<int8_t>((i * 3 + 2) % 7 - 3);
+
+    std::vector<uint8_t> A_packed(funcs.get_a_packed_size(m, k));
+    std::vector<uint8_t> B_packed(funcs.get_b_packed_size(n, k));
+    funcs.run_a_pack(m, k, k, k, 0, A.data(), A_packed.data());
+    funcs.run_b_pack(n, k, n, k, 0, B.data(), B_packed.data());
+
+    constexpr int32_t clamp_min = std::numeric_limits<int32_t>::min();
+    constexpr int32_t clamp_max = std::numeric_limits<int32_t>::max();
+    std::vector<int32_t> whole(m * n), split_result(m * n);
+    funcs.run_gemm(m, n, k, A_packed.data(), k, 0, B_packed.data(), k, 0, nullptr, n, whole.data(),
+                   n, nullptr, clamp_min, clamp_max);
+    funcs.run_gemm(m, n, split, A_packed.data(), k, 0, B_packed.data(), k, 0, nullptr, n,
+                   split_result.data(), n, nullptr, clamp_min, clamp_max);
+
+    const size_t a_offset = funcs.get_a_packed_offset(0, split, k, m);
+    const size_t b_offset = funcs.get_b_packed_offset(0, split, k, n);
+    funcs.run_gemm(m, n, k - split, A_packed.data() + a_offset, k, split,
+                   B_packed.data() + b_offset, k, split, split_result.data(), n,
+                   split_result.data(), n, nullptr, clamp_min, clamp_max);
+
+    SCOPED_TRACE("packed int8 split-K with nonzero origin");
+    auto result =
+        verify_gemm_result<int32_t>(whole.data(), split_result.data(), m * n, 0.0f, 0.999999f);
+    EXPECT_TRUE(result.passed) << result.error_message;
+}
+
 // ============================================================================
 // Test runner: packed 1xN bias requantized GEMM
 // A: asymmetric int8 [M,K] -> packed, B: per-channel symmetric int8 transposed [N,K] -> packed
@@ -997,6 +1035,121 @@ inline void run_b_only_packed_1xnbias_reqi32toi8_gemm_test(
                                << "\n  Cosine similarity: " << result.cosine_similarity;
 }
 
+/// Compare compact and getter-selected packed suffix windows for the three requantized int8
+/// layouts. Requantized output cannot be accumulated across split-K calls, so this differential
+/// form isolates K-origin addressing without changing the mathematical operation.
+inline void run_packed_requantized_i8_nonzero_origin_test(
+    size_t m, size_t n, size_t k, size_t k_origin,
+    const PackedRequantizedGemmFuncs<tqt_qai8_qai8_qsi8cx_params> &one_by_n_funcs,
+    const BOnlyPackedRequantizedGemmFuncs<tqt_qai8_qai8_qsi8cx_params> &b_only_funcs,
+    const PackedRequantizedGemmFuncs<tqt_qai8_qsi8dx_qai8_params> &m_by_one_funcs)
+{
+    ASSERT_GT(k_origin, 0U);
+    ASSERT_LT(k_origin, k);
+    const size_t window = k - k_origin;
+
+    std::vector<int8_t> A(m * k), B_transposed(n * k), B(k * n);
+    for (size_t row = 0; row < m; ++row) {
+        for (size_t depth = 0; depth < k; ++depth)
+            A[row * k + depth] = static_cast<int8_t>((row + depth * 2) % 3 - 1);
+    }
+    for (size_t column = 0; column < n; ++column) {
+        for (size_t depth = 0; depth < k; ++depth) {
+            const int8_t value = static_cast<int8_t>((column * 2 + depth) % 3 - 1);
+            B_transposed[column * k + depth] = value;
+            B[depth * n + column] = value;
+        }
+    }
+
+    std::vector<int8_t> A_window(m * window), B_transposed_window(n * window), B_window(window * n);
+    for (size_t row = 0; row < m; ++row) {
+        std::copy_n(A.data() + row * k + k_origin, window, A_window.data() + row * window);
+    }
+    for (size_t column = 0; column < n; ++column) {
+        std::copy_n(B_transposed.data() + column * k + k_origin, window,
+                    B_transposed_window.data() + column * window);
+    }
+    std::copy(B.begin() + k_origin * n, B.end(), B_window.begin());
+
+    std::vector<float> scale_a(m, 1.0f), scale_b(n, 1.0f);
+    std::vector<int32_t> bias_one_by_n(n, 0), bias_m_by_one(m, 0);
+    const tqt_qai8_qai8_qsi8cx_params one_by_n_params = {
+        1.0f, 0, scale_b.data(), static_cast<int32_t>(n), 1.0f, 0};
+    const tqt_qai8_qsi8dx_qai8_params m_by_one_params = {
+        scale_a.data(), static_cast<int32_t>(m), 1.0f, 0, 1.0f, 0};
+    constexpr int8_t clamp_min = -128;
+    constexpr int8_t clamp_max = 127;
+
+    auto verify_equal = [&](const std::vector<int8_t> &compact, const std::vector<int8_t> &selected,
+                            const char *layout) {
+        SCOPED_TRACE(layout);
+        EXPECT_EQ(compact, selected);
+    };
+
+    // Fully packed A and transposed B, 1xN bias.
+    {
+        std::vector<uint8_t> A_full(one_by_n_funcs.get_a_packed_size(m, k));
+        std::vector<uint8_t> B_full(one_by_n_funcs.get_b_packed_size(n, k));
+        std::vector<uint8_t> A_compact(one_by_n_funcs.get_a_packed_size(m, window));
+        std::vector<uint8_t> B_compact(one_by_n_funcs.get_b_packed_size(n, window));
+        one_by_n_funcs.run_a_pack(m, k, k, k, 0, A.data(), A_full.data());
+        one_by_n_funcs.run_bt_pack(n, k, k, k, 0, B_transposed.data(), B_full.data());
+        one_by_n_funcs.run_a_pack(m, window, window, window, 0, A_window.data(), A_compact.data());
+        one_by_n_funcs.run_bt_pack(n, window, window, window, 0, B_transposed_window.data(),
+                                   B_compact.data());
+        const size_t a_offset = one_by_n_funcs.get_a_packed_offset(0, k_origin, k, m);
+        const size_t b_offset = one_by_n_funcs.get_b_packed_offset(0, k_origin, k, n);
+        std::vector<int8_t> compact(m * n), selected(m * n);
+        one_by_n_funcs.run_gemm(m, n, window, A_compact.data(), window, 0, B_compact.data(), window,
+                                0, nullptr, n, compact.data(), n, bias_one_by_n.data(), clamp_min,
+                                clamp_max, &one_by_n_params);
+        one_by_n_funcs.run_gemm(m, n, window, A_full.data() + a_offset, k, k_origin,
+                                B_full.data() + b_offset, k, k_origin, nullptr, n, selected.data(),
+                                n, bias_one_by_n.data(), clamp_min, clamp_max, &one_by_n_params);
+        verify_equal(compact, selected, "fully packed 1xN requantized int8");
+    }
+
+    // Raw A and packed transposed B, 1xN bias.
+    {
+        std::vector<uint8_t> B_full(b_only_funcs.get_b_packed_size(n, k));
+        std::vector<uint8_t> B_compact(b_only_funcs.get_b_packed_size(n, window));
+        b_only_funcs.run_bt_pack(n, k, k, k, 0, B_transposed.data(), B_full.data());
+        b_only_funcs.run_bt_pack(n, window, window, window, 0, B_transposed_window.data(),
+                                 B_compact.data());
+        const size_t b_offset = b_only_funcs.get_b_packed_offset(0, k_origin, k, n);
+        std::vector<int8_t> compact(m * n), selected(m * n);
+        b_only_funcs.run_gemm(m, n, window, A_window.data(), window, 0, B_compact.data(), window, 0,
+                              nullptr, n, compact.data(), n, bias_one_by_n.data(), clamp_min,
+                              clamp_max, &one_by_n_params);
+        b_only_funcs.run_gemm(m, n, window, A.data() + k_origin, k, k_origin,
+                              B_full.data() + b_offset, k, k_origin, nullptr, n, selected.data(), n,
+                              bias_one_by_n.data(), clamp_min, clamp_max, &one_by_n_params);
+        verify_equal(compact, selected, "B-only packed 1xN requantized int8");
+    }
+
+    // Fully packed A and row-major B, Mx1 bias.
+    {
+        std::vector<uint8_t> A_full(m_by_one_funcs.get_a_packed_size(m, k));
+        std::vector<uint8_t> B_full(m_by_one_funcs.get_b_packed_size(n, k));
+        std::vector<uint8_t> A_compact(m_by_one_funcs.get_a_packed_size(m, window));
+        std::vector<uint8_t> B_compact(m_by_one_funcs.get_b_packed_size(n, window));
+        m_by_one_funcs.run_a_pack(m, k, k, k, 0, A.data(), A_full.data());
+        m_by_one_funcs.run_b_pack(n, k, n, k, 0, B.data(), B_full.data());
+        m_by_one_funcs.run_a_pack(m, window, window, window, 0, A_window.data(), A_compact.data());
+        m_by_one_funcs.run_b_pack(n, window, n, window, 0, B_window.data(), B_compact.data());
+        const size_t a_offset = m_by_one_funcs.get_a_packed_offset(0, k_origin, k, m);
+        const size_t b_offset = m_by_one_funcs.get_b_packed_offset(0, k_origin, k, n);
+        std::vector<int8_t> compact(m * n), selected(m * n);
+        m_by_one_funcs.run_gemm(m, n, window, A_compact.data(), window, 0, B_compact.data(), window,
+                                0, nullptr, n, compact.data(), n, bias_m_by_one.data(), clamp_min,
+                                clamp_max, &m_by_one_params);
+        m_by_one_funcs.run_gemm(m, n, window, A_full.data() + a_offset, k, k_origin,
+                                B_full.data() + b_offset, k, k_origin, nullptr, n, selected.data(),
+                                n, bias_m_by_one.data(), clamp_min, clamp_max, &m_by_one_params);
+        verify_equal(compact, selected, "fully packed Mx1 requantized int8");
+    }
+}
+
 // ============================================================================
 // Function pointer types for quantized-weight GEMM (e.g., int4 weight + fp16
 // activation). Templated on activation type TA and output/clamp type TD so
@@ -1113,6 +1266,38 @@ void run_quantized_weight_gemm_test(const GemmTestParams &params,
                                << " K=" << k << " BL=" << bl << "\n  Config: " << params.name
                                << "\n  Max abs error: " << result.max_abs_error
                                << "\n  Cosine similarity: " << result.cosine_similarity;
+
+    if (k > bl) {
+        const size_t k_origin = bl;
+        const size_t window = k - k_origin;
+        std::vector<TA> A_window(m * window);
+        std::vector<uint8_t> B_window(n * (window / 2));
+        for (size_t row = 0; row < m; ++row) {
+            std::copy_n(A.data() + row * k + k_origin, window, A_window.data() + row * window);
+        }
+        for (size_t row = 0; row < n; ++row) {
+            std::copy_n(B.data() + row * (k / 2) + k_origin / 2, window / 2,
+                        B_window.data() + row * (window / 2));
+        }
+
+        std::vector<TD> zero_origin(m * n, to_target_type<TD>(0.0f));
+        std::vector<TD> nonzero_origin(m * n, to_target_type<TD>(0.0f));
+        const size_t scale_b_offset = funcs.get_scale_b_offset(0, k_origin / bl, ldsb);
+        const auto *scale_b_window = reinterpret_cast<const TA *>(
+            reinterpret_cast<const uint8_t *>(scale_b.data()) + scale_b_offset);
+        funcs.run_gemm(m, n, window, bl, A_window.data(), window, 0, B_window.data(), window, 0,
+                       scale_b_window, ldsb, nullptr, n, zero_origin.data(), n, nullptr,
+                       to_target_type<TD>(-FLT_MAX), to_target_type<TD>(FLT_MAX));
+        funcs.run_gemm(m, n, window, bl, A.data() + k_origin, k, k_origin, B.data() + k_origin / 2,
+                       k, k_origin, scale_b_window, ldsb, nullptr, n, nonzero_origin.data(), n,
+                       nullptr, to_target_type<TD>(-FLT_MAX), to_target_type<TD>(FLT_MAX));
+
+        SCOPED_TRACE("nonzero quantized-weight K origin");
+        auto origin_result = verify_gemm_result<TD>(zero_origin.data(), nonzero_origin.data(),
+                                                    m * n, DefaultThreshold<TA>::abs_error,
+                                                    DefaultThreshold<TA>::cosine_sim);
+        EXPECT_TRUE(origin_result.passed) << origin_result.error_message;
+    }
 }
 
 // ============================================================================
@@ -1245,6 +1430,97 @@ void run_packed_quantized_weight_gemm_test(const GemmTestParams &params,
                                << " K=" << k << " BL=" << bl << "\n  Config: " << params.name
                                << "\n  Max abs error: " << result.max_abs_error
                                << "\n  Cosine similarity: " << result.cosine_similarity;
+
+    if (k > bl) {
+        const size_t k_origin = bl;
+        const size_t window = k - k_origin;
+        std::vector<TA> A_window(m * window);
+        std::vector<uint8_t> B_window(n * (window / 2));
+        for (size_t row = 0; row < m; ++row) {
+            std::copy_n(A.data() + row * k + k_origin, window, A_window.data() + row * window);
+        }
+        for (size_t row = 0; row < n; ++row) {
+            std::copy_n(B.data() + row * (k / 2) + k_origin / 2, window / 2,
+                        B_window.data() + row * (window / 2));
+        }
+
+        const size_t a_offset = funcs.get_a_packed_offset(0, k_origin, k, m);
+        const size_t b_offset = funcs.get_b_packed_offset(0, k_origin, k, n);
+        const size_t scale_b_offset = funcs.get_scale_b_offset(0, k_origin / bl, ldsb);
+        const auto *scale_b_window = reinterpret_cast<const TA *>(
+            reinterpret_cast<const uint8_t *>(scale_b.data()) + scale_b_offset);
+
+        // A getter-selected window in a full packed buffer must have the same tile-local
+        // layout as packing that window into a compact buffer. Check both A tiles and the
+        // one- or two-subgroup B layout independently from the numerical GEMM result.
+        std::vector<uint8_t> A_window_packed(funcs.get_a_packed_size(m, window));
+        std::vector<uint8_t> B_window_packed(funcs.get_b_packed_size(n, window));
+        funcs.run_a_pack(m, window, window, window, 0, A_window.data(), A_window_packed.data());
+        funcs.run_bt_pack(n, window, window, window, 0, B_window.data(), B_window_packed.data());
+
+        const size_t m_step = funcs.get_m_step();
+        for (size_t m_idx = 0; m_idx < m; m_idx += m_step) {
+            const size_t actual_m = std::min(m - m_idx, m_step);
+            const uint8_t *full_tile =
+                A_packed.data() + funcs.get_a_packed_offset(m_idx, k_origin, k, actual_m);
+            const uint8_t *window_tile =
+                A_window_packed.data() + funcs.get_a_packed_offset(m_idx, 0, window, actual_m);
+            EXPECT_TRUE(
+                std::equal(full_tile, full_tile + actual_m * window * sizeof(TA), window_tile))
+                << "Packed A window mismatch at m_idx=" << m_idx;
+        }
+
+        const size_t n_step = funcs.get_n_step();
+        const size_t vlmax = n_step / 2;
+        for (size_t n_idx = 0; n_idx < n; n_idx += n_step) {
+            const size_t actual_n = std::min(n - n_idx, n_step);
+            const size_t first_n =
+                actual_n >= n_step ? n_step : (actual_n >= vlmax ? vlmax : actual_n);
+            const uint8_t *full_tile =
+                B_packed.data() + funcs.get_b_packed_offset(n_idx, k_origin, k, actual_n);
+            const uint8_t *window_tile =
+                B_window_packed.data() + funcs.get_b_packed_offset(n_idx, 0, window, actual_n);
+            EXPECT_TRUE(std::equal(full_tile, full_tile + first_n * (window / 2), window_tile))
+                << "Packed B first subgroup mismatch at n_idx=" << n_idx;
+
+            const size_t remain_n = actual_n - first_n;
+            if (remain_n > 0) {
+                const uint8_t *full_remain =
+                    full_tile + first_n * (k / 2) - (k_origin / 2) * (first_n - remain_n);
+                const uint8_t *window_remain = window_tile + first_n * (window / 2);
+                EXPECT_TRUE(
+                    std::equal(full_remain, full_remain + remain_n * (window / 2), window_remain))
+                    << "Packed B second subgroup mismatch at n_idx=" << n_idx;
+            }
+        }
+
+        std::vector<TD> zero_origin(m * n, to_target_type<TD>(0.0f));
+        std::vector<TD> zero_origin_packed(m * n, to_target_type<TD>(0.0f));
+        std::vector<TD> nonzero_origin(m * n, to_target_type<TD>(0.0f));
+        reference_gemm_quantized_weight_mixed<TA, TD>(
+            m, n, window, bl, A_window.data(), window, B_window.data(), window, scale_b.data() + 1,
+            ldsb, nullptr, n, zero_origin.data(), n, nullptr, BiasMode::kNone,
+            to_target_type<TD>(-FLT_MAX), to_target_type<TD>(FLT_MAX));
+        funcs.run_gemm(m, n, window, bl, A_window_packed.data(), window, 0, B_window_packed.data(),
+                       window, 0, scale_b_window, ldsb, nullptr, n, zero_origin_packed.data(), n,
+                       nullptr, to_target_type<TD>(-FLT_MAX), to_target_type<TD>(FLT_MAX));
+        funcs.run_gemm(m, n, window, bl, A_packed.data() + a_offset, k, k_origin,
+                       B_packed.data() + b_offset, k, k_origin, scale_b_window, ldsb, nullptr, n,
+                       nonzero_origin.data(), n, nullptr, to_target_type<TD>(-FLT_MAX),
+                       to_target_type<TD>(FLT_MAX));
+
+        SCOPED_TRACE("nonzero packed quantized-weight K origin");
+        auto origin_result = verify_gemm_result<TD>(zero_origin.data(), nonzero_origin.data(),
+                                                    m * n, DefaultThreshold<TA>::abs_error,
+                                                    DefaultThreshold<TA>::cosine_sim);
+        EXPECT_TRUE(origin_result.passed) << origin_result.error_message;
+        auto packed_origin_result = verify_gemm_result<TD>(
+            zero_origin_packed.data(), nonzero_origin.data(), m * n,
+            DefaultThreshold<TA>::abs_error, DefaultThreshold<TA>::cosine_sim);
+        EXPECT_TRUE(packed_origin_result.passed)
+            << "Compact and nonzero-origin packed GEMM differ:\n"
+            << packed_origin_result.error_message;
+    }
 }
 
 // ============================================================================
@@ -1657,6 +1933,62 @@ inline void run_packed_1xnbias_clamp_fp_qai8dxp_qsi8cxp_gemm_test(
                                << "\n  Cosine similarity: " << result.cosine_similarity;
 }
 
+/// Compare compact and getter-selected packed suffix windows for floating-output int8 GEMM.
+template <typename T_D>
+inline void run_packed_clamp_fp_i8_nonzero_origin_test(size_t m, size_t n, size_t k,
+                                                       size_t k_origin,
+                                                       const PackedClampFpGemmFuncs<T_D> &funcs)
+{
+    ASSERT_GT(k_origin, 0U);
+    ASSERT_LT(k_origin, k);
+    const size_t window = k - k_origin;
+
+    std::vector<int8_t> A(m * k), B(n * k);
+    for (size_t row = 0; row < m; ++row) {
+        for (size_t depth = 0; depth < k; ++depth)
+            A[row * k + depth] = static_cast<int8_t>((row + depth * 2) % 3 - 1);
+    }
+    for (size_t row = 0; row < n; ++row) {
+        for (size_t depth = 0; depth < k; ++depth)
+            B[row * k + depth] = static_cast<int8_t>((row * 2 + depth) % 3 - 1);
+    }
+
+    std::vector<int8_t> A_window(m * window), B_window(n * window);
+    for (size_t row = 0; row < m; ++row) {
+        std::copy_n(A.data() + row * k + k_origin, window, A_window.data() + row * window);
+    }
+    for (size_t row = 0; row < n; ++row) {
+        std::copy_n(B.data() + row * k + k_origin, window, B_window.data() + row * window);
+    }
+
+    std::vector<uint8_t> A_full(funcs.get_a_packed_size(m, k));
+    std::vector<uint8_t> B_full(funcs.get_b_packed_size(n, k));
+    std::vector<uint8_t> A_compact(funcs.get_a_packed_size(m, window));
+    std::vector<uint8_t> B_compact(funcs.get_b_packed_size(n, window));
+    funcs.run_a_pack(m, k, k, k, 0, A.data(), A_full.data());
+    funcs.run_bt_pack(n, k, k, k, 0, B.data(), B_full.data());
+    funcs.run_a_pack(m, window, window, window, 0, A_window.data(), A_compact.data());
+    funcs.run_bt_pack(n, window, window, window, 0, B_window.data(), B_compact.data());
+
+    const size_t a_offset = funcs.get_a_packed_offset(0, k_origin, k, m);
+    const size_t b_offset = funcs.get_b_packed_offset(0, k_origin, k, n);
+    std::vector<float> scale_a(m, 1.0f), scale_b(n, 1.0f);
+    std::vector<int32_t> zero_point_a(m, 0);
+    const tqt_qai8dxp_qsi8cxp_params qparams = {scale_a.data(), zero_point_a.data(),
+                                                scale_b.data()};
+    std::vector<T_D> compact(m * n), selected(m * n);
+    const T_D clamp_min = to_target_type<T_D>(-FLT_MAX);
+    const T_D clamp_max = to_target_type<T_D>(FLT_MAX);
+    funcs.run_gemm(m, n, window, A_compact.data(), window, 0, B_compact.data(), window, 0, nullptr,
+                   n, compact.data(), n, nullptr, clamp_min, clamp_max, &qparams);
+    funcs.run_gemm(m, n, window, A_full.data() + a_offset, k, k_origin, B_full.data() + b_offset, k,
+                   k_origin, nullptr, n, selected.data(), n, nullptr, clamp_min, clamp_max,
+                   &qparams);
+
+    SCOPED_TRACE("floating-output packed int8 nonzero K origin");
+    EXPECT_EQ(compact, selected);
+}
+
 // ============================================================================
 // W4A8 quantization helpers (shared by per-channel and block-quantized tests)
 // ----------------------------------------------------------------------------
@@ -1999,6 +2331,8 @@ struct W4A8PackedGemmFuncs
 {
     using GetMStepFunc = size_t (*)(void);
     using GetNStepFunc = size_t (*)(void);
+    using GetAPackedOffsetFunc = size_t (*)(size_t, size_t, size_t, size_t);
+    using GetBPackedOffsetFunc = size_t (*)(size_t, size_t, size_t, size_t);
     using GetAPackedSizeFunc = size_t (*)(size_t m, size_t k);
     using GetBPackedSizeFunc = size_t (*)(size_t n, size_t k);
     using RunAPackFunc = void (*)(size_t m, size_t k, size_t lda, size_t lda_packed, size_t k_idx,
@@ -2013,12 +2347,113 @@ struct W4A8PackedGemmFuncs
 
     GetMStepFunc get_m_step;
     GetNStepFunc get_n_step;
+    GetAPackedOffsetFunc get_a_packed_offset;
+    GetBPackedOffsetFunc get_b_packed_offset;
     GetAPackedSizeFunc get_a_packed_size;
     GetBPackedSizeFunc get_b_packed_size;
     RunAPackFunc run_a_pack;
     RunBtPackFunc run_bt_pack;
     RunGemmFunc run_gemm;
 };
+
+inline std::vector<int8_t> copy_i8_k_window(const std::vector<int8_t> &src, size_t rows,
+                                            size_t stride, size_t k_origin, size_t window)
+{
+    std::vector<int8_t> dst(rows * window);
+    for (size_t row = 0; row < rows; ++row) {
+        std::copy_n(src.data() + row * stride + k_origin, window, dst.data() + row * window);
+    }
+    return dst;
+}
+
+inline std::vector<uint8_t> copy_i4_k_window(const std::vector<uint8_t> &src, size_t rows,
+                                             size_t stride, size_t k_origin, size_t window)
+{
+    TQT_ASSUME(k_origin % 2 == 0);
+    TQT_ASSUME(window % 2 == 0);
+    std::vector<uint8_t> dst(rows * (window / 2));
+    for (size_t row = 0; row < rows; ++row) {
+        std::copy_n(src.data() + row * (stride / 2) + k_origin / 2, window / 2,
+                    dst.data() + row * (window / 2));
+    }
+    return dst;
+}
+
+template <typename TD>
+inline void check_w4a8_nonzero_origin(const GemmTestParams &params, const W4A8GemmFuncs<TD> &funcs,
+                                      const std::vector<int8_t> &A_i8,
+                                      const std::vector<uint8_t> &B_i4,
+                                      const struct tqt_qai8dx_qsi4cx_params &qparams)
+{
+    const size_t k_origin = (params.k / 4) * 2;
+    const size_t window = params.k - k_origin;
+    if (k_origin == 0 || window == 0 || window % 2 != 0) {
+        return;
+    }
+
+    const auto A_window = copy_i8_k_window(A_i8, params.m, params.k, k_origin, window);
+    const auto B_window = copy_i4_k_window(B_i4, params.n, params.k, k_origin, window);
+    std::vector<TD> expected(params.m * params.n, to_target_type<TD>(0.0f));
+    std::vector<TD> actual(params.m * params.n, to_target_type<TD>(0.0f));
+    const TD clamp_min = to_target_type<TD>(-FLT_MAX);
+    const TD clamp_max = to_target_type<TD>(FLT_MAX);
+
+    funcs.run_gemm(params.m, params.n, window, A_window.data(), window, 0, B_window.data(), window,
+                   0, nullptr, params.n, expected.data(), params.n, nullptr, clamp_min, clamp_max,
+                   &qparams);
+    funcs.run_gemm(params.m, params.n, window, A_i8.data() + k_origin, params.k, k_origin,
+                   B_i4.data() + k_origin / 2, params.k, k_origin, nullptr, params.n, actual.data(),
+                   params.n, nullptr, clamp_min, clamp_max, &qparams);
+
+    SCOPED_TRACE("nonzero K origin");
+    auto result =
+        verify_gemm_result<TD>(expected.data(), actual.data(), actual.size(),
+                               DefaultThreshold<TD>::abs_error, DefaultThreshold<TD>::cosine_sim);
+    EXPECT_TRUE(result.passed) << result.error_message;
+}
+
+template <typename TD>
+inline void check_w4a8_nonzero_origin(const GemmTestParams &params,
+                                      const W4A8PackedGemmFuncs<TD> &funcs,
+                                      const std::vector<int8_t> &A_i8,
+                                      const std::vector<uint8_t> &B_i4,
+                                      const std::vector<uint8_t> &A_packed,
+                                      const std::vector<uint8_t> &B_packed,
+                                      const struct tqt_qai8dx_qsi4cx_params &qparams)
+{
+    const size_t k_origin = (params.k / 4) * 2;
+    const size_t window = params.k - k_origin;
+    if (k_origin == 0 || window == 0 || window % 2 != 0) {
+        return;
+    }
+
+    const auto A_window = copy_i8_k_window(A_i8, params.m, params.k, k_origin, window);
+    const auto B_window = copy_i4_k_window(B_i4, params.n, params.k, k_origin, window);
+    std::vector<uint8_t> A_window_packed(funcs.get_a_packed_size(params.m, window));
+    std::vector<uint8_t> B_window_packed(funcs.get_b_packed_size(params.n, window));
+    funcs.run_a_pack(params.m, window, window, window, 0, A_window.data(), A_window_packed.data());
+    funcs.run_bt_pack(params.n, window, window, window, 0, B_window.data(), B_window_packed.data());
+
+    const size_t a_offset = funcs.get_a_packed_offset(0, k_origin, params.k, params.m);
+    const size_t b_offset = funcs.get_b_packed_offset(0, k_origin, params.k, params.n);
+    std::vector<TD> expected(params.m * params.n, to_target_type<TD>(0.0f));
+    std::vector<TD> actual(params.m * params.n, to_target_type<TD>(0.0f));
+    const TD clamp_min = to_target_type<TD>(-FLT_MAX);
+    const TD clamp_max = to_target_type<TD>(FLT_MAX);
+
+    funcs.run_gemm(params.m, params.n, window, A_window_packed.data(), window, 0,
+                   B_window_packed.data(), window, 0, nullptr, params.n, expected.data(), params.n,
+                   nullptr, clamp_min, clamp_max, &qparams);
+    funcs.run_gemm(params.m, params.n, window, A_packed.data() + a_offset, params.k, k_origin,
+                   B_packed.data() + b_offset, params.k, k_origin, nullptr, params.n, actual.data(),
+                   params.n, nullptr, clamp_min, clamp_max, &qparams);
+
+    SCOPED_TRACE("nonzero packed K origin");
+    auto result =
+        verify_gemm_result<TD>(expected.data(), actual.data(), actual.size(),
+                               DefaultThreshold<TD>::abs_error, DefaultThreshold<TD>::cosine_sim);
+    EXPECT_TRUE(result.passed) << result.error_message;
+}
 
 template <typename TD>
 inline void run_w4a8_gemm_test(const GemmTestParams &params, const W4A8GemmFuncs<TD> &funcs)
@@ -2108,6 +2543,8 @@ inline void run_w4a8_gemm_test(const GemmTestParams &params, const W4A8GemmFuncs
                                << " K=" << k << "\n  Config: " << params.name
                                << "\n  Max abs error: " << result.max_abs_error
                                << "\n  Cosine similarity: " << result.cosine_similarity;
+
+    check_w4a8_nonzero_origin(params, funcs, A_i8, B_packed, qparams);
 }
 
 template <typename TD>
@@ -2206,6 +2643,8 @@ inline void run_w4a8_packed_gemm_test(const GemmTestParams &params,
                                << " K=" << k << "\n  Config: " << params.name
                                << "\n  Max abs error: " << result.max_abs_error
                                << "\n  Cosine similarity: " << result.cosine_similarity;
+
+    check_w4a8_nonzero_origin(params, funcs, A_i8, B_int4, A_packed, B_packed, qparams);
 }
 
 // ============================================================================
@@ -2239,6 +2678,8 @@ struct W4A8ReqI8PackedGemmFuncs
 {
     using GetMStepFunc = size_t (*)(void);
     using GetNStepFunc = size_t (*)(void);
+    using GetAPackedOffsetFunc = size_t (*)(size_t, size_t, size_t, size_t);
+    using GetBPackedOffsetFunc = size_t (*)(size_t, size_t, size_t, size_t);
     using GetAPackedSizeFunc = size_t (*)(size_t m, size_t k);
     using GetBPackedSizeFunc = size_t (*)(size_t n, size_t k);
     using RunAPackFunc = void (*)(size_t m, size_t k, size_t lda, size_t lda_packed, size_t k_idx,
@@ -2253,12 +2694,77 @@ struct W4A8ReqI8PackedGemmFuncs
 
     GetMStepFunc get_m_step;
     GetNStepFunc get_n_step;
+    GetAPackedOffsetFunc get_a_packed_offset;
+    GetBPackedOffsetFunc get_b_packed_offset;
     GetAPackedSizeFunc get_a_packed_size;
     GetBPackedSizeFunc get_b_packed_size;
     RunAPackFunc run_a_pack;
     RunBtPackFunc run_bt_pack;
     RunGemmFunc run_gemm;
 };
+
+inline void check_w4a8_reqi8_nonzero_origin(const GemmTestParams &params,
+                                            const W4A8ReqI8GemmFuncs &funcs,
+                                            const std::vector<int8_t> &A_i8,
+                                            const std::vector<uint8_t> &B_i4,
+                                            const struct tqt_qai8_qai8dx_qsi4cx_params &qparams)
+{
+    const size_t k_origin = (params.k / 4) * 2;
+    const size_t window = params.k - k_origin;
+    if (k_origin == 0 || window == 0 || window % 2 != 0) {
+        return;
+    }
+
+    const auto A_window = copy_i8_k_window(A_i8, params.m, params.k, k_origin, window);
+    const auto B_window = copy_i4_k_window(B_i4, params.n, params.k, k_origin, window);
+    std::vector<int8_t> expected(params.m * params.n);
+    std::vector<int8_t> actual(params.m * params.n);
+    funcs.run_gemm(params.m, params.n, window, A_window.data(), window, 0, B_window.data(), window,
+                   0, nullptr, params.n, expected.data(), params.n, nullptr, INT8_MIN, INT8_MAX,
+                   &qparams);
+    funcs.run_gemm(params.m, params.n, window, A_i8.data() + k_origin, params.k, k_origin,
+                   B_i4.data() + k_origin / 2, params.k, k_origin, nullptr, params.n, actual.data(),
+                   params.n, nullptr, INT8_MIN, INT8_MAX, &qparams);
+
+    SCOPED_TRACE("nonzero K origin");
+    EXPECT_EQ(actual, expected);
+}
+
+inline void check_w4a8_reqi8_nonzero_origin(const GemmTestParams &params,
+                                            const W4A8ReqI8PackedGemmFuncs &funcs,
+                                            const std::vector<int8_t> &A_i8,
+                                            const std::vector<uint8_t> &B_i4,
+                                            const std::vector<uint8_t> &A_packed,
+                                            const std::vector<uint8_t> &B_packed,
+                                            const struct tqt_qai8_qai8dx_qsi4cx_params &qparams)
+{
+    const size_t k_origin = (params.k / 4) * 2;
+    const size_t window = params.k - k_origin;
+    if (k_origin == 0 || window == 0 || window % 2 != 0) {
+        return;
+    }
+
+    const auto A_window = copy_i8_k_window(A_i8, params.m, params.k, k_origin, window);
+    const auto B_window = copy_i4_k_window(B_i4, params.n, params.k, k_origin, window);
+    std::vector<uint8_t> A_window_packed(funcs.get_a_packed_size(params.m, window));
+    std::vector<uint8_t> B_window_packed(funcs.get_b_packed_size(params.n, window));
+    funcs.run_a_pack(params.m, window, window, window, 0, A_window.data(), A_window_packed.data());
+    funcs.run_bt_pack(params.n, window, window, window, 0, B_window.data(), B_window_packed.data());
+
+    const size_t a_offset = funcs.get_a_packed_offset(0, k_origin, params.k, params.m);
+    const size_t b_offset = funcs.get_b_packed_offset(0, k_origin, params.k, params.n);
+    std::vector<int8_t> expected(params.m * params.n);
+    std::vector<int8_t> actual(params.m * params.n);
+    funcs.run_gemm(params.m, params.n, window, A_window_packed.data(), window, 0,
+                   B_window_packed.data(), window, 0, nullptr, params.n, expected.data(), params.n,
+                   nullptr, INT8_MIN, INT8_MAX, &qparams);
+    funcs.run_gemm(params.m, params.n, window, A_packed.data() + a_offset, params.k, k_origin,
+                   B_packed.data() + b_offset, params.k, k_origin, nullptr, params.n, actual.data(),
+                   params.n, nullptr, INT8_MIN, INT8_MAX, &qparams);
+
+    SCOPED_TRACE("nonzero packed K origin");
+    EXPECT_EQ(actual, expected);
+}
 
 inline void run_w4a8_reqi8_gemm_test(const GemmTestParams &params, const W4A8ReqI8GemmFuncs &funcs)
 {
@@ -2336,6 +2842,8 @@ inline void run_w4a8_reqi8_gemm_test(const GemmTestParams &params, const W4A8Req
                                << " K=" << k << "\n  Config: " << params.name
                                << "\n  Max abs error: " << result.max_abs_error
                                << "\n  Cosine similarity: " << result.cosine_similarity;
+
+    check_w4a8_reqi8_nonzero_origin(params, funcs, A_i8, B_packed, qparams);
 }
 
 inline void run_w4a8_reqi8_packed_gemm_test(const GemmTestParams &params,
@@ -2420,6 +2928,8 @@ inline void run_w4a8_reqi8_packed_gemm_test(const GemmTestParams &params,
                                << " K=" << k << "\n  Config: " << params.name
                                << "\n  Max abs error: " << result.max_abs_error
                                << "\n  Cosine similarity: " << result.cosine_similarity;
+
+    check_w4a8_reqi8_nonzero_origin(params, funcs, A_i8, B_int4, A_packed, B_packed, qparams);
 }
 
 // ============================================================================
@@ -2453,6 +2963,8 @@ struct W4A8BQ_Qai8dx_Qsi4c2_PackedFuncs
 {
     using GetMStepFunc = size_t (*)(void);
     using GetNStepFunc = size_t (*)(void);
+    using GetAPackedOffsetFunc = size_t (*)(size_t, size_t, size_t, size_t);
+    using GetBPackedOffsetFunc = size_t (*)(size_t, size_t, size_t, size_t);
     using GetAPackedSizeFunc = size_t (*)(size_t m, size_t k);
     using GetBPackedSizeFunc = size_t (*)(size_t n, size_t k);
     using RunAPackFunc = void (*)(size_t m, size_t k, size_t lda, size_t lda_packed, size_t k_idx,
@@ -2466,6 +2978,8 @@ struct W4A8BQ_Qai8dx_Qsi4c2_PackedFuncs
                                  const struct tqt_qai8dx_qsi4c2_params *params);
     GetMStepFunc get_m_step;
     GetNStepFunc get_n_step;
+    GetAPackedOffsetFunc get_a_packed_offset;
+    GetBPackedOffsetFunc get_b_packed_offset;
     GetAPackedSizeFunc get_a_packed_size;
     GetBPackedSizeFunc get_b_packed_size;
     RunAPackFunc run_a_pack;
@@ -2495,6 +3009,8 @@ struct W4A8BQ_Qsi8d2_Qsi4c2_PackedFuncs
 {
     using GetMStepFunc = size_t (*)(void);
     using GetNStepFunc = size_t (*)(void);
+    using GetAPackedOffsetFunc = size_t (*)(size_t, size_t, size_t, size_t);
+    using GetBPackedOffsetFunc = size_t (*)(size_t, size_t, size_t, size_t);
     using GetAPackedSizeFunc = size_t (*)(size_t m, size_t k);
     using GetBPackedSizeFunc = size_t (*)(size_t n, size_t k);
     using RunAPackFunc = void (*)(size_t m, size_t k, size_t lda, size_t lda_packed, size_t k_idx,
@@ -2508,6 +3024,8 @@ struct W4A8BQ_Qsi8d2_Qsi4c2_PackedFuncs
                                  const struct tqt_qsi8d2_qsi4c2_params *params);
     GetMStepFunc get_m_step;
     GetNStepFunc get_n_step;
+    GetAPackedOffsetFunc get_a_packed_offset;
+    GetBPackedOffsetFunc get_b_packed_offset;
     GetAPackedSizeFunc get_a_packed_size;
     GetBPackedSizeFunc get_b_packed_size;
     RunAPackFunc run_a_pack;
@@ -2537,6 +3055,8 @@ struct W4A8BQ_Qsi8d2_Qai4c2_PackedFuncs
 {
     using GetMStepFunc = size_t (*)(void);
     using GetNStepFunc = size_t (*)(void);
+    using GetAPackedOffsetFunc = size_t (*)(size_t, size_t, size_t, size_t);
+    using GetBPackedOffsetFunc = size_t (*)(size_t, size_t, size_t, size_t);
     using GetAPackedSizeFunc = size_t (*)(size_t m, size_t k);
     using GetBPackedSizeFunc = size_t (*)(size_t n, size_t k);
     using RunAPackFunc = void (*)(size_t m, size_t k, size_t lda, size_t lda_packed, size_t k_idx,
@@ -2550,6 +3070,8 @@ struct W4A8BQ_Qsi8d2_Qai4c2_PackedFuncs
                                  const struct tqt_qsi8d2_qai4c2_params *params);
     GetMStepFunc get_m_step;
     GetNStepFunc get_n_step;
+    GetAPackedOffsetFunc get_a_packed_offset;
+    GetBPackedOffsetFunc get_b_packed_offset;
     GetAPackedSizeFunc get_a_packed_size;
     GetBPackedSizeFunc get_b_packed_size;
     RunAPackFunc run_a_pack;
@@ -2657,6 +3179,85 @@ inline std::vector<TD> round_through_td(const std::vector<float> &src)
     return dst;
 }
 
+template <typename TD, typename Funcs, typename QParams>
+inline void check_w4a8_bq_nonzero_origin(const GemmTestParams &params, const Funcs &funcs,
+                                         const std::vector<int8_t> &A_i8,
+                                         const std::vector<uint8_t> &B_i4,
+                                         const QParams &window_params, const QParams &full_params)
+{
+    const size_t k_origin = params.bl;
+    if (params.bl == 0 || params.k <= params.bl) {
+        return;
+    }
+    const size_t window = params.k - k_origin;
+    if (window % params.bl != 0) {
+        return;
+    }
+
+    const auto A_window = copy_i8_k_window(A_i8, params.m, params.k, k_origin, window);
+    const auto B_window = copy_i4_k_window(B_i4, params.n, params.k, k_origin, window);
+    std::vector<TD> expected(params.m * params.n, to_target_type<TD>(0.0f));
+    std::vector<TD> actual(params.m * params.n, to_target_type<TD>(0.0f));
+    const TD clamp_min = to_target_type<TD>(-FLT_MAX);
+    const TD clamp_max = to_target_type<TD>(FLT_MAX);
+
+    funcs.run_gemm(params.m, params.n, window, params.bl, A_window.data(), window, 0,
+                   B_window.data(), window, 0, nullptr, params.n, expected.data(), params.n,
+                   nullptr, clamp_min, clamp_max, &window_params);
+    funcs.run_gemm(params.m, params.n, window, params.bl, A_i8.data() + k_origin, params.k,
+                   k_origin, B_i4.data() + k_origin / 2, params.k, k_origin, nullptr, params.n,
+                   actual.data(), params.n, nullptr, clamp_min, clamp_max, &full_params);
+
+    SCOPED_TRACE("nonzero block-quantized K origin");
+    auto result =
+        verify_gemm_result<TD>(expected.data(), actual.data(), actual.size(),
+                               DefaultThreshold<TD>::abs_error, DefaultThreshold<TD>::cosine_sim);
+    EXPECT_TRUE(result.passed) << result.error_message;
+}
+
+template <typename TD, typename Funcs, typename QParams>
+inline void check_w4a8_bq_nonzero_packed_origin(
+    const GemmTestParams &params, const Funcs &funcs, const std::vector<int8_t> &A_i8,
+    const std::vector<uint8_t> &B_i4, const std::vector<uint8_t> &A_packed,
+    const std::vector<uint8_t> &B_packed, const QParams &window_params, const QParams &full_params)
+{
+    const size_t k_origin = params.bl;
+    if (params.bl == 0 || params.k <= params.bl) {
+        return;
+    }
+    const size_t window = params.k - k_origin;
+    if (window % params.bl != 0) {
+        return;
+    }
+
+    const auto A_window = copy_i8_k_window(A_i8, params.m, params.k, k_origin, window);
+    const auto B_window = copy_i4_k_window(B_i4, params.n, params.k, k_origin, window);
+    std::vector<uint8_t> A_window_packed(funcs.get_a_packed_size(params.m, window));
+    std::vector<uint8_t> B_window_packed(funcs.get_b_packed_size(params.n, window));
+    funcs.run_a_pack(params.m, window, window, window, 0, A_window.data(), A_window_packed.data());
+    funcs.run_bt_pack(params.n, window, window, window, 0, B_window.data(), B_window_packed.data());
+
+    const size_t a_offset = funcs.get_a_packed_offset(0, k_origin, params.k, params.m);
+    const size_t b_offset = funcs.get_b_packed_offset(0, k_origin, params.k, params.n);
+    std::vector<TD> expected(params.m * params.n, to_target_type<TD>(0.0f));
+    std::vector<TD> actual(params.m * params.n, to_target_type<TD>(0.0f));
+    const TD clamp_min = to_target_type<TD>(-FLT_MAX);
+    const TD clamp_max = to_target_type<TD>(FLT_MAX);
+
+    funcs.run_gemm(params.m, params.n, window, params.bl, A_window_packed.data(), window, 0,
+                   B_window_packed.data(), window, 0, nullptr, params.n, expected.data(), params.n,
+                   nullptr, clamp_min, clamp_max, &window_params);
+    funcs.run_gemm(params.m, params.n, window, params.bl, A_packed.data() + a_offset, params.k,
+                   k_origin, B_packed.data() + b_offset, params.k, k_origin, nullptr, params.n,
+                   actual.data(), params.n, nullptr, clamp_min, clamp_max, &full_params);
+
+    SCOPED_TRACE("nonzero packed block-quantized K origin");
+    auto result =
+        verify_gemm_result<TD>(expected.data(), actual.data(), actual.size(),
+                               DefaultThreshold<TD>::abs_error, DefaultThreshold<TD>::cosine_sim);
+    EXPECT_TRUE(result.passed) << result.error_message;
+}
+
 // ============================================================================
 // W4A8 block-quantized: runners (6 — 3 categories × {unpacked, packed})
 // ============================================================================
@@ -2701,6 +3302,9 @@ inline void run_w4a8_bq_qai8dx_qsi4c2t_test(const GemmTestParams &params,
                    &qparams);
 
     verify_w4a8_bq_result(D_ref, D_act, params);
+    auto window_params = qparams;
+    window_params.scale_b += 1;
+    check_w4a8_bq_nonzero_origin<TD>(params, funcs, A_i8, B_int4, window_params, qparams);
 }
 
 // ---------- Class 1 packed: qai8dxp × qsi4c2p ----------
@@ -2750,6 +3354,10 @@ inline void run_w4a8_bq_qai8dxp_qsi4c2p_test(const GemmTestParams &params,
                    &qparams);
 
     verify_w4a8_bq_result(D_ref, D_act, params);
+    auto window_params = qparams;
+    window_params.scale_b += 1;
+    check_w4a8_bq_nonzero_packed_origin<TD>(params, funcs, A_i8, B_int4, A_packed, B_packed,
+                                            window_params, qparams);
 }
 
 // ---------- Class 2 unpacked: qsi8d2 × qsi4c2t ----------
@@ -2791,6 +3399,10 @@ inline void run_w4a8_bq_qsi8d2_qsi4c2t_test(const GemmTestParams &params,
                    &qparams);
 
     verify_w4a8_bq_result(D_ref, D_act, params);
+    auto window_params = qparams;
+    window_params.scale_a += 1;
+    window_params.scale_b += 1;
+    check_w4a8_bq_nonzero_origin<TD>(params, funcs, A_i8, B_int4, window_params, qparams);
 }
 
 // ---------- Class 2 packed: qsi8d2p × qsi4c2p ----------
@@ -2839,6 +3451,11 @@ inline void run_w4a8_bq_qsi8d2p_qsi4c2p_test(const GemmTestParams &params,
                    &qparams);
 
     verify_w4a8_bq_result(D_ref, D_act, params);
+    auto window_params = qparams;
+    window_params.scale_a += 1;
+    window_params.scale_b += 1;
+    check_w4a8_bq_nonzero_packed_origin<TD>(params, funcs, A_i8, B_int4, A_packed, B_packed,
+                                            window_params, qparams);
 }
 
 // ---------- Class 3 unpacked: qsi8d2 × qai4c2t ----------
@@ -2886,6 +3503,11 @@ inline void run_w4a8_bq_qsi8d2_qai4c2t_test(const GemmTestParams &params,
                    &qparams);
 
     verify_w4a8_bq_result(D_ref, D_act, params);
+    auto window_params = qparams;
+    window_params.scale_a += 1;
+    window_params.scale_b += 1;
+    window_params.zp_b += 1;
+    check_w4a8_bq_nonzero_origin<TD>(params, funcs, A_i8, B_int4, window_params, qparams);
 }
 
 // ---------- Class 3 packed: qsi8d2p × qai4c2p ----------
@@ -2940,6 +3562,12 @@ inline void run_w4a8_bq_qsi8d2p_qai4c2p_test(const GemmTestParams &params,
                    &qparams);
 
     verify_w4a8_bq_result(D_ref, D_act, params);
+    auto window_params = qparams;
+    window_params.scale_a += 1;
+    window_params.scale_b += 1;
+    window_params.zp_b += 1;
+    check_w4a8_bq_nonzero_packed_origin<TD>(params, funcs, A_i8, B_int4, A_packed, B_packed,
+                                            window_params, qparams);
 }
 
 // ============================================================================
@@ -3945,6 +4573,8 @@ void run_packed_qsi8_qx0_source_test(size_t m, size_t n, size_t k,
         FUNCS_TYPE<TD> funcs;                                                           \
         funcs.get_m_step = tqt_get_m_step_gemm_##KBASE##_4x1vl_rvv;                     \
         funcs.get_n_step = tqt_get_n_step_gemm_##KBASE##_4x1vl_rvv;                     \
+        funcs.get_a_packed_offset = tqt_get_a_packed_offset_gemm_##KBASE##_4x1vl_rvv;   \
+        funcs.get_b_packed_offset = tqt_get_b_packed_offset_gemm_##KBASE##_4x1vl_rvv;   \
         funcs.get_a_packed_size = tqt_get_a_packed_size_gemm_##KBASE##_4x1vl_rvv;       \
         funcs.get_b_packed_size = tqt_get_b_packed_size_gemm_##KBASE##_4x1vl_rvv;       \
         funcs.run_a_pack = tqt_run_a_pack_gemm_##KBASE##_4x1vl_rvv;                     \

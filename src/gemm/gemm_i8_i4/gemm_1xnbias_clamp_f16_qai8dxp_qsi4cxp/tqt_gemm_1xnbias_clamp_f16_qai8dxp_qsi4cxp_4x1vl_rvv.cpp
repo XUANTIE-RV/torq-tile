@@ -209,9 +209,6 @@ void tqt_run_gemm_1xnbias_clamp_f16_qai8dxp_qsi4cxp_4x1vl_rvv(
     size_t ldd, const void *bias, float16_t clamp_min, float16_t clamp_max,
     const struct tqt_qai8dx_qsi4cx_params *params)
 {
-    TQT_UNUSED(k_idx_a);
-    TQT_UNUSED(k_idx_b);
-
     if (!params) {
         return;
     }
@@ -222,17 +219,19 @@ void tqt_run_gemm_1xnbias_clamp_f16_qai8dxp_qsi4cxp_4x1vl_rvv(
     const float16_t *bias_ptr = (const float16_t *)bias;
     float16_t *D_ptr = (float16_t *)D;
 
-    const size_t k_half = k / 2;
+    TQT_ASSUME(k_idx_b % 2 == 0);
+    const size_t ldb_e8 = ldb / 2;
+    const size_t origin_m = TQT_MIN(m, m_step);
+    const size_t origin_n = TQT_MIN(n, n_step);
 
     for (size_t m_idx = 0; m_idx < m; m_idx += m_step) {
         for (size_t n_idx = 0; n_idx < n; n_idx += n_step) {
             const size_t actual_m = TQT_MIN(m - m_idx, m_step);
             const size_t actual_n = TQT_MIN(n - n_idx, n_step);
 
-            // Packed A tile starts at m_idx * k (interleaved per m-tile).
-            const int8_t *a_tile = A_ptr + m_idx * k;
-            // Packed B tile starts at n_idx * (k/2).
-            const uint8_t *b_tile = B_ptr + n_idx * k_half;
+            const int8_t *a_tile = A_ptr + m_idx * lda + k_idx_a * actual_m - k_idx_a * origin_m;
+            const uint8_t *b_tile =
+                B_ptr + n_idx * ldb_e8 + (k_idx_b / 2) * actual_n - (k_idx_b / 2) * origin_n;
             const float16_t *c_tile = C_ptr ? C_ptr + m_idx * ldc + n_idx : nullptr;
             const float16_t *bias_tile = bias_ptr ? bias_ptr + n_idx : nullptr;
             float16_t *d_tile = D_ptr + m_idx * ldd + n_idx;

@@ -167,19 +167,11 @@ void tqt_run_gemm_clamp_i32_i8p_i8p_4x1vl_rvv(size_t m, size_t n, size_t k, cons
             const size_t actual_m = TQT_MIN(m - m_idx, m_step);
             const size_t actual_n = TQT_MIN(n - n_idx, n_step);
 
-            const int8_t *a_ptr;
-            const int8_t *b_ptr;
-            if (actual_m == m_step || k_idx_a == 0) {
-                a_ptr = (const int8_t *)A_packed + m_idx * lda;
-            } else {
-                a_ptr = (const int8_t *)A_packed + m_idx * lda - k_idx_a * (m_step - actual_m);
-            }
-            if (actual_n == n_step || k_idx_b == 0) {
-                b_ptr = (const int8_t *)B_packed + n_idx * ldb;
-            } else {
-                b_ptr = (const int8_t *)B_packed + n_idx * ldb - k_idx_b * (n_step - actual_n);
-            }
-            const int32_t *c_ptr = C ? (const int32_t *)C + m_idx * ldc + n_idx : NULL;
+            const int8_t *a_ptr = (const int8_t *)A_packed + m_idx * lda + k_idx_a * actual_m -
+                                  k_idx_a * TQT_MIN(m, m_step);
+            const int8_t *b_ptr = (const int8_t *)B_packed + n_idx * ldb + k_idx_b * actual_n -
+                                  k_idx_b * TQT_MIN(n, n_step);
+            const int32_t *c_ptr = C ? (const int32_t *)C + m_idx * ldc + n_idx : nullptr;
             int32_t *d_ptr = (int32_t *)D + m_idx * ldd + n_idx;
 
             size_t mr_idx = actual_m - 1;

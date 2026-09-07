@@ -204,14 +204,10 @@ void tqt_run_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp_4x1vl_rvv(
             const size_t actual_n = TQT_MIN(n - n_idx, n_step);
 
             const int8_t *a_ptr = A_ptr + m_idx * lda;
-            const int8_t *b_ptr;
-            if (actual_n == n_step || k_idx_b == 0) {
-                b_ptr = (const int8_t *)B_packed + n_idx * ldb;
-            } else {
-                b_ptr = (const int8_t *)B_packed + n_idx * ldb - k_idx_b * (n_step - actual_n);
-            }
-            const int32_t *c_ptr = C_ptr ? C_ptr + m_idx * ldc + n_idx : NULL;
-            const int32_t *bias_tile_ptr = bias_ptr ? bias_ptr + n_idx : NULL;
+            const int8_t *b_ptr = (const int8_t *)B_packed + n_idx * ldb + k_idx_b * actual_n -
+                                  k_idx_b * TQT_MIN(n, n_step);
+            const int32_t *c_ptr = C_ptr ? C_ptr + m_idx * ldc + n_idx : nullptr;
+            const int32_t *bias_tile_ptr = bias_ptr ? bias_ptr + n_idx : nullptr;
             int8_t *d_ptr = D_ptr + m_idx * ldd + n_idx;
 
             const int32_t *mult_ptr = mult + n_idx;

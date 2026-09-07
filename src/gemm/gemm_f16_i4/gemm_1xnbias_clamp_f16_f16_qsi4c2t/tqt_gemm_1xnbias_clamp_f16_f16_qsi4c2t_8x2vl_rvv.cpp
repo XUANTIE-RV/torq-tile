@@ -186,8 +186,9 @@ void tqt_run_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv(
     size_t ldc, void *D, size_t ldd, const void *bias, float16_t clamp_min, float16_t clamp_max)
 {
     TQT_UNUSED(k_idx_a);
-    TQT_UNUSED(k_idx_b);
 
+    TQT_ASSUME(k_idx_b % bl == 0);
+    TQT_ASSUME(k_idx_b % 2 == 0);
     const size_t b_byte_stride = ldb / 2;
 
     for (size_t m_idx = 0; m_idx < m; m_idx += m_step) {

@@ -186,19 +186,11 @@ void tqt_run_gemm_1xnbias_clamp_f32_qai8dxp_qsi8cxp_4x1vl_rvv(
             const size_t actual_m = TQT_MIN(m - m_idx, m_step);
             const size_t actual_n = TQT_MIN(n - n_idx, n_step);
 
-            const int8_t *a_ptr;
-            const int8_t *b_ptr;
-            if (actual_m == m_step || k_idx_a == 0) {
-                a_ptr = (const int8_t *)A_packed + m_idx * lda;
-            } else {
-                a_ptr = (const int8_t *)A_packed + m_idx * lda - k_idx_a * (m_step - actual_m);
-            }
-            if (actual_n == n_step || k_idx_b == 0) {
-                b_ptr = (const int8_t *)B_packed + n_idx * ldb;
-            } else {
-                b_ptr = (const int8_t *)B_packed + n_idx * ldb - k_idx_b * (n_step - actual_n);
-            }
-            const float *bias_tile_ptr = bias_ptr ? bias_ptr + n_idx : NULL;
+            const int8_t *a_ptr = (const int8_t *)A_packed + m_idx * lda + k_idx_a * actual_m -
+                                  k_idx_a * TQT_MIN(m, m_step);
+            const int8_t *b_ptr = (const int8_t *)B_packed + n_idx * ldb + k_idx_b * actual_n -
+                                  k_idx_b * TQT_MIN(n, n_step);
+            const float *bias_tile_ptr = bias_ptr ? bias_ptr + n_idx : nullptr;
             float *d_ptr = D_ptr + m_idx * ldd + n_idx;
 
             float scale_a_tile[m_step] = {0.f, 0.f, 0.f, 0.f};

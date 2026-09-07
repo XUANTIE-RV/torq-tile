@@ -3564,6 +3564,342 @@ void run_packed_qsi8_kblock_gemm_equivalence_test(
     check_qsi8_block_quantized_gemm_result(compact_output, expanded_output);
 }
 
+// ============================================================================
+// Q8_0 activation x Q1_0/Q2_0/Q4_0/Q5_0 source-aware execution tests
+// ============================================================================
+
+enum class Qx0SourceEncoding
+{
+    Bipolar1,
+    U2Z1,
+    I4,
+    I5,
+};
+
+inline size_t qx0_source_block_size(Qx0SourceEncoding encoding)
+{
+    switch (encoding) {
+        case Qx0SourceEncoding::Bipolar1:
+            return 128;
+        case Qx0SourceEncoding::U2Z1:
+            return 64;
+        case Qx0SourceEncoding::I4:
+        case Qx0SourceEncoding::I5:
+            return 32;
+    }
+    return 0;
+}
+
+inline size_t qx0_row_bytes(Qx0SourceEncoding encoding, size_t k)
+{
+    switch (encoding) {
+        case Qx0SourceEncoding::Bipolar1:
+            return k / 8;
+        case Qx0SourceEncoding::U2Z1:
+            return k / 4;
+        case Qx0SourceEncoding::I4:
+            return k / 2;
+        case Qx0SourceEncoding::I5:
+            return (k / 32) * 20;
+    }
+    return 0;
+}
+
+inline int8_t qx0_pattern_value(Qx0SourceEncoding encoding, size_t index)
+{
+    switch (encoding) {
+        case Qx0SourceEncoding::Bipolar1: {
+            static constexpr int8_t values[] = {-1, 1};
+            return values[index % 2];
+        }
+        case Qx0SourceEncoding::U2Z1: {
+            static constexpr int8_t values[] = {-1, 0, 1, 2};
+            return values[index % 4];
+        }
+        case Qx0SourceEncoding::I4: {
+            static constexpr int8_t values[] = {-8, -1, 0, 7};
+            return values[index % 4];
+        }
+        case Qx0SourceEncoding::I5: {
+            static constexpr int8_t values[] = {-16, -1, 0, 15};
+            return values[index % 4];
+        }
+    }
+    return 0;
+}
+
+inline void set_qx0_raw_value(std::vector<uint8_t> &raw, Qx0SourceEncoding encoding, size_t k,
+                              size_t row, size_t kk, int8_t value)
+{
+    uint8_t *dst = raw.data() + row * qx0_row_bytes(encoding, k);
+    switch (encoding) {
+        case Qx0SourceEncoding::Bipolar1:
+            dst[kk / 8] |= static_cast<uint8_t>((value > 0) << (kk % 8));
+            break;
+        case Qx0SourceEncoding::U2Z1:
+            dst[kk / 4] |= static_cast<uint8_t>((value + 1) << ((kk % 4) * 2));
+            break;
+        case Qx0SourceEncoding::I4: {
+            const size_t block_base = (kk / 32) * 16;
+            const size_t in_block = kk % 32;
+            const size_t byte = block_base + in_block % 16;
+            const uint8_t code = static_cast<uint8_t>(value + 8);
+            dst[byte] |= static_cast<uint8_t>(code << ((in_block / 16) * 4));
+            break;
+        }
+        case Qx0SourceEncoding::I5: {
+            const size_t block_base = (kk / 32) * 20;
+            const size_t in_block = kk % 32;
+            const uint8_t code = static_cast<uint8_t>(value + 16);
+            dst[block_base + 4 + in_block % 16] |=
+                static_cast<uint8_t>((code & 15) << ((in_block / 16) * 4));
+            dst[block_base + in_block / 8] |=
+                static_cast<uint8_t>(((code >> 4) & 1) << (in_block % 8));
+            break;
+        }
+    }
+}
+
+inline int8_t get_qx0_raw_value(const std::vector<uint8_t> &raw, Qx0SourceEncoding encoding,
+                                size_t k, size_t row, size_t kk)
+{
+    const uint8_t *src = raw.data() + row * qx0_row_bytes(encoding, k);
+    switch (encoding) {
+        case Qx0SourceEncoding::Bipolar1:
+            return ((src[kk / 8] >> (kk % 8)) & 1) ? 1 : -1;
+        case Qx0SourceEncoding::U2Z1:
+            return static_cast<int8_t>(((src[kk / 4] >> ((kk % 4) * 2)) & 3) - 1);
+        case Qx0SourceEncoding::I4: {
+            const size_t block_base = (kk / 32) * 16;
+            const size_t in_block = kk % 32;
+            const uint8_t code = (src[block_base + in_block % 16] >> ((in_block / 16) * 4)) & 15;
+            return static_cast<int8_t>(code) - 8;
+        }
+        case Qx0SourceEncoding::I5: {
+            const size_t block_base = (kk / 32) * 20;
+            const size_t in_block = kk % 32;
+            const uint8_t low = (src[block_base + 4 + in_block % 16] >> ((in_block / 16) * 4)) & 15;
+            const uint8_t high = (src[block_base + in_block / 8] >> (in_block % 8)) & 1;
+            return static_cast<int8_t>(low | (high << 4)) - 16;
+        }
+    }
+    return 0;
+}
+
+inline std::vector<uint8_t> adapt_qx0_raw_to_execution(const std::vector<uint8_t> &raw,
+                                                       Qx0SourceEncoding encoding,
+                                                       size_t execution_bits, size_t n, size_t k)
+{
+    const size_t execution_row_bytes = k * execution_bits / 8;
+    std::vector<uint8_t> execution(n * execution_row_bytes, 0);
+    for (size_t row = 0; row < n; ++row) {
+        uint8_t *dst = execution.data() + row * execution_row_bytes;
+        for (size_t kk = 0; kk < k; ++kk) {
+            const int8_t value = get_qx0_raw_value(raw, encoding, k, row, kk);
+            if (execution_bits == 8) {
+                reinterpret_cast<int8_t *>(dst)[kk] = value;
+                continue;
+            }
+            if (execution_bits == 4) {
+                dst[kk / 2] |= static_cast<uint8_t>((value & 15) << ((kk % 2) * 4));
+                continue;
+            }
+            switch (encoding) {
+                case Qx0SourceEncoding::Bipolar1:
+                    dst[kk / 8] |= static_cast<uint8_t>((value > 0) << (kk % 8));
+                    break;
+                case Qx0SourceEncoding::U2Z1:
+                    dst[kk / 4] |= static_cast<uint8_t>((value + 1) << ((kk % 4) * 2));
+                    break;
+                case Qx0SourceEncoding::I4:
+                    dst[kk / 2] |= static_cast<uint8_t>((value & 15) << ((kk % 2) * 4));
+                    break;
+                case Qx0SourceEncoding::I5: {
+                    const size_t block_base = (kk / 32) * 20;
+                    const size_t in_block = kk % 32;
+                    const uint8_t code = static_cast<uint8_t>(value) & 31;
+                    dst[block_base + in_block / 2] |=
+                        static_cast<uint8_t>((code & 15) << ((in_block % 2) * 4));
+                    dst[block_base + 16 + in_block / 8] |=
+                        static_cast<uint8_t>(((code >> 4) & 1) << (in_block % 8));
+                    break;
+                }
+            }
+        }
+    }
+    return execution;
+}
+
+template <typename QParams>
+struct PackedQsi8Qx0GemmTestFuncs
+{
+    using GetStepFunc = size_t (*)(void);
+    using GetPackedOffsetFunc = size_t (*)(size_t, size_t, size_t, size_t);
+    using GetPackedSizeFunc = size_t (*)(size_t, size_t);
+    using RunPackFunc = void (*)(size_t, size_t, size_t, size_t, size_t, const void *, void *);
+    using MakeParamsFunc = QParams (*)(const float *, size_t, const float *, size_t);
+    using RunGemmFunc = void (*)(size_t, size_t, size_t, const void *, size_t, size_t, const void *,
+                                 size_t, size_t, const void *, size_t, void *, size_t, const void *,
+                                 float, float, const QParams *);
+
+    Qx0SourceEncoding encoding;
+    size_t execution_bits;
+    size_t execution_scale_block;
+    GetStepFunc get_m_step;
+    GetStepFunc get_n_step;
+    GetPackedOffsetFunc get_a_packed_offset;
+    GetPackedOffsetFunc get_b_packed_offset;
+    GetPackedSizeFunc get_a_packed_size;
+    GetPackedSizeFunc get_b_packed_size;
+    RunPackFunc run_a_pack;
+    RunPackFunc run_bt_pack;
+    MakeParamsFunc make_params;
+    RunGemmFunc run_gemm;
+};
+
+template <typename QParams>
+void run_packed_qsi8_qx0_source_test(size_t m, size_t n, size_t k,
+                                     const PackedQsi8Qx0GemmTestFuncs<QParams> &funcs,
+                                     bool check_single_tail_tile = true)
+{
+    const size_t source_block = qx0_source_block_size(funcs.encoding);
+    ASSERT_EQ(k % source_block, 0U);
+    std::vector<int8_t> a(m * k);
+    for (size_t index = 0; index < a.size(); ++index)
+        a[index] = static_cast<int8_t>((index * 37 + 13) % 255 - 127);
+
+    std::vector<uint8_t> raw(n * qx0_row_bytes(funcs.encoding, k), 0);
+    for (size_t row = 0; row < n; ++row) {
+        for (size_t kk = 0; kk < k; ++kk) {
+            const int8_t value = qx0_pattern_value(funcs.encoding, kk + row * 3);
+            set_qx0_raw_value(raw, funcs.encoding, k, row, kk, value);
+        }
+    }
+    const std::vector<uint8_t> execution =
+        adapt_qx0_raw_to_execution(raw, funcs.encoding, funcs.execution_bits, n, k);
+
+    switch (funcs.encoding) {
+        case Qx0SourceEncoding::Bipolar1:
+            EXPECT_EQ(raw[0], 0xaa);
+            break;
+        case Qx0SourceEncoding::U2Z1:
+            EXPECT_EQ(raw[0], 0xe4);
+            break;
+        case Qx0SourceEncoding::I4:
+            EXPECT_EQ(raw[0], 0x00);
+            EXPECT_EQ(raw[1], 0x77);
+            break;
+        case Qx0SourceEncoding::I5:
+            EXPECT_EQ(raw[0], 0xcc);
+            EXPECT_EQ(raw[4], 0x00);
+            EXPECT_EQ(raw[5], 0xff);
+            break;
+    }
+    if (funcs.execution_bits == 8) {
+        EXPECT_EQ(static_cast<int8_t>(execution[0]), qx0_pattern_value(funcs.encoding, 0));
+        EXPECT_EQ(static_cast<int8_t>(execution[1]), qx0_pattern_value(funcs.encoding, 1));
+    } else if (funcs.execution_bits == 4) {
+        const uint8_t expected = static_cast<uint8_t>(qx0_pattern_value(funcs.encoding, 0)) & 15;
+        const uint8_t expected_next =
+            static_cast<uint8_t>(qx0_pattern_value(funcs.encoding, 1)) & 15;
+        EXPECT_EQ(execution[0], expected | static_cast<uint8_t>(expected_next << 4));
+    } else {
+        switch (funcs.encoding) {
+            case Qx0SourceEncoding::Bipolar1:
+                EXPECT_EQ(execution[0], 0xaa);
+                break;
+            case Qx0SourceEncoding::U2Z1:
+                EXPECT_EQ(execution[0], 0xe4);
+                break;
+            case Qx0SourceEncoding::I4:
+                EXPECT_EQ(execution[0], 0xf8);
+                EXPECT_EQ(execution[1], 0x70);
+                break;
+            case Qx0SourceEncoding::I5:
+                EXPECT_EQ(execution[0], 0xf0);
+                EXPECT_EQ(execution[16], 0x33);
+                break;
+        }
+    }
+
+    const size_t ldsa = k / 32;
+    const size_t source_ldsb = k / source_block;
+    const size_t ldsb = k / funcs.execution_scale_block;
+    std::vector<float> scale_a(m * ldsa);
+    std::vector<float> source_scale_b(n * source_ldsb);
+    std::vector<float> scale_b(n * ldsb);
+    for (size_t index = 0; index < scale_a.size(); ++index)
+        scale_a[index] = 0.003f * static_cast<float>(1 + index % 7);
+    for (size_t index = 0; index < source_scale_b.size(); ++index)
+        source_scale_b[index] = 0.007f * static_cast<float>(1 + index % 5);
+    for (size_t row = 0; row < n; ++row) {
+        for (size_t group = 0; group < ldsb; ++group) {
+            scale_b[row * ldsb + group] =
+                source_scale_b[row * source_ldsb +
+                               (group * funcs.execution_scale_block) / source_block];
+        }
+    }
+    std::vector<float> c(m * n), bias(n), reference(m * n), output(m * n), partial(m * n);
+    for (size_t index = 0; index < c.size(); ++index)
+        c[index] = static_cast<float>(static_cast<int>(index % 9) - 4) * 0.03125f;
+    for (size_t column = 0; column < n; ++column)
+        bias[column] = static_cast<float>(static_cast<int>(column % 5) - 2) * 0.0625f;
+
+    for (size_t row = 0; row < m; ++row) {
+        for (size_t column = 0; column < n; ++column) {
+            float value = c[row * n + column] + bias[column];
+            for (size_t group_k = 0; group_k < k; group_k += 32) {
+                int32_t dot = 0;
+                for (size_t kk = 0; kk < 32; ++kk) {
+                    dot += static_cast<int32_t>(a[row * k + group_k + kk]) *
+                           get_qx0_raw_value(raw, funcs.encoding, k, column, group_k + kk);
+                }
+                value += static_cast<float>(dot) * scale_a[row * ldsa + group_k / 32] *
+                         source_scale_b[column * source_ldsb + group_k / source_block];
+            }
+            reference[row * n + column] = value;
+        }
+    }
+
+    EXPECT_EQ(funcs.get_a_packed_size(m, k), m * k);
+    const size_t execution_row_bytes = k * funcs.execution_bits / 8;
+    EXPECT_EQ(funcs.get_b_packed_size(n, k), n * execution_row_bytes);
+    std::vector<uint8_t> a_packed(funcs.get_a_packed_size(m, k));
+    std::vector<uint8_t> b_packed(funcs.get_b_packed_size(n, k));
+    funcs.run_a_pack(m, k, k, k, 0, a.data(), a_packed.data());
+    funcs.run_bt_pack(n, k, k, k, 0, execution.data(), b_packed.data());
+    const QParams params = funcs.make_params(scale_a.data(), ldsa, scale_b.data(), ldsb);
+    const float inf = std::numeric_limits<float>::infinity();
+    {
+        SCOPED_TRACE("full K");
+        funcs.run_gemm(m, n, k, a_packed.data(), k, 0, b_packed.data(), k, 0, c.data(), n,
+                       output.data(), n, bias.data(), -inf, inf, &params);
+        check_qsi8_block_quantized_gemm_result(output, reference);
+    }
+
+    const size_t split = 32;
+    funcs.run_gemm(m, n, split, a_packed.data(), k, 0, b_packed.data(), k, 0, c.data(), n,
+                   partial.data(), n, nullptr, -inf, inf, &params);
+    const size_t a_offset = funcs.get_a_packed_offset(0, split, k, m);
+    const size_t b_offset = funcs.get_b_packed_offset(0, split, k, n);
+    funcs.run_gemm(m, n, k - split, a_packed.data() + a_offset, k, split,
+                   b_packed.data() + b_offset, k, split, partial.data(), n, output.data(), n,
+                   bias.data(), -inf, inf, &params);
+    {
+        SCOPED_TRACE("split K");
+        check_qsi8_block_quantized_gemm_result(output, reference);
+    }
+
+    const size_t n_step = funcs.get_n_step();
+    if (n > n_step)
+        EXPECT_EQ(funcs.get_b_packed_offset(n_step, 0, k, n), n_step * execution_row_bytes);
+
+    if (check_single_tail_tile) {
+        SCOPED_TRACE("single M/N tail tile");
+        run_packed_qsi8_qx0_source_test(1, 1, k, funcs, false);
+    }
+}
+
 }  // namespace test
 }  // namespace torq_tile
 

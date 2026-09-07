@@ -17,6 +17,8 @@ if(TORQ_TILE_ENABLE_RVV)
         gemm/bench_gemm_f32_f32_rvv.cpp
         gemm/bench_gemm_i8_i8_rvv.cpp
         gemm/bench_gemm_i8_i4_rvv.cpp
+        gemm/bench_gemm_i8_b1_rvv.cpp
+        gemm/bench_gemm_i8_i5_rvv.cpp
         gemm/bench_gemm_i8_i3_rvv.cpp
         gemm/bench_gemm_i8_u2_rvv.cpp
         gemm/bench_gemm_i8_u4_rvv.cpp

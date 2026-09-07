@@ -655,6 +655,8 @@ inline void register_packed_quantized_weight_gemm_benchmark(
 
 enum class Qsi8BlockWeightEncoding
 {
+    Qsb1,
+    Qau2,
     Qau4,
     Qau5,
     Qau8,
@@ -665,6 +667,10 @@ enum class Qsi8BlockWeightEncoding
 inline size_t get_qsi8_block_weight_row_bytes(Qsi8BlockWeightEncoding encoding, size_t k)
 {
     switch (encoding) {
+        case Qsi8BlockWeightEncoding::Qsb1:
+            return k / 8;
+        case Qsi8BlockWeightEncoding::Qau2:
+            return k / 4;
         case Qsi8BlockWeightEncoding::Qau4:
             return k / 2;
         case Qsi8BlockWeightEncoding::Qau5:
@@ -683,7 +689,11 @@ inline std::vector<uint8_t> make_qsi8_block_weight_benchmark_source(
 {
     const size_t row_bytes = get_qsi8_block_weight_row_bytes(encoding, k);
     std::vector<uint8_t> source(n * row_bytes, 1);
-    if (encoding == Qsi8BlockWeightEncoding::Qau4) {
+    if (encoding == Qsi8BlockWeightEncoding::Qsb1) {
+        std::fill(source.begin(), source.end(), 0xff);
+    } else if (encoding == Qsi8BlockWeightEncoding::Qau2) {
+        std::fill(source.begin(), source.end(), 0xaa);
+    } else if (encoding == Qsi8BlockWeightEncoding::Qau4) {
         std::fill(source.begin(), source.end(), 0x11);
     } else if (encoding == Qsi8BlockWeightEncoding::Qau5) {
         for (size_t offset = 0; offset < source.size(); offset += 20) {

@@ -496,6 +496,37 @@ TEST(GemmI8I8Rvv, Qsi8d256Qsi8c16)
     check_qsi8_block_quantized_gemm_result(output, data.reference);
 }
 
+static tqt_qsi8d32_qsi8c32_params make_qsi8d32_qsi8c32_qx0_rvv_params(const float *scale_a,
+                                                                      size_t ldsa,
+                                                                      const float *scale_b,
+                                                                      size_t ldsb)
+{
+    return {scale_a, ldsa, scale_b, ldsb};
+}
+
+TEST(GemmI8I8Rvv, Qx0I8ExpandedSourceAware)
+{
+    for (const auto encoding : {Qx0SourceEncoding::Bipolar1, Qx0SourceEncoding::U2Z1,
+                                Qx0SourceEncoding::I4, Qx0SourceEncoding::I5}) {
+        const PackedQsi8Qx0GemmTestFuncs<tqt_qsi8d32_qsi8c32_params> funcs = {
+            encoding,
+            8,
+            32,
+            tqt_get_m_step_gemm_1xnbias_clamp_f32_qsi8d32p_qsi8c32p_4x1vl_rvv,
+            tqt_get_n_step_gemm_1xnbias_clamp_f32_qsi8d32p_qsi8c32p_4x1vl_rvv,
+            tqt_get_a_packed_offset_gemm_1xnbias_clamp_f32_qsi8d32p_qsi8c32p_4x1vl_rvv,
+            tqt_get_b_packed_offset_gemm_1xnbias_clamp_f32_qsi8d32p_qsi8c32p_4x1vl_rvv,
+            tqt_get_a_packed_size_gemm_1xnbias_clamp_f32_qsi8d32p_qsi8c32p_4x1vl_rvv,
+            tqt_get_b_packed_size_gemm_1xnbias_clamp_f32_qsi8d32p_qsi8c32p_4x1vl_rvv,
+            tqt_run_a_pack_gemm_1xnbias_clamp_f32_qsi8d32p_qsi8c32p_4x1vl_rvv,
+            tqt_run_bt_pack_gemm_1xnbias_clamp_f32_qsi8d32p_qsi8c32p_4x1vl_rvv,
+            make_qsi8d32_qsi8c32_qx0_rvv_params,
+            tqt_run_gemm_1xnbias_clamp_f32_qsi8d32p_qsi8c32p_4x1vl_rvv};
+        run_packed_qsi8_qx0_source_test(5, funcs.get_n_step() + 3,
+                                        2 * qx0_source_block_size(encoding), funcs);
+    }
+}
+
 TEST(GemmI8I8Rvv, Qsi8d32Qsi8c32AndSplitK)
 {
     const size_t n = tqt_get_n_step_gemm_1xnbias_clamp_f32_qsi8d32p_qsi8c32p_4x1vl_rvv() + 3;

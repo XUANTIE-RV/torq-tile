@@ -6,6 +6,7 @@
 
 #include "benchmark/common/gemm_benchmark_runner.h"
 #include "src/gemm/gemm_i8_u2/gemm_1xnbias_clamp_f32_qsi8d256p_qau2c16p/tqt_gemm_1xnbias_clamp_f32_qsi8d256p_qau2c16p_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_u2/gemm_1xnbias_clamp_f32_qsi8d32p_qau2z1c64p/tqt_gemm_1xnbias_clamp_f32_qsi8d32p_qau2z1c64p_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_u4/gemm_1xnbias_clamp_f32_qsi8d256p_qau4c16p/tqt_gemm_1xnbias_clamp_f32_qsi8d256p_qau4c16p_4x1vl_rvv.h"
 
 namespace torq_tile
@@ -35,6 +36,14 @@ static tqt_qsi8d256_qau4c16_params make_qau4c16_params(const float *scale_a, siz
             qmin_b,  ldqb, super_scale_b, super_min_b, ldssb};
 }
 
+static tqt_qsi8d32_qau2z1c64_params make_qau2z1c64_params(const float *scale_a, size_t ldsa,
+                                                          const int16_t *, size_t,
+                                                          const float *scale_b, const float *,
+                                                          size_t ldsb)
+{
+    return {scale_a, ldsa, scale_b, ldsb};
+}
+
 void register_gemm_i8_u2_rvv_benchmarks()
 {
     const PackedQsi8KBlockGemmBenchmarkFuncs<tqt_qsi8d256_qau2c16_params> compact = {
@@ -57,6 +66,19 @@ void register_gemm_i8_u2_rvv_benchmarks()
         "tqt_gemm_1xnbias_clamp_f32_qsi8d256p_qau2c16p_4x1vl_rvv", compact);
     register_packed_qsi8_kblock_gemm_benchmark(
         "tqt_gemm_1xnbias_clamp_f32_qsi8d256p_qau4c16p_4x1vl_rvv", expanded);
+
+    const PackedQsi8BlockQuantizedGemmBenchmarkFuncs<tqt_qsi8d32_qau2z1c64_params> q2_0 = {
+        32,
+        64,
+        Qsi8BlockWeightEncoding::Qau2,
+        tqt_get_a_packed_size_gemm_1xnbias_clamp_f32_qsi8d32p_qau2z1c64p_4x1vl_rvv,
+        tqt_get_b_packed_size_gemm_1xnbias_clamp_f32_qsi8d32p_qau2z1c64p_4x1vl_rvv,
+        tqt_run_a_pack_gemm_1xnbias_clamp_f32_qsi8d32p_qau2z1c64p_4x1vl_rvv,
+        tqt_run_bt_pack_gemm_1xnbias_clamp_f32_qsi8d32p_qau2z1c64p_4x1vl_rvv,
+        make_qau2z1c64_params,
+        tqt_run_gemm_1xnbias_clamp_f32_qsi8d32p_qau2z1c64p_4x1vl_rvv};
+    register_packed_qsi8_block_quantized_gemm_benchmark(
+        "tqt_gemm_1xnbias_clamp_f32_qsi8d32p_qau2z1c64p_4x1vl_rvv", q2_0);
 }
 
 }  // namespace benchmark

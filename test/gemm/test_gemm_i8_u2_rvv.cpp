@@ -5,6 +5,7 @@
 //
 
 #include "src/gemm/gemm_i8_u2/gemm_1xnbias_clamp_f32_qsi8d256p_qau2c16p/tqt_gemm_1xnbias_clamp_f32_qsi8d256p_qau2c16p_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_u2/gemm_1xnbias_clamp_f32_qsi8d32p_qau2z1c64p/tqt_gemm_1xnbias_clamp_f32_qsi8d32p_qau2z1c64p_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_u4/gemm_1xnbias_clamp_f32_qsi8d256p_qau4c16p/tqt_gemm_1xnbias_clamp_f32_qsi8d256p_qau4c16p_4x1vl_rvv.h"
 #include "test/common/quantized_gemm_test_runner.h"
 
@@ -74,4 +75,29 @@ TEST(GemmI8U2Rvv, CompactExpandedTailsAndSplitK)
     const auto expanded = make_qau4c16_rvv_funcs();
     run_packed_qsi8_kblock_gemm_equivalence_test(5, compact.get_n_step() + 3, 512, compact,
                                                  expanded);
+}
+
+static tqt_qsi8d32_qau2z1c64_params make_qsi8d32_qau2z1c64_params(const float *scale_a, size_t ldsa,
+                                                                  const float *scale_b, size_t ldsb)
+{
+    return {scale_a, ldsa, scale_b, ldsb};
+}
+
+TEST(GemmI8U2Rvv, Q2_0SourceAwareTailsAndSplitK)
+{
+    const PackedQsi8Qx0GemmTestFuncs<tqt_qsi8d32_qau2z1c64_params> funcs = {
+        Qx0SourceEncoding::U2Z1,
+        2,
+        64,
+        tqt_get_m_step_gemm_1xnbias_clamp_f32_qsi8d32p_qau2z1c64p_4x1vl_rvv,
+        tqt_get_n_step_gemm_1xnbias_clamp_f32_qsi8d32p_qau2z1c64p_4x1vl_rvv,
+        tqt_get_a_packed_offset_gemm_1xnbias_clamp_f32_qsi8d32p_qau2z1c64p_4x1vl_rvv,
+        tqt_get_b_packed_offset_gemm_1xnbias_clamp_f32_qsi8d32p_qau2z1c64p_4x1vl_rvv,
+        tqt_get_a_packed_size_gemm_1xnbias_clamp_f32_qsi8d32p_qau2z1c64p_4x1vl_rvv,
+        tqt_get_b_packed_size_gemm_1xnbias_clamp_f32_qsi8d32p_qau2z1c64p_4x1vl_rvv,
+        tqt_run_a_pack_gemm_1xnbias_clamp_f32_qsi8d32p_qau2z1c64p_4x1vl_rvv,
+        tqt_run_bt_pack_gemm_1xnbias_clamp_f32_qsi8d32p_qau2z1c64p_4x1vl_rvv,
+        make_qsi8d32_qau2z1c64_params,
+        tqt_run_gemm_1xnbias_clamp_f32_qsi8d32p_qau2z1c64p_4x1vl_rvv};
+    run_packed_qsi8_qx0_source_test(5, funcs.get_n_step() + 3, 128, funcs);
 }

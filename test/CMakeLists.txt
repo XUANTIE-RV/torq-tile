@@ -84,6 +84,10 @@ if(TORQ_TILE_ENABLE_RVV)
         gemm/test_gemm_i8_u8_rvv.cpp)
     torq_tile_add_test(test_gemm_i8_i6_rvv
         gemm/test_gemm_i8_i6_rvv.cpp)
+    torq_tile_add_test(test_gemm_i8_b1_rvv
+        gemm/test_gemm_i8_b1_rvv.cpp)
+    torq_tile_add_test(test_gemm_i8_i5_rvv
+        gemm/test_gemm_i8_i5_rvv.cpp)
     # --- Gemm i8_i2 RVV variants ---
     torq_tile_add_test(test_gemm_i8_i2_rvv
         gemm/test_gemm_i8_i2_rvv.cpp)

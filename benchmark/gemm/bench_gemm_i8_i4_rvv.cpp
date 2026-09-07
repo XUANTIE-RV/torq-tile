@@ -25,6 +25,7 @@
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f32_qsi8d2_qsi4c2t/tqt_gemm_1xnbias_clamp_f32_qsi8d2_qsi4c2t_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f32_qsi8d2p_qai4c2p/tqt_gemm_1xnbias_clamp_f32_qsi8d2p_qai4c2p_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f32_qsi8d2p_qsi4c2p/tqt_gemm_1xnbias_clamp_f32_qsi8d2p_qsi4c2p_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f32_qsi8d32p_qsi4c32p/tqt_gemm_1xnbias_clamp_f32_qsi8d32p_qsi4c32p_4x1vl_rvv.h"
 #if defined(__riscv_zfh) && defined(__riscv_zvfh)
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qai8dx_qsi4cxt/tqt_gemm_1xnbias_clamp_f16_qai8dx_qsi4cxt_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qai8dxp_qsi4cxp/tqt_gemm_1xnbias_clamp_f16_qai8dxp_qsi4cxp_4x1vl_rvv.h"
@@ -52,6 +53,14 @@ namespace torq_tile
 {
 namespace benchmark
 {
+
+static tqt_qsi8d32_qsi4c32_params make_qsi4c32_rvv_params(const float *scale_a, size_t ldsa,
+                                                          const int16_t *, size_t,
+                                                          const float *scale_b, const float *,
+                                                          size_t ldsb)
+{
+    return {scale_a, ldsa, scale_b, ldsb};
+}
 
 // ============================================================================
 // W4A8 (qai8dx × qsi4cx) GEMM benchmark utilities
@@ -1104,6 +1113,19 @@ MAKE_W4A8BQ_PACKED_FUNCS(1xnbias_clamp_bf16_qsi8d2p_qai4c2p, bfloat16_t,
 
 void register_gemm_i8_i4_blockquant_rvv_benchmarks()
 {
+    const PackedQsi8BlockQuantizedGemmBenchmarkFuncs<tqt_qsi8d32_qsi4c32_params> q4_0 = {
+        32,
+        32,
+        Qsi8BlockWeightEncoding::Qau4,
+        tqt_get_a_packed_size_gemm_1xnbias_clamp_f32_qsi8d32p_qsi4c32p_4x1vl_rvv,
+        tqt_get_b_packed_size_gemm_1xnbias_clamp_f32_qsi8d32p_qsi4c32p_4x1vl_rvv,
+        tqt_run_a_pack_gemm_1xnbias_clamp_f32_qsi8d32p_qsi4c32p_4x1vl_rvv,
+        tqt_run_bt_pack_gemm_1xnbias_clamp_f32_qsi8d32p_qsi4c32p_4x1vl_rvv,
+        make_qsi4c32_rvv_params,
+        tqt_run_gemm_1xnbias_clamp_f32_qsi8d32p_qsi4c32p_4x1vl_rvv};
+    register_packed_qsi8_block_quantized_gemm_benchmark(
+        "tqt_gemm_1xnbias_clamp_f32_qsi8d32p_qsi4c32p_4x1vl_rvv", q4_0);
+
     // Class 1: qai8dx × qsi4c2
     register_w4a8bq_qai8dx_qsi4c2<float>("gemm_1xnbias_clamp_f32_qai8dx_qsi4c2t_4x1vl_rvv",
                                          make_funcs_1xnbias_clamp_f32_qai8dx_qsi4c2t());

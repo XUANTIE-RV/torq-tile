@@ -29,6 +29,8 @@ namespace benchmark
 void register_gemm_f32_f32_rvv_benchmarks();
 void register_gemm_i8_i8_rvv_benchmarks();
 void register_gemm_i8_i4_rvv_benchmarks();
+void register_gemm_i8_b1_rvv_benchmarks();
+void register_gemm_i8_i5_rvv_benchmarks();
 void register_gemm_i8_i3_rvv_benchmarks();
 void register_gemm_i8_u2_rvv_benchmarks();
 void register_gemm_i8_u4_rvv_benchmarks();
@@ -83,6 +85,8 @@ inline void register_gemm_benchmarks()
     register_gemm_f32_f32_rvv_benchmarks();
     register_gemm_i8_i8_rvv_benchmarks();
     register_gemm_i8_i4_rvv_benchmarks();
+    register_gemm_i8_b1_rvv_benchmarks();
+    register_gemm_i8_i5_rvv_benchmarks();
     register_gemm_i8_i3_rvv_benchmarks();
     register_gemm_i8_u2_rvv_benchmarks();
     register_gemm_i8_u4_rvv_benchmarks();

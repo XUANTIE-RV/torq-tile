@@ -25,6 +25,7 @@
 // --- W4A8 block-quantized: Class 2 qsi8d2 × qsi4c2 (F32 always) ---
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f32_qsi8d2_qsi4c2t/tqt_gemm_1xnbias_clamp_f32_qsi8d2_qsi4c2t_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f32_qsi8d2p_qsi4c2p/tqt_gemm_1xnbias_clamp_f32_qsi8d2p_qsi4c2p_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f32_qsi8d32p_qsi4c32p/tqt_gemm_1xnbias_clamp_f32_qsi8d32p_qsi4c32p_4x1vl_rvv.h"
 // --- W4A8 block-quantized: Class 3 qsi8d2 × qai4c2 (F32 always) ---
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f32_qsi8d2_qai4c2t/tqt_gemm_1xnbias_clamp_f32_qsi8d2_qai4c2t_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f32_qsi8d2p_qai4c2p/tqt_gemm_1xnbias_clamp_f32_qsi8d2p_qai4c2p_4x1vl_rvv.h"
@@ -345,6 +346,31 @@ TEST_P(Test_gemm_1xnbias_clamp_bf16_qai8dxp_qsi4cxp_4x1vl_rvv, Correctness)
 INSTANTIATE_TEST_SUITE_P(GemmTests, Test_gemm_1xnbias_clamp_bf16_qai8dxp_qsi4cxp_4x1vl_rvv,
                          common_w4a8_test_values(), GemmTestParamNameGenerator());
 #endif  // __riscv_zvfbfwma
+
+static tqt_qsi8d32_qsi4c32_params make_qsi8d32_qsi4c32_rvv_params(const float *scale_a, size_t ldsa,
+                                                                  const float *scale_b, size_t ldsb)
+{
+    return {scale_a, ldsa, scale_b, ldsb};
+}
+
+TEST(GemmI8I4Rvv, Q4_0SourceAwareTailsAndSplitK)
+{
+    const PackedQsi8Qx0GemmTestFuncs<tqt_qsi8d32_qsi4c32_params> funcs = {
+        Qx0SourceEncoding::I4,
+        4,
+        32,
+        tqt_get_m_step_gemm_1xnbias_clamp_f32_qsi8d32p_qsi4c32p_4x1vl_rvv,
+        tqt_get_n_step_gemm_1xnbias_clamp_f32_qsi8d32p_qsi4c32p_4x1vl_rvv,
+        tqt_get_a_packed_offset_gemm_1xnbias_clamp_f32_qsi8d32p_qsi4c32p_4x1vl_rvv,
+        tqt_get_b_packed_offset_gemm_1xnbias_clamp_f32_qsi8d32p_qsi4c32p_4x1vl_rvv,
+        tqt_get_a_packed_size_gemm_1xnbias_clamp_f32_qsi8d32p_qsi4c32p_4x1vl_rvv,
+        tqt_get_b_packed_size_gemm_1xnbias_clamp_f32_qsi8d32p_qsi4c32p_4x1vl_rvv,
+        tqt_run_a_pack_gemm_1xnbias_clamp_f32_qsi8d32p_qsi4c32p_4x1vl_rvv,
+        tqt_run_bt_pack_gemm_1xnbias_clamp_f32_qsi8d32p_qsi4c32p_4x1vl_rvv,
+        make_qsi8d32_qsi4c32_rvv_params,
+        tqt_run_gemm_1xnbias_clamp_f32_qsi8d32p_qsi4c32p_4x1vl_rvv};
+    run_packed_qsi8_qx0_source_test(5, funcs.get_n_step() + 3, 64, funcs);
+}
 
 // ============================================================================
 // W4A8 block-quantized — Class 1: qai8dx × qsi4c2 (F32 always; F16/BF16 gated)

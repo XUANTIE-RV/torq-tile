@@ -27,6 +27,18 @@ struct tqt_qsi8d256_qsi4c16_params
     size_t ldssb;
 };
 
+/// Parameters for qsi8d32 A x normalized qsi4c32 B -> f32.
+///
+/// scale_a is [M, K/32], and scale_b is [N, K/32]. The qsi4 values use
+/// signed two's-complement nibbles in [-8, 7].
+struct tqt_qsi8d32_qsi4c32_params
+{
+    const float *scale_a;
+    size_t ldsa;
+    const float *scale_b;
+    size_t ldsb;
+};
+
 /// Quantization parameters for qai8dx (A) x qsi4cx (B) -> f16/f32/bf16 (D)
 ///
 /// A is per-dimension (per-row) asymmetric quantized int8:

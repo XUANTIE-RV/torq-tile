@@ -30,6 +30,8 @@
 #if TORQ_TILE_HAS_RVV_F16
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qai8dx_qsi4cxt/tqt_gemm_1xnbias_clamp_f16_qai8dx_qsi4cxt_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qai8dxp_qsi4cxp/tqt_gemm_1xnbias_clamp_f16_qai8dxp_qsi4cxp_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbiasf32_clamp_f16_qai8dx_qsi4cxt/tqt_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi4cxt_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi4cxp/tqt_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi4cxp_4x1vl_rvv.h"
 // W4A8 BQ F16
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qai8dx_qsi4c2t/tqt_gemm_1xnbias_clamp_f16_qai8dx_qsi4c2t_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qai8dxp_qsi4c2p/tqt_gemm_1xnbias_clamp_f16_qai8dxp_qsi4c2p_4x1vl_rvv.h"
@@ -37,10 +39,18 @@
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qsi8d2_qsi4c2t/tqt_gemm_1xnbias_clamp_f16_qsi8d2_qsi4c2t_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qsi8d2p_qai4c2p/tqt_gemm_1xnbias_clamp_f16_qsi8d2p_qai4c2p_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qsi8d2p_qsi4c2p/tqt_gemm_1xnbias_clamp_f16_qsi8d2p_qsi4c2p_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbiasf32_clamp_f16_qai8dx_qsi4c2t/tqt_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi4c2t_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi4c2p/tqt_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi4c2p_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbiasf32_clamp_f16_qsi8d2_qai4c2t/tqt_gemm_1xnbiasf32_clamp_f16_qsi8d2_qai4c2t_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbiasf32_clamp_f16_qsi8d2_qsi4c2t/tqt_gemm_1xnbiasf32_clamp_f16_qsi8d2_qsi4c2t_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbiasf32_clamp_f16_qsi8d2p_qai4c2p/tqt_gemm_1xnbiasf32_clamp_f16_qsi8d2p_qai4c2p_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbiasf32_clamp_f16_qsi8d2p_qsi4c2p/tqt_gemm_1xnbiasf32_clamp_f16_qsi8d2p_qsi4c2p_4x1vl_rvv.h"
 #endif  // TORQ_TILE_HAS_RVV_F16
 #if TORQ_TILE_HAS_RVV_BF16
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_bf16_qai8dx_qsi4cxt/tqt_gemm_1xnbias_clamp_bf16_qai8dx_qsi4cxt_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_bf16_qai8dxp_qsi4cxp/tqt_gemm_1xnbias_clamp_bf16_qai8dxp_qsi4cxp_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbiasf32_clamp_bf16_qai8dx_qsi4cxt/tqt_gemm_1xnbiasf32_clamp_bf16_qai8dx_qsi4cxt_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbiasf32_clamp_bf16_qai8dxp_qsi4cxp/tqt_gemm_1xnbiasf32_clamp_bf16_qai8dxp_qsi4cxp_4x1vl_rvv.h"
 // W4A8 BQ BF16
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_bf16_qai8dx_qsi4c2t/tqt_gemm_1xnbias_clamp_bf16_qai8dx_qsi4c2t_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_bf16_qai8dxp_qsi4c2p/tqt_gemm_1xnbias_clamp_bf16_qai8dxp_qsi4c2p_4x1vl_rvv.h"
@@ -48,6 +58,12 @@
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_bf16_qsi8d2_qsi4c2t/tqt_gemm_1xnbias_clamp_bf16_qsi8d2_qsi4c2t_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_bf16_qsi8d2p_qai4c2p/tqt_gemm_1xnbias_clamp_bf16_qsi8d2p_qai4c2p_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_bf16_qsi8d2p_qsi4c2p/tqt_gemm_1xnbias_clamp_bf16_qsi8d2p_qsi4c2p_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbiasf32_clamp_bf16_qai8dx_qsi4c2t/tqt_gemm_1xnbiasf32_clamp_bf16_qai8dx_qsi4c2t_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbiasf32_clamp_bf16_qai8dxp_qsi4c2p/tqt_gemm_1xnbiasf32_clamp_bf16_qai8dxp_qsi4c2p_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbiasf32_clamp_bf16_qsi8d2_qai4c2t/tqt_gemm_1xnbiasf32_clamp_bf16_qsi8d2_qai4c2t_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbiasf32_clamp_bf16_qsi8d2_qsi4c2t/tqt_gemm_1xnbiasf32_clamp_bf16_qsi8d2_qsi4c2t_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbiasf32_clamp_bf16_qsi8d2p_qai4c2p/tqt_gemm_1xnbiasf32_clamp_bf16_qsi8d2p_qai4c2p_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i4/gemm_1xnbiasf32_clamp_bf16_qsi8d2p_qsi4c2p/tqt_gemm_1xnbiasf32_clamp_bf16_qsi8d2p_qsi4c2p_4x1vl_rvv.h"
 #endif  // TORQ_TILE_HAS_RVV_BF16
 
 namespace torq_tile
@@ -406,6 +422,14 @@ inline void register_w4a8_reqi8_packed_gemm(const char *name,
 // ============================================================================
 
 #if TORQ_TILE_HAS_RVV_F16
+static W4A8GemmBenchFuncs<float16_t> make_funcs_f16_qai8dx_qsi4cxt()
+{
+    W4A8GemmBenchFuncs<float16_t> f;
+    f.get_m_step = tqt_get_m_step_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi4cxt_4x1vl_rvv;
+    f.get_n_step = tqt_get_n_step_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi4cxt_4x1vl_rvv;
+    f.run_gemm = tqt_run_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi4cxt_4x1vl_rvv;
+    return f;
+}
 
 static W4A8GemmBenchFuncs<float16_t> make_funcs_f16_qai8dx_qsi4cxt_legacy()
 {
@@ -413,6 +437,19 @@ static W4A8GemmBenchFuncs<float16_t> make_funcs_f16_qai8dx_qsi4cxt_legacy()
     f.get_m_step = tqt_get_m_step_gemm_1xnbias_clamp_f16_qai8dx_qsi4cxt_4x1vl_rvv;
     f.get_n_step = tqt_get_n_step_gemm_1xnbias_clamp_f16_qai8dx_qsi4cxt_4x1vl_rvv;
     f.run_gemm = tqt_run_gemm_1xnbias_clamp_f16_qai8dx_qsi4cxt_4x1vl_rvv;
+    return f;
+}
+
+static W4A8PackedGemmBenchFuncs<float16_t> make_funcs_f16_qai8dxp_qsi4cxp()
+{
+    W4A8PackedGemmBenchFuncs<float16_t> f;
+    f.get_m_step = tqt_get_m_step_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi4cxp_4x1vl_rvv;
+    f.get_n_step = tqt_get_n_step_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi4cxp_4x1vl_rvv;
+    f.get_a_packed_size = tqt_get_a_packed_size_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi4cxp_4x1vl_rvv;
+    f.get_b_packed_size = tqt_get_b_packed_size_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi4cxp_4x1vl_rvv;
+    f.run_a_pack = tqt_run_a_pack_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi4cxp_4x1vl_rvv;
+    f.run_bt_pack = tqt_run_bt_pack_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi4cxp_4x1vl_rvv;
+    f.run_gemm = tqt_run_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi4cxp_4x1vl_rvv;
     return f;
 }
 
@@ -477,6 +514,14 @@ static W4A8ReqI8PackedGemmBenchFuncs make_funcs_reqi8_qai8dxp_qsi4cxp()
 }
 
 #if TORQ_TILE_HAS_RVV_BF16
+static W4A8GemmBenchFuncs<bfloat16_t> make_funcs_bf16_qai8dx_qsi4cxt()
+{
+    W4A8GemmBenchFuncs<bfloat16_t> f;
+    f.get_m_step = tqt_get_m_step_gemm_1xnbiasf32_clamp_bf16_qai8dx_qsi4cxt_4x1vl_rvv;
+    f.get_n_step = tqt_get_n_step_gemm_1xnbiasf32_clamp_bf16_qai8dx_qsi4cxt_4x1vl_rvv;
+    f.run_gemm = tqt_run_gemm_1xnbiasf32_clamp_bf16_qai8dx_qsi4cxt_4x1vl_rvv;
+    return f;
+}
 
 static W4A8GemmBenchFuncs<bfloat16_t> make_funcs_bf16_qai8dx_qsi4cxt_legacy()
 {
@@ -484,6 +529,21 @@ static W4A8GemmBenchFuncs<bfloat16_t> make_funcs_bf16_qai8dx_qsi4cxt_legacy()
     f.get_m_step = tqt_get_m_step_gemm_1xnbias_clamp_bf16_qai8dx_qsi4cxt_4x1vl_rvv;
     f.get_n_step = tqt_get_n_step_gemm_1xnbias_clamp_bf16_qai8dx_qsi4cxt_4x1vl_rvv;
     f.run_gemm = tqt_run_gemm_1xnbias_clamp_bf16_qai8dx_qsi4cxt_4x1vl_rvv;
+    return f;
+}
+
+static W4A8PackedGemmBenchFuncs<bfloat16_t> make_funcs_bf16_qai8dxp_qsi4cxp()
+{
+    W4A8PackedGemmBenchFuncs<bfloat16_t> f;
+    f.get_m_step = tqt_get_m_step_gemm_1xnbiasf32_clamp_bf16_qai8dxp_qsi4cxp_4x1vl_rvv;
+    f.get_n_step = tqt_get_n_step_gemm_1xnbiasf32_clamp_bf16_qai8dxp_qsi4cxp_4x1vl_rvv;
+    f.get_a_packed_size =
+        tqt_get_a_packed_size_gemm_1xnbiasf32_clamp_bf16_qai8dxp_qsi4cxp_4x1vl_rvv;
+    f.get_b_packed_size =
+        tqt_get_b_packed_size_gemm_1xnbiasf32_clamp_bf16_qai8dxp_qsi4cxp_4x1vl_rvv;
+    f.run_a_pack = tqt_run_a_pack_gemm_1xnbiasf32_clamp_bf16_qai8dxp_qsi4cxp_4x1vl_rvv;
+    f.run_bt_pack = tqt_run_bt_pack_gemm_1xnbiasf32_clamp_bf16_qai8dxp_qsi4cxp_4x1vl_rvv;
+    f.run_gemm = tqt_run_gemm_1xnbiasf32_clamp_bf16_qai8dxp_qsi4cxp_4x1vl_rvv;
     return f;
 }
 
@@ -519,18 +579,22 @@ void register_gemm_i8_i4_rvv_benchmarks()
     register_w4a8_reqi8_packed_gemm("gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp_4x1vl_rvv",
                                     make_funcs_reqi8_qai8dxp_qsi4cxp());
 #if TORQ_TILE_HAS_RVV_F16
-
+    register_w4a8_gemm<float16_t>("gemm_1xnbiasf32_clamp_f16_qai8dx_qsi4cxt_4x1vl_rvv",
+                                  make_funcs_f16_qai8dx_qsi4cxt());
     register_w4a8_gemm<float16_t>("gemm_1xnbias_clamp_f16_qai8dx_qsi4cxt_4x1vl_rvv",
                                   make_funcs_f16_qai8dx_qsi4cxt_legacy());
-
+    register_w4a8_packed_gemm<float16_t>("gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi4cxp_4x1vl_rvv",
+                                         make_funcs_f16_qai8dxp_qsi4cxp());
     register_w4a8_packed_gemm<float16_t>("gemm_1xnbias_clamp_f16_qai8dxp_qsi4cxp_4x1vl_rvv",
                                          make_funcs_f16_qai8dxp_qsi4cxp_legacy());
 #endif  // TORQ_TILE_HAS_RVV_F16
 #if TORQ_TILE_HAS_RVV_BF16
-
+    register_w4a8_gemm<bfloat16_t>("gemm_1xnbiasf32_clamp_bf16_qai8dx_qsi4cxt_4x1vl_rvv",
+                                   make_funcs_bf16_qai8dx_qsi4cxt());
     register_w4a8_gemm<bfloat16_t>("gemm_1xnbias_clamp_bf16_qai8dx_qsi4cxt_4x1vl_rvv",
                                    make_funcs_bf16_qai8dx_qsi4cxt_legacy());
-
+    register_w4a8_packed_gemm<bfloat16_t>("gemm_1xnbiasf32_clamp_bf16_qai8dxp_qsi4cxp_4x1vl_rvv",
+                                          make_funcs_bf16_qai8dxp_qsi4cxp());
     register_w4a8_packed_gemm<bfloat16_t>("gemm_1xnbias_clamp_bf16_qai8dxp_qsi4cxp_4x1vl_rvv",
                                           make_funcs_bf16_qai8dxp_qsi4cxp_legacy());
 #endif  // TORQ_TILE_HAS_RVV_BF16
@@ -1077,18 +1141,22 @@ MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbias_clamp_f32_qai8dx_qsi4c2t, float, W4A8BQ_Qai8d
 MAKE_W4A8BQ_PACKED_FUNCS(1xnbias_clamp_f32_qai8dxp_qsi4c2p, float,
                          W4A8BQ_Qai8dx_Qsi4c2_PackedBenchFuncs)
 #if TORQ_TILE_HAS_RVV_F16
-
+MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbiasf32_clamp_f16_qai8dx_qsi4c2t, float16_t,
+                           W4A8BQ_Qai8dx_Qsi4c2_BenchFuncs)
 MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbias_clamp_f16_qai8dx_qsi4c2t, float16_t,
                            W4A8BQ_Qai8dx_Qsi4c2_BenchFuncs)
-
+MAKE_W4A8BQ_PACKED_FUNCS(1xnbiasf32_clamp_f16_qai8dxp_qsi4c2p, float16_t,
+                         W4A8BQ_Qai8dx_Qsi4c2_PackedBenchFuncs)
 MAKE_W4A8BQ_PACKED_FUNCS(1xnbias_clamp_f16_qai8dxp_qsi4c2p, float16_t,
                          W4A8BQ_Qai8dx_Qsi4c2_PackedBenchFuncs)
 #endif  // TORQ_TILE_HAS_RVV_F16
 #if TORQ_TILE_HAS_RVV_BF16
-
+MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbiasf32_clamp_bf16_qai8dx_qsi4c2t, bfloat16_t,
+                           W4A8BQ_Qai8dx_Qsi4c2_BenchFuncs)
 MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbias_clamp_bf16_qai8dx_qsi4c2t, bfloat16_t,
                            W4A8BQ_Qai8dx_Qsi4c2_BenchFuncs)
-
+MAKE_W4A8BQ_PACKED_FUNCS(1xnbiasf32_clamp_bf16_qai8dxp_qsi4c2p, bfloat16_t,
+                         W4A8BQ_Qai8dx_Qsi4c2_PackedBenchFuncs)
 MAKE_W4A8BQ_PACKED_FUNCS(1xnbias_clamp_bf16_qai8dxp_qsi4c2p, bfloat16_t,
                          W4A8BQ_Qai8dx_Qsi4c2_PackedBenchFuncs)
 #endif  // TORQ_TILE_HAS_RVV_BF16
@@ -1098,18 +1166,22 @@ MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbias_clamp_f32_qsi8d2_qsi4c2t, float, W4A8BQ_Qsi8d
 MAKE_W4A8BQ_PACKED_FUNCS(1xnbias_clamp_f32_qsi8d2p_qsi4c2p, float,
                          W4A8BQ_Qsi8d2_Qsi4c2_PackedBenchFuncs)
 #if TORQ_TILE_HAS_RVV_F16
-
+MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbiasf32_clamp_f16_qsi8d2_qsi4c2t, float16_t,
+                           W4A8BQ_Qsi8d2_Qsi4c2_BenchFuncs)
 MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbias_clamp_f16_qsi8d2_qsi4c2t, float16_t,
                            W4A8BQ_Qsi8d2_Qsi4c2_BenchFuncs)
-
+MAKE_W4A8BQ_PACKED_FUNCS(1xnbiasf32_clamp_f16_qsi8d2p_qsi4c2p, float16_t,
+                         W4A8BQ_Qsi8d2_Qsi4c2_PackedBenchFuncs)
 MAKE_W4A8BQ_PACKED_FUNCS(1xnbias_clamp_f16_qsi8d2p_qsi4c2p, float16_t,
                          W4A8BQ_Qsi8d2_Qsi4c2_PackedBenchFuncs)
 #endif  // TORQ_TILE_HAS_RVV_F16
 #if TORQ_TILE_HAS_RVV_BF16
-
+MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbiasf32_clamp_bf16_qsi8d2_qsi4c2t, bfloat16_t,
+                           W4A8BQ_Qsi8d2_Qsi4c2_BenchFuncs)
 MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbias_clamp_bf16_qsi8d2_qsi4c2t, bfloat16_t,
                            W4A8BQ_Qsi8d2_Qsi4c2_BenchFuncs)
-
+MAKE_W4A8BQ_PACKED_FUNCS(1xnbiasf32_clamp_bf16_qsi8d2p_qsi4c2p, bfloat16_t,
+                         W4A8BQ_Qsi8d2_Qsi4c2_PackedBenchFuncs)
 MAKE_W4A8BQ_PACKED_FUNCS(1xnbias_clamp_bf16_qsi8d2p_qsi4c2p, bfloat16_t,
                          W4A8BQ_Qsi8d2_Qsi4c2_PackedBenchFuncs)
 #endif  // TORQ_TILE_HAS_RVV_BF16
@@ -1119,18 +1191,22 @@ MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbias_clamp_f32_qsi8d2_qai4c2t, float, W4A8BQ_Qsi8d
 MAKE_W4A8BQ_PACKED_FUNCS(1xnbias_clamp_f32_qsi8d2p_qai4c2p, float,
                          W4A8BQ_Qsi8d2_Qai4c2_PackedBenchFuncs)
 #if TORQ_TILE_HAS_RVV_F16
-
+MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbiasf32_clamp_f16_qsi8d2_qai4c2t, float16_t,
+                           W4A8BQ_Qsi8d2_Qai4c2_BenchFuncs)
 MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbias_clamp_f16_qsi8d2_qai4c2t, float16_t,
                            W4A8BQ_Qsi8d2_Qai4c2_BenchFuncs)
-
+MAKE_W4A8BQ_PACKED_FUNCS(1xnbiasf32_clamp_f16_qsi8d2p_qai4c2p, float16_t,
+                         W4A8BQ_Qsi8d2_Qai4c2_PackedBenchFuncs)
 MAKE_W4A8BQ_PACKED_FUNCS(1xnbias_clamp_f16_qsi8d2p_qai4c2p, float16_t,
                          W4A8BQ_Qsi8d2_Qai4c2_PackedBenchFuncs)
 #endif  // TORQ_TILE_HAS_RVV_F16
 #if TORQ_TILE_HAS_RVV_BF16
-
+MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbiasf32_clamp_bf16_qsi8d2_qai4c2t, bfloat16_t,
+                           W4A8BQ_Qsi8d2_Qai4c2_BenchFuncs)
 MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbias_clamp_bf16_qsi8d2_qai4c2t, bfloat16_t,
                            W4A8BQ_Qsi8d2_Qai4c2_BenchFuncs)
-
+MAKE_W4A8BQ_PACKED_FUNCS(1xnbiasf32_clamp_bf16_qsi8d2p_qai4c2p, bfloat16_t,
+                         W4A8BQ_Qsi8d2_Qai4c2_PackedBenchFuncs)
 MAKE_W4A8BQ_PACKED_FUNCS(1xnbias_clamp_bf16_qsi8d2p_qai4c2p, bfloat16_t,
                          W4A8BQ_Qsi8d2_Qai4c2_PackedBenchFuncs)
 #endif  // TORQ_TILE_HAS_RVV_BF16
@@ -1163,19 +1239,25 @@ void register_gemm_i8_i4_blockquant_rvv_benchmarks()
     register_w4a8bq_qai8dx_qsi4c2_packed<float>("gemm_1xnbias_clamp_f32_qai8dxp_qsi4c2p_4x1vl_rvv",
                                                 make_funcs_1xnbias_clamp_f32_qai8dxp_qsi4c2p());
 #if TORQ_TILE_HAS_RVV_F16
-
+    register_w4a8bq_qai8dx_qsi4c2<float16_t>("gemm_1xnbiasf32_clamp_f16_qai8dx_qsi4c2t_4x1vl_rvv",
+                                             make_funcs_1xnbiasf32_clamp_f16_qai8dx_qsi4c2t());
     register_w4a8bq_qai8dx_qsi4c2<float16_t>("gemm_1xnbias_clamp_f16_qai8dx_qsi4c2t_4x1vl_rvv",
                                              make_funcs_1xnbias_clamp_f16_qai8dx_qsi4c2t());
-
+    register_w4a8bq_qai8dx_qsi4c2_packed<float16_t>(
+        "gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi4c2p_4x1vl_rvv",
+        make_funcs_1xnbiasf32_clamp_f16_qai8dxp_qsi4c2p());
     register_w4a8bq_qai8dx_qsi4c2_packed<float16_t>(
         "gemm_1xnbias_clamp_f16_qai8dxp_qsi4c2p_4x1vl_rvv",
         make_funcs_1xnbias_clamp_f16_qai8dxp_qsi4c2p());
 #endif  // TORQ_TILE_HAS_RVV_F16
 #if TORQ_TILE_HAS_RVV_BF16
-
+    register_w4a8bq_qai8dx_qsi4c2<bfloat16_t>("gemm_1xnbiasf32_clamp_bf16_qai8dx_qsi4c2t_4x1vl_rvv",
+                                              make_funcs_1xnbiasf32_clamp_bf16_qai8dx_qsi4c2t());
     register_w4a8bq_qai8dx_qsi4c2<bfloat16_t>("gemm_1xnbias_clamp_bf16_qai8dx_qsi4c2t_4x1vl_rvv",
                                               make_funcs_1xnbias_clamp_bf16_qai8dx_qsi4c2t());
-
+    register_w4a8bq_qai8dx_qsi4c2_packed<bfloat16_t>(
+        "gemm_1xnbiasf32_clamp_bf16_qai8dxp_qsi4c2p_4x1vl_rvv",
+        make_funcs_1xnbiasf32_clamp_bf16_qai8dxp_qsi4c2p());
     register_w4a8bq_qai8dx_qsi4c2_packed<bfloat16_t>(
         "gemm_1xnbias_clamp_bf16_qai8dxp_qsi4c2p_4x1vl_rvv",
         make_funcs_1xnbias_clamp_bf16_qai8dxp_qsi4c2p());
@@ -1187,19 +1269,25 @@ void register_gemm_i8_i4_blockquant_rvv_benchmarks()
     register_w4a8bq_qsi8d2_qsi4c2_packed<float>("gemm_1xnbias_clamp_f32_qsi8d2p_qsi4c2p_4x1vl_rvv",
                                                 make_funcs_1xnbias_clamp_f32_qsi8d2p_qsi4c2p());
 #if TORQ_TILE_HAS_RVV_F16
-
+    register_w4a8bq_qsi8d2_qsi4c2<float16_t>("gemm_1xnbiasf32_clamp_f16_qsi8d2_qsi4c2t_4x1vl_rvv",
+                                             make_funcs_1xnbiasf32_clamp_f16_qsi8d2_qsi4c2t());
     register_w4a8bq_qsi8d2_qsi4c2<float16_t>("gemm_1xnbias_clamp_f16_qsi8d2_qsi4c2t_4x1vl_rvv",
                                              make_funcs_1xnbias_clamp_f16_qsi8d2_qsi4c2t());
-
+    register_w4a8bq_qsi8d2_qsi4c2_packed<float16_t>(
+        "gemm_1xnbiasf32_clamp_f16_qsi8d2p_qsi4c2p_4x1vl_rvv",
+        make_funcs_1xnbiasf32_clamp_f16_qsi8d2p_qsi4c2p());
     register_w4a8bq_qsi8d2_qsi4c2_packed<float16_t>(
         "gemm_1xnbias_clamp_f16_qsi8d2p_qsi4c2p_4x1vl_rvv",
         make_funcs_1xnbias_clamp_f16_qsi8d2p_qsi4c2p());
 #endif  // TORQ_TILE_HAS_RVV_F16
 #if TORQ_TILE_HAS_RVV_BF16
-
+    register_w4a8bq_qsi8d2_qsi4c2<bfloat16_t>("gemm_1xnbiasf32_clamp_bf16_qsi8d2_qsi4c2t_4x1vl_rvv",
+                                              make_funcs_1xnbiasf32_clamp_bf16_qsi8d2_qsi4c2t());
     register_w4a8bq_qsi8d2_qsi4c2<bfloat16_t>("gemm_1xnbias_clamp_bf16_qsi8d2_qsi4c2t_4x1vl_rvv",
                                               make_funcs_1xnbias_clamp_bf16_qsi8d2_qsi4c2t());
-
+    register_w4a8bq_qsi8d2_qsi4c2_packed<bfloat16_t>(
+        "gemm_1xnbiasf32_clamp_bf16_qsi8d2p_qsi4c2p_4x1vl_rvv",
+        make_funcs_1xnbiasf32_clamp_bf16_qsi8d2p_qsi4c2p());
     register_w4a8bq_qsi8d2_qsi4c2_packed<bfloat16_t>(
         "gemm_1xnbias_clamp_bf16_qsi8d2p_qsi4c2p_4x1vl_rvv",
         make_funcs_1xnbias_clamp_bf16_qsi8d2p_qsi4c2p());
@@ -1211,19 +1299,25 @@ void register_gemm_i8_i4_blockquant_rvv_benchmarks()
     register_w4a8bq_qsi8d2_qai4c2_packed<float>("gemm_1xnbias_clamp_f32_qsi8d2p_qai4c2p_4x1vl_rvv",
                                                 make_funcs_1xnbias_clamp_f32_qsi8d2p_qai4c2p());
 #if TORQ_TILE_HAS_RVV_F16
-
+    register_w4a8bq_qsi8d2_qai4c2<float16_t>("gemm_1xnbiasf32_clamp_f16_qsi8d2_qai4c2t_4x1vl_rvv",
+                                             make_funcs_1xnbiasf32_clamp_f16_qsi8d2_qai4c2t());
     register_w4a8bq_qsi8d2_qai4c2<float16_t>("gemm_1xnbias_clamp_f16_qsi8d2_qai4c2t_4x1vl_rvv",
                                              make_funcs_1xnbias_clamp_f16_qsi8d2_qai4c2t());
-
+    register_w4a8bq_qsi8d2_qai4c2_packed<float16_t>(
+        "gemm_1xnbiasf32_clamp_f16_qsi8d2p_qai4c2p_4x1vl_rvv",
+        make_funcs_1xnbiasf32_clamp_f16_qsi8d2p_qai4c2p());
     register_w4a8bq_qsi8d2_qai4c2_packed<float16_t>(
         "gemm_1xnbias_clamp_f16_qsi8d2p_qai4c2p_4x1vl_rvv",
         make_funcs_1xnbias_clamp_f16_qsi8d2p_qai4c2p());
 #endif  // TORQ_TILE_HAS_RVV_F16
 #if TORQ_TILE_HAS_RVV_BF16
-
+    register_w4a8bq_qsi8d2_qai4c2<bfloat16_t>("gemm_1xnbiasf32_clamp_bf16_qsi8d2_qai4c2t_4x1vl_rvv",
+                                              make_funcs_1xnbiasf32_clamp_bf16_qsi8d2_qai4c2t());
     register_w4a8bq_qsi8d2_qai4c2<bfloat16_t>("gemm_1xnbias_clamp_bf16_qsi8d2_qai4c2t_4x1vl_rvv",
                                               make_funcs_1xnbias_clamp_bf16_qsi8d2_qai4c2t());
-
+    register_w4a8bq_qsi8d2_qai4c2_packed<bfloat16_t>(
+        "gemm_1xnbiasf32_clamp_bf16_qsi8d2p_qai4c2p_4x1vl_rvv",
+        make_funcs_1xnbiasf32_clamp_bf16_qsi8d2p_qai4c2p());
     register_w4a8bq_qsi8d2_qai4c2_packed<bfloat16_t>(
         "gemm_1xnbias_clamp_bf16_qsi8d2p_qai4c2p_4x1vl_rvv",
         make_funcs_1xnbias_clamp_bf16_qsi8d2p_qai4c2p());

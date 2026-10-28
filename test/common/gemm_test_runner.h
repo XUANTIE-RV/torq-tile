@@ -10,10 +10,12 @@
 
 #include <algorithm>
 #include <cfloat>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <functional>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "src/common/tqt_common.h"
@@ -32,7 +34,7 @@ namespace test
 // Function pointer types for non-packed variants
 // ============================================================================
 
-template <typename ClampT>
+template <typename ClampT, typename BiasT = void>
 struct NonPackedGemmFuncs
 {
     using GetMStepFunc = size_t (*)(void);
@@ -63,7 +65,7 @@ struct NonPackedGemmFuncs
 // Function pointer types for packed variants
 // ============================================================================
 
-template <typename ClampT>
+template <typename ClampT, typename BiasT = void>
 struct PackedGemmFuncs
 {
     using GetMStepFunc = size_t (*)(void);
@@ -344,8 +346,9 @@ inline void run_tiled_loop(size_t total_m, size_t total_n, size_t total_k, size_
 // ============================================================================
 
 template <typename TA, typename TD, BLayout kBLayout, BiasMode kBiasMode, typename ClampT,
-          typename TB = TA>
-void run_nonpacked_gemm_test(const GemmTestParams &params, const NonPackedGemmFuncs<ClampT> &funcs,
+          typename TB = TA, typename BiasT = void>
+void run_nonpacked_gemm_test(const GemmTestParams &params,
+                             const NonPackedGemmFuncs<ClampT, BiasT> &funcs,
                              float abs_error_threshold = DefaultThreshold<TD>::abs_error,
                              float cosine_sim_threshold = DefaultThreshold<TD>::cosine_sim,
                              bool narrow_a_to_b_type = false)
@@ -403,16 +406,18 @@ void run_nonpacked_gemm_test(const GemmTestParams &params, const NonPackedGemmFu
         c_ptr_ref = C_data.data();
     }
 
-    std::vector<TD> bias_data;
-    const TD *bias_ptr_ref = nullptr;
+    using ActualBiasT = std::conditional_t<std::is_void_v<BiasT>, TD, BiasT>;
+    UniformRandomGenerator<ActualBiasT> gen_bias(-10.0f, 10.0f, 123);
+    std::vector<ActualBiasT> bias_data;
+    const ActualBiasT *bias_ptr_ref = nullptr;
     BiasMode ref_bias_mode = BiasMode::kNone;
     if (params.has_bias) {
         if (kBiasMode == BiasMode::kMx1) {
             bias_data.resize(m);
-            gen_d.fill_matrix(bias_data.data(), m, 1);
+            gen_bias.fill_matrix(bias_data.data(), m, 1);
         } else {
             bias_data.resize(n);
-            gen_d.fill_matrix(bias_data.data(), 1, n);
+            gen_bias.fill_matrix(bias_data.data(), 1, n);
         }
         bias_ptr_ref = bias_data.data();
         ref_bias_mode = kBiasMode;
@@ -422,9 +427,9 @@ void run_nonpacked_gemm_test(const GemmTestParams &params, const NonPackedGemmFu
     const TD clamp_max = to_target_type<TD>(params.clamp_max_f);
 
     std::vector<TD> ref_D(m * n);
-    reference_gemm<TA, TD, TB>(m, n, k, A_ref.data(), lda, B_data.data(), ldb, kBLayout, c_ptr_ref,
-                               ldc, ref_D.data(), ldd, bias_ptr_ref, ref_bias_mode, clamp_min,
-                               clamp_max);
+    reference_gemm<TA, TD, TB, ActualBiasT>(m, n, k, A_ref.data(), lda, B_data.data(), ldb,
+                                            kBLayout, c_ptr_ref, ldc, ref_D.data(), ldd,
+                                            bias_ptr_ref, ref_bias_mode, clamp_min, clamp_max);
 
     std::vector<TD> act_D(m * n, to_target_type<TD>(0.0f));
 
@@ -451,11 +456,12 @@ void run_nonpacked_gemm_test(const GemmTestParams &params, const NonPackedGemmFu
 
             bool is_last_k = (k_start + actual_k >= k);
 
-            const void *bias_ptr = nullptr;
+            const BiasT *bias_ptr = nullptr;
             if (params.has_bias && is_last_k) {
                 size_t bias_idx = (kBiasMode == BiasMode::kMx1) ? m_start : n_start;
                 const size_t bias_offset = funcs.get_bias_offset(bias_idx);
-                bias_ptr = reinterpret_cast<const uint8_t *>(bias_data.data()) + bias_offset;
+                bias_ptr = reinterpret_cast<const BiasT *>(
+                    reinterpret_cast<const uint8_t *>(bias_data.data()) + bias_offset);
             }
 
             ClampT effective_clamp_min = static_cast<ClampT>(to_target_type<TD>(-INFINITY));
@@ -485,8 +491,9 @@ void run_nonpacked_gemm_test(const GemmTestParams &params, const NonPackedGemmFu
 // (TA: A type, TB: B type, TD: C/D/bias type; TB defaults to TA)
 // ============================================================================
 
-template <typename TA, typename TD, BiasMode kBiasMode, typename ClampT, typename TB = TA>
-void run_packed_gemm_test(const GemmTestParams &params, const PackedGemmFuncs<ClampT> &funcs,
+template <typename TA, typename TD, BiasMode kBiasMode, typename ClampT, typename TB = TA,
+          typename BiasT = void>
+void run_packed_gemm_test(const GemmTestParams &params, const PackedGemmFuncs<ClampT, BiasT> &funcs,
                           float abs_error_threshold = DefaultThreshold<TD>::abs_error,
                           float cosine_sim_threshold = DefaultThreshold<TD>::cosine_sim,
                           bool narrow_a_to_b_type = false)
@@ -535,16 +542,18 @@ void run_packed_gemm_test(const GemmTestParams &params, const PackedGemmFuncs<Cl
         c_ptr_ref = C_data.data();
     }
 
-    std::vector<TD> bias_data;
-    const TD *bias_ptr_ref = nullptr;
+    using ActualBiasT = std::conditional_t<std::is_void_v<BiasT>, TD, BiasT>;
+    UniformRandomGenerator<ActualBiasT> gen_bias(-10.0f, 10.0f, 123);
+    std::vector<ActualBiasT> bias_data;
+    const ActualBiasT *bias_ptr_ref = nullptr;
     BiasMode ref_bias_mode = BiasMode::kNone;
     if (params.has_bias) {
         if (kBiasMode == BiasMode::kMx1) {
             bias_data.resize(m);
-            gen_d.fill_matrix(bias_data.data(), m, 1);
+            gen_bias.fill_matrix(bias_data.data(), m, 1);
         } else {
             bias_data.resize(n);
-            gen_d.fill_matrix(bias_data.data(), 1, n);
+            gen_bias.fill_matrix(bias_data.data(), 1, n);
         }
         bias_ptr_ref = bias_data.data();
         ref_bias_mode = kBiasMode;
@@ -554,9 +563,9 @@ void run_packed_gemm_test(const GemmTestParams &params, const PackedGemmFuncs<Cl
     const TD clamp_max = to_target_type<TD>(params.clamp_max_f);
 
     std::vector<TD> ref_D(m * n);
-    reference_gemm<TA, TD, TB>(m, n, k, A_ref.data(), lda, B_orig.data(), ldb_orig,
-                               BLayout::kTransposed, c_ptr_ref, ldc, ref_D.data(), ldd,
-                               bias_ptr_ref, ref_bias_mode, clamp_min, clamp_max);
+    reference_gemm<TA, TD, TB, ActualBiasT>(m, n, k, A_ref.data(), lda, B_orig.data(), ldb_orig,
+                                            BLayout::kTransposed, c_ptr_ref, ldc, ref_D.data(), ldd,
+                                            bias_ptr_ref, ref_bias_mode, clamp_min, clamp_max);
 
     std::vector<TD> act_D(m * n, to_target_type<TD>(0.0f));
 
@@ -589,11 +598,12 @@ void run_packed_gemm_test(const GemmTestParams &params, const PackedGemmFuncs<Cl
                     c_ptr = reinterpret_cast<const uint8_t *>(C_data.data()) + c_offset;
                 }
 
-                const void *bias_ptr = nullptr;
+                const BiasT *bias_ptr = nullptr;
                 if (params.has_bias) {
                     size_t bias_idx = (kBiasMode == BiasMode::kMx1) ? m_start : n_start;
                     const size_t bias_offset = funcs.get_bias_offset(bias_idx);
-                    bias_ptr = reinterpret_cast<const uint8_t *>(bias_data.data()) + bias_offset;
+                    bias_ptr = reinterpret_cast<const BiasT *>(
+                        reinterpret_cast<const uint8_t *>(bias_data.data()) + bias_offset);
                 }
 
                 funcs.run_gemm(actual_m, actual_n, actual_k, a_ptr, lda, 0, b_ptr, ldb_orig, 0,
@@ -641,11 +651,12 @@ void run_packed_gemm_test(const GemmTestParams &params, const PackedGemmFuncs<Cl
 
                 bool is_last_k = (k_start + actual_k >= k);
 
-                const void *bias_ptr = nullptr;
+                const BiasT *bias_ptr = nullptr;
                 if (params.has_bias && is_last_k) {
                     size_t bias_idx = (kBiasMode == BiasMode::kMx1) ? m_start : n_start;
                     const size_t bias_offset = funcs.get_bias_offset(bias_idx);
-                    bias_ptr = reinterpret_cast<const uint8_t *>(bias_data.data()) + bias_offset;
+                    bias_ptr = reinterpret_cast<const BiasT *>(
+                        reinterpret_cast<const uint8_t *>(bias_data.data()) + bias_offset);
                 }
 
                 ClampT effective_clamp_min = static_cast<ClampT>(to_target_type<TD>(-INFINITY));
@@ -675,9 +686,10 @@ void run_packed_gemm_test(const GemmTestParams &params, const PackedGemmFuncs<Cl
 // Packed GEMM full-buffer split-K harness
 // ============================================================================
 
-template <typename TA, typename TD, BiasMode kBiasMode, typename ClampT, typename TB = TA>
+template <typename TA, typename TD, BiasMode kBiasMode, typename ClampT, typename TB = TA,
+          typename BiasT = void>
 void run_packed_gemm_full_buffer_split_k_test(
-    size_t m, size_t n, size_t k, size_t k_split, const PackedGemmFuncs<ClampT> &funcs,
+    size_t m, size_t n, size_t k, size_t k_split, const PackedGemmFuncs<ClampT, BiasT> &funcs,
     float abs_error_threshold = DefaultThreshold<TD>::abs_error,
     float cosine_sim_threshold = DefaultThreshold<TD>::cosine_sim, bool narrow_a_to_b_type = false)
 {
@@ -697,11 +709,13 @@ void run_packed_gemm_full_buffer_split_k_test(
     std::vector<TA> A(m * k);
     std::vector<TB> B(n * k);
     std::vector<TD> C(m * n);
-    std::vector<TD> bias(n);
+    using ActualBiasT = std::conditional_t<std::is_void_v<BiasT>, TD, BiasT>;
+    UniformRandomGenerator<ActualBiasT> gen_bias(-1.0f, 1.0f, 54);
+    std::vector<ActualBiasT> bias(n);
     gen_a.fill_matrix(A.data(), m, k);
     gen_b.fill_matrix(B.data(), n, k);
     gen_d.fill_matrix(C.data(), m, n);
-    gen_d.fill_matrix(bias.data(), 1, n);
+    gen_bias.fill_matrix(bias.data(), 1, n);
 
     std::vector<TA> A_ref = A;
     if (narrow_a_to_b_type) {
@@ -713,9 +727,9 @@ void run_packed_gemm_full_buffer_split_k_test(
     const TD clamp_min = to_target_type<TD>(-10.0f);
     const TD clamp_max = to_target_type<TD>(10.0f);
     std::vector<TD> ref_D(m * n);
-    reference_gemm<TA, TD, TB>(m, n, k, A_ref.data(), lda, B.data(), ldb, BLayout::kTransposed,
-                               C.data(), ldc, ref_D.data(), ldd, bias.data(), kBiasMode, clamp_min,
-                               clamp_max);
+    reference_gemm<TA, TD, TB, ActualBiasT>(m, n, k, A_ref.data(), lda, B.data(), ldb,
+                                            BLayout::kTransposed, C.data(), ldc, ref_D.data(), ldd,
+                                            bias.data(), kBiasMode, clamp_min, clamp_max);
 
     std::vector<uint8_t> A_packed(funcs.get_a_packed_size(m, k));
     std::vector<uint8_t> B_packed(funcs.get_b_packed_size(n, k));
@@ -740,7 +754,7 @@ void run_packed_gemm_full_buffer_split_k_test(
             const TD *c_ptr =
                 reinterpret_cast<const TD *>(reinterpret_cast<const uint8_t *>(C.data()) +
                                              funcs.get_c_offset(m_idx, n_idx, ldc));
-            const TD *bias_ptr = reinterpret_cast<const TD *>(
+            const ActualBiasT *bias_ptr = reinterpret_cast<const ActualBiasT *>(
                 reinterpret_cast<const uint8_t *>(bias.data()) + funcs.get_bias_offset(n_idx));
 
             const size_t a0_offset = funcs.get_a_packed_offset(m_idx, 0, lda, actual_m);
@@ -771,7 +785,7 @@ void run_packed_gemm_full_buffer_split_k_test(
 // (TA: A/B element type, TD: C/D/bias element type; for same-type GEMM use TA == TD)
 // ============================================================================
 
-template <typename TA, typename TD, BiasMode kBiasMode, typename ClampT>
+template <typename TA, typename TD, BiasMode kBiasMode, typename ClampT, typename BiasT = void>
 void run_b_only_packed_gemm_test(const GemmTestParams &params,
                                  const BOnlyPackedGemmFuncs<ClampT> &funcs,
                                  float abs_error_threshold = DefaultThreshold<TD>::abs_error,
@@ -975,6 +989,331 @@ struct GemmTestParamNameGenerator
         return sanitize_gtest_name(test_name);
     }
 };
+
+// Square-packed GEMM contract: A/C/D use row-major blocks; B uses column-major
+// blocks; each block is a row-major get_m_step() square. N/K padding uses
+// get_n_step(). C and D are packed with public pack/unpack entry points.
+// The reference computation and buffer checks are independent of the backend.
+template <typename T>
+struct GuardedGemmBuffer
+{
+    static constexpr size_t guard = 8;
+    size_t count;
+    std::vector<T> storage;
+    explicit GuardedGemmBuffer(size_t n) : count(n), storage(n + 2 * guard, static_cast<T>(-7)) {}
+    T *data() { return storage.data() + guard; }
+    void check() const
+    {
+        for (size_t i = 0; i < guard; ++i) {
+            EXPECT_EQ(static_cast<float>(storage[i]), -7.0f);
+            EXPECT_EQ(static_cast<float>(storage[guard + count + i]), -7.0f);
+        }
+    }
+};
+
+static inline void expect_gemm_value(float actual, float expected)
+{
+    if (std::isnan(expected)) {
+        EXPECT_TRUE(std::isnan(actual));
+    } else {
+        EXPECT_EQ(actual, expected);
+        if (expected == 0) {
+            EXPECT_EQ(std::signbit(actual), std::signbit(expected));
+        }
+    }
+}
+
+template <typename T, bool Wide, typename Row, typename Bt, typename Packed>
+void run_square_packed_gemm_test(const Row &row, const Bt &transposed, const Packed &packed,
+                                 int layout, size_t m, size_t n, size_t k, bool residual, bool bias,
+                                 bool alias, float lower = -INFINITY, float upper = INFINITY,
+                                 bool special = false)
+{
+    SCOPED_TRACE(::testing::Message() << "layout=" << layout << " M/N/K=" << m << '/' << n << '/'
+                                      << k << " wide=" << Wide << " alias=" << alias);
+    const size_t lda = k + 3, ldb = n + 5, ldbt = k + 7, ldc = n + 9;
+    const size_t ldd = alias ? ldc : n + 11;
+    GuardedGemmBuffer<T> a(m * lda), b(k * ldb), bt(n * ldbt), c(m * ldc), d(m * ldd), biasv(n);
+    const float special_values[] = {NAN, INFINITY, -INFINITY, -0.0f, 0.0f, -2, 2};
+    for (size_t i = 0; i < m; ++i) {
+        for (size_t q = 0; q < k; ++q) {
+            a.data()[i * lda + q] =
+                static_cast<T>((static_cast<int>((i * 17 + q * 3) % 13) - 6) / 13.0f);
+        }
+        for (size_t j = 0; j < n; ++j) {
+            c.data()[i * ldc + j] =
+                static_cast<T>(special ? special_values[(i * n + j) % 7]
+                                       : (static_cast<int>((i * 3 + j) % 11) - 5) / 16.0f);
+        }
+    }
+    for (size_t q = 0; q < k; ++q) {
+        for (size_t j = 0; j < n; ++j) {
+            b.data()[q * ldb + j] = bt.data()[j * ldbt + q] =
+                static_cast<T>((static_cast<int>((q * 7 + j * 5) % 17) - 8) / 16.0f);
+        }
+    }
+    for (size_t j = 0; j < n; ++j) {
+        biasv.data()[j] = static_cast<T>((static_cast<int>(j % 7) - 3) / 16.0f);
+    }
+    const auto saved_a = a.storage, saved_b = b.storage, saved_bt = bt.storage;
+    const auto saved_c = c.storage, saved_bias = biasv.storage;
+    std::vector<float> expected(m * n);
+    const T lo = static_cast<T>(lower), hi = static_cast<T>(upper);
+    for (size_t i = 0; i < m; ++i) {
+        for (size_t j = 0; j < n; ++j) {
+            float sum = residual ? static_cast<float>(c.data()[i * ldc + j]) : 0;
+            for (size_t q = 0; q < k; ++q) {
+                const float av = static_cast<float>(a.data()[i * lda + q]);
+                const float bv = static_cast<float>(b.data()[q * ldb + j]);
+                if constexpr (Wide || sizeof(T) == sizeof(float)) {
+                    sum = std::fma(av, bv, sum);
+                } else {
+                    // Double represents the product of two 16-bit inputs exactly.
+                    sum = static_cast<float>(
+                        static_cast<T>(std::fma(static_cast<double>(av), static_cast<double>(bv),
+                                                static_cast<double>(sum))));
+                }
+            }
+            if (bias) {
+                sum += static_cast<float>(biasv.data()[j]);
+            }
+            sum = static_cast<float>(static_cast<T>(sum));
+            if (!(lower == -INFINITY && upper == INFINITY)) {
+                sum = fminf(fmaxf(sum, static_cast<float>(lo)), static_cast<float>(hi));
+            }
+            expected[i * n + j] = sum;
+        }
+    }
+    T *output = alias ? c.data() : d.data();
+    if (layout == 2) {
+        GuardedGemmBuffer<T> ap(packed.get_a_packed_size(m, k) / sizeof(T));
+        GuardedGemmBuffer<T> bp(packed.get_b_packed_size(n, k) / sizeof(T));
+        GuardedGemmBuffer<T> btp(bp.count), cp(packed.get_d_packed_size(m, n) / sizeof(T)),
+            dp(cp.count);
+        GuardedGemmBuffer<T> biasp(packed.get_bias_packed_size(n) / sizeof(T));
+        packed.run_a_pack(m, k, lda, a.data(), ap.data());
+        packed.run_b_pack(n, k, ldb, b.data(), bp.data());
+        packed.run_bt_pack(n, k, ldbt, bt.data(), btp.data());
+        EXPECT_EQ(memcmp(bp.data(), btp.data(), bp.count * sizeof(T)), 0);
+        packed.run_c_pack(m, n, ldc, c.data(), cp.data());
+        packed.run_bias_pack(n, biasv.data(), biasp.data());
+        T *outp = alias ? cp.data() : dp.data();
+        packed.run_gemm(m, n, k, k ? ap.data() : nullptr, k ? bp.data() : nullptr,
+                        residual ? cp.data() : nullptr, outp, bias ? biasp.data() : nullptr, lo,
+                        hi);
+        packed.run_d_unpack(m, n, ldd, outp, output);
+        for (const auto *v : {&ap, &bp, &btp, &cp, &dp, &biasp}) {
+            v->check();
+        }
+    } else {
+        const auto fn = layout == 1 ? transposed.run_gemm : row.run_gemm;
+        fn(m, n, k, k ? a.data() : nullptr, lda, 0,
+           k ? (layout == 1 ? bt.data() : b.data()) : nullptr, layout == 1 ? ldbt : ldb, 0,
+           residual ? c.data() : nullptr, ldc, output, ldd, bias ? biasv.data() : nullptr, lo, hi);
+    }
+    for (size_t i = 0; i < m; ++i) {
+        for (size_t j = 0; j < n; ++j) {
+            expect_gemm_value(static_cast<float>(output[i * ldd + j]), expected[i * n + j]);
+        }
+        for (size_t j = n; j < ldd; ++j) {
+            EXPECT_EQ(static_cast<float>(output[i * ldd + j]), -7.0f);
+        }
+    }
+    EXPECT_EQ(memcmp(a.storage.data(), saved_a.data(), saved_a.size() * sizeof(T)), 0);
+    EXPECT_EQ(memcmp(b.storage.data(), saved_b.data(), saved_b.size() * sizeof(T)), 0);
+    EXPECT_EQ(memcmp(bt.storage.data(), saved_bt.data(), saved_bt.size() * sizeof(T)), 0);
+    EXPECT_EQ(memcmp(biasv.storage.data(), saved_bias.data(), saved_bias.size() * sizeof(T)), 0);
+    if (!alias) {
+        EXPECT_EQ(memcmp(c.storage.data(), saved_c.data(), saved_c.size() * sizeof(T)), 0);
+    }
+    for (const auto *v : {&a, &b, &bt, &c, &d, &biasv}) {
+        v->check();
+    }
+}
+
+template <typename T, typename Packed>
+void run_square_packed_gemm_layout_test(const Packed &p)
+{
+    const size_t s = p.get_m_step(), step = p.get_n_step();
+    const size_t rows = step + 1, cols = step + 3, ld = cols + 5;
+    const size_t pr = 2 * step, pc = ((cols + step - 1) / step) * step;
+    GuardedGemmBuffer<T> input(rows * ld), bp(p.get_b_packed_size(cols, rows) / sizeof(T));
+    for (size_t i = 0; i < rows; ++i) {
+        for (size_t j = 0; j < cols; ++j) {
+            input.data()[i * ld + j] = static_cast<T>(1 + (i * 7 + j * 3) % 31);
+        }
+    }
+    p.run_b_pack(cols, rows, ld, input.data(), bp.data());
+    size_t offset = 0;
+    for (size_t j = 0; j < pc; j += s) {
+        for (size_t i = 0; i < pr; i += s) {
+            for (size_t r = 0; r < s; ++r) {
+                for (size_t c = 0; c < s; ++c) {
+                    const float expected =
+                        i + r < rows && j + c < cols
+                            ? static_cast<float>(input.data()[(i + r) * ld + j + c])
+                            : 0;
+                    EXPECT_EQ(static_cast<float>(bp.data()[offset++]), expected);
+                }
+            }
+        }
+    }
+    EXPECT_EQ(offset, bp.count);
+    GuardedGemmBuffer<T> ap(p.get_a_packed_size(rows, cols) / sizeof(T));
+    GuardedGemmBuffer<T> cp(p.get_d_packed_size(rows, cols) / sizeof(T));
+    GuardedGemmBuffer<T> unpacked(rows * ld), bias(cols),
+        biasp(p.get_bias_packed_size(cols) / sizeof(T));
+    p.run_a_pack(rows, cols, ld, input.data(), ap.data());
+    p.run_c_pack(rows, cols, ld, input.data(), cp.data());
+    EXPECT_EQ(memcmp(ap.data(), cp.data(), ap.count * sizeof(T)), 0);
+    offset = 0;
+    for (size_t i = 0; i < rows; i += s) {
+        for (size_t j = 0; j < pc; j += s) {
+            for (size_t r = 0; r < s; ++r) {
+                for (size_t c = 0; c < s; ++c) {
+                    const float expected =
+                        i + r < rows && j + c < cols
+                            ? static_cast<float>(input.data()[(i + r) * ld + j + c])
+                            : 0;
+                    EXPECT_EQ(static_cast<float>(ap.data()[offset++]), expected);
+                }
+            }
+        }
+    }
+    EXPECT_EQ(offset, ap.count);
+    p.run_d_unpack(rows, cols, ld, cp.data(), unpacked.data());
+    EXPECT_EQ(memcmp(input.data(), unpacked.data(), rows * ld * sizeof(T)), 0);
+    for (size_t j = 0; j < cols; ++j)
+        bias.data()[j] = static_cast<T>(1 + j % 17);
+    p.run_bias_pack(cols, bias.data(), biasp.data());
+    for (size_t j = 0; j < biasp.count; ++j) {
+        EXPECT_EQ(static_cast<float>(biasp.data()[j]),
+                  j < cols ? static_cast<float>(bias.data()[j]) : 0.0f);
+    }
+    for (const auto *v : {&input, &bp, &ap, &cp, &unpacked, &bias, &biasp})
+        v->check();
+}
+
+// A unit contribution is exactly half an ULP at base. Native accumulation loses
+// each tie; widening retains the sum. Bias adds another tie before final RNE.
+template <typename T, typename Row, typename Bt, typename Packed>
+void run_gemm_accumulation_precision_test(const Row &native, const Row &wide, const Bt &native_bt,
+                                          const Bt &wide_bt, const Packed &native_p,
+                                          const Packed &wide_p, float base)
+{
+    const size_t m = native.get_m_step(), n = native.get_n_step(), k = n;
+    std::vector<T> a(m * k, static_cast<T>(1)), b(k * n, static_cast<T>(1));
+    std::vector<T> c(m * n, static_cast<T>(base)), bias(n, static_cast<T>(1));
+    std::vector<T> dn(m * n), dw(m * n);
+    EXPECT_EQ(native_p.get_a_packed_size(m, k), wide_p.get_a_packed_size(m, k));
+    EXPECT_EQ(native_p.get_b_packed_size(n, k), wide_p.get_b_packed_size(n, k));
+    EXPECT_EQ(native_p.get_d_packed_size(m, n), wide_p.get_d_packed_size(m, n));
+    for (int layout : {0, 1, 2}) {
+        if (layout == 2) {
+            std::vector<T> ap(native_p.get_a_packed_size(m, k) / sizeof(T));
+            std::vector<T> bp(native_p.get_b_packed_size(n, k) / sizeof(T));
+            std::vector<T> cp(native_p.get_d_packed_size(m, n) / sizeof(T));
+            std::vector<T> biasp(native_p.get_bias_packed_size(n) / sizeof(T));
+            std::vector<T> dnp(cp.size()), dwp(cp.size());
+            native_p.run_a_pack(m, k, k, a.data(), ap.data());
+            native_p.run_b_pack(n, k, n, b.data(), bp.data());
+            native_p.run_c_pack(m, n, n, c.data(), cp.data());
+            native_p.run_bias_pack(n, bias.data(), biasp.data());
+            native_p.run_gemm(m, n, k, ap.data(), bp.data(), cp.data(), dnp.data(), biasp.data(),
+                              (T)-INFINITY, (T)INFINITY);
+            wide_p.run_gemm(m, n, k, ap.data(), bp.data(), cp.data(), dwp.data(), biasp.data(),
+                            (T)-INFINITY, (T)INFINITY);
+            native_p.run_d_unpack(m, n, n, dnp.data(), dn.data());
+            wide_p.run_d_unpack(m, n, n, dwp.data(), dw.data());
+        } else {
+            const auto fn = layout == 0 ? native.run_gemm : native_bt.run_gemm;
+            const auto fw = layout == 0 ? wide.run_gemm : wide_bt.run_gemm;
+            fn(m, n, k, a.data(), k, 0, b.data(), n, 0, c.data(), n, dn.data(), n, bias.data(),
+               (T)-INFINITY, (T)INFINITY);
+            fw(m, n, k, a.data(), k, 0, b.data(), n, 0, c.data(), n, dw.data(), n, bias.data(),
+               (T)-INFINITY, (T)INFINITY);
+        }
+        for (size_t i = 0; i < m * n; ++i) {
+            EXPECT_EQ(static_cast<float>(dn[i]), base);
+            EXPECT_EQ(static_cast<float>(dw[i]), static_cast<float>(static_cast<T>(base + k + 1)));
+            EXPECT_NE(dn[i], dw[i]);
+        }
+    }
+}
+
+// Exact powers-of-two inputs produce the supplied dot value. A large F32 bias
+// cancels it to small fractions that would disappear if bias or dot narrowed early.
+template <typename TD, typename Run>
+void check_f32_bias_epilogue(size_t m, size_t n, float dot, bool supports_c, Run run)
+{
+    const size_t stride = n + 3;
+    std::vector<float> bias(n);
+    std::vector<TD> residual(m * stride, static_cast<TD>(0));
+    for (size_t j = 0; j < n; ++j) {
+        bias[j] = -dot + static_cast<float>(static_cast<int>(j % 7) - 3) * 0.375f;
+    }
+    for (size_t i = 0; i < m; ++i) {
+        for (size_t j = 0; j < n; ++j) {
+            residual[i * stride + j] = static_cast<TD>(0.5f * (static_cast<int>(i % 3) - 1));
+        }
+    }
+    for (bool has_bias : {false, true}) {
+        for (bool has_c : {false, true}) {
+            if (has_c && !supports_c)
+                continue;
+            for (bool clamp : {false, true}) {
+                SCOPED_TRACE(::testing::Message()
+                             << "bias=" << has_bias << " C=" << has_c << " clamp=" << clamp);
+                std::vector<TD> output(m * stride + 8, static_cast<TD>(123));
+                run(has_c ? residual.data() : nullptr, stride, has_bias ? bias.data() : nullptr,
+                    output.data(), static_cast<TD>(clamp ? -1.0f : -INFINITY),
+                    static_cast<TD>(clamp ? 1.0f : INFINITY));
+                for (size_t i = 0; i < m; ++i) {
+                    for (size_t j = 0; j < n; ++j) {
+                        float expected = dot;
+                        if (has_c)
+                            expected += static_cast<float>(residual[i * stride + j]);
+                        if (has_bias)
+                            expected += bias[j];
+                        if (clamp)
+                            expected = std::min(1.0f, std::max(-1.0f, expected));
+                        EXPECT_EQ(static_cast<float>(output[i * stride + j]),
+                                  static_cast<float>(static_cast<TD>(expected)))
+                            << "row=" << i << " col=" << j;
+                    }
+                    for (size_t j = n; j < stride; ++j) {
+                        EXPECT_EQ(static_cast<float>(output[i * stride + j]), 123.0f);
+                    }
+                }
+                for (size_t i = m * stride; i < output.size(); ++i) {
+                    EXPECT_EQ(static_cast<float>(output[i]), 123.0f);
+                }
+            }
+        }
+    }
+    if constexpr (std::is_same_v<TD, float>) {
+        // A finite F32 clamp above the F16 range must not become infinity.
+        if (dot > 70000.0f) {
+            for (bool negative : {false, true}) {
+                std::vector<float> wide_bias(n, -2.0f * dot);
+                std::vector<float> output(m * stride + 8, 123.0f);
+                run(nullptr, stride, negative ? wide_bias.data() : nullptr, output.data(),
+                    -70000.0f, 70000.0f);
+                for (size_t i = 0; i < m; ++i) {
+                    for (size_t j = 0; j < n; ++j) {
+                        EXPECT_EQ(output[i * stride + j], negative ? -70000.0f : 70000.0f);
+                    }
+                    for (size_t j = n; j < stride; ++j) {
+                        EXPECT_EQ(output[i * stride + j], 123.0f);
+                    }
+                }
+                for (size_t i = m * stride; i < output.size(); ++i) {
+                    EXPECT_EQ(output[i], 123.0f);
+                }
+            }
+        }
+    }
+}
 
 }  // namespace test
 }  // namespace torq_tile

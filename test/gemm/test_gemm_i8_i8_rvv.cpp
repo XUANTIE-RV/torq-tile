@@ -16,8 +16,8 @@
 #include "test/common/gemm_clamp_test_utils.h"
 #include "torq_tile/tqt_compile_config.h"
 #if TORQ_TILE_HAS_RVV_F16
-#include "src/gemm/gemm_i8_i8/gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt/tqt_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv.h"
-#include "src/gemm/gemm_i8_i8/gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp/tqt_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i8/gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt/tqt_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i8/gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp/tqt_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv.h"
 #endif
 #include "src/gemm/gemm_i8_i8/gemm_clamp_i32_i8_i8/tqt_gemm_clamp_i32_i8_i8_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i8/gemm_clamp_i32_i8p_i8p/tqt_gemm_clamp_i32_i8p_i8p_4x1vl_rvv.h"
@@ -416,99 +416,100 @@ INSTANTIATE_TEST_SUITE_P(
 
 #if TORQ_TILE_HAS_RVV_F16
 // ============================================================================
-// gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv
+// gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv
 // NonPacked a_bt: int8 inputs -> f16 output with 1xN bias
 // ============================================================================
 
-static NonPackedClampFpGemmFuncs<float16_t> make_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv_funcs()
+static NonPackedClampFpGemmFuncs<float16_t>
+make_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv_funcs()
 {
     return {
-        tqt_get_m_step_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv,
-        tqt_get_n_step_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv,
-        tqt_get_a_offset_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv,
-        tqt_get_b_offset_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv,
-        tqt_get_bias_offset_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv,
-        tqt_get_d_offset_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv,
-        tqt_get_d_size_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv,
-        clamp_test_run<tqt_run_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv, float16_t, 13, 11,
-                       12, 14, ClampSource::kColumnBias, false, 5, false>(),
+        tqt_get_m_step_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv,
+        tqt_get_n_step_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv,
+        tqt_get_a_offset_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv,
+        tqt_get_b_offset_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv,
+        tqt_get_bias_offset_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv,
+        tqt_get_d_offset_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv,
+        tqt_get_d_size_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv,
+        clamp_test_run<tqt_run_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv, float16_t, 13,
+                       11, 12, 14, ClampSource::kColumnBias, false, 5, false, float>(),
     };
 }
 
-class Test_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv
+class Test_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv
     : public testing::TestWithParam<GemmTestParams>
 {
 };
 
-TEST_P(Test_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv, Correctness)
+TEST_P(Test_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv, Correctness)
 {
-    auto funcs = make_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv_funcs();
-    run_1xnbias_clamp_fp_qai8dxp_qsi8cxp_gemm_test<float16_t, float16_t>(GetParam(), funcs);
+    auto funcs = make_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv_funcs();
+    run_1xnbias_clamp_fp_qai8dxp_qsi8cxp_gemm_test<float16_t>(GetParam(), funcs);
 }
 
-TEST_P(Test_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv, ClampSpecialValues)
+TEST_P(Test_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv, ClampSpecialValues)
 {
     ScopedGemmClampProbe probe;
-    auto funcs = make_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv_funcs();
-    run_1xnbias_clamp_fp_qai8dxp_qsi8cxp_gemm_test<float16_t, float16_t>(GetParam(), funcs);
+    auto funcs = make_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv_funcs();
+    run_1xnbias_clamp_fp_qai8dxp_qsi8cxp_gemm_test<float16_t>(GetParam(), funcs);
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    GemmTests, Test_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv,
+    GemmTests, Test_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv,
     with_clamp_dimensions(int8_common_test_values(),
-                          tqt_get_m_step_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv(),
-                          tqt_get_n_step_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv(), 1, true,
-                          false),
+                          tqt_get_m_step_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv(),
+                          tqt_get_n_step_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv(), 1,
+                          true, false),
     GemmTestParamNameGenerator());
 
 // ============================================================================
-// gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv
+// gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv
 // Packed ap_bp: int8 inputs -> f16 output with 1xN bias
 // ============================================================================
 
 static PackedClampFpGemmFuncs<float16_t>
-make_packed_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv_funcs()
+make_packed_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv_funcs()
 {
     return {
-        tqt_get_m_step_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
-        tqt_get_n_step_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
-        tqt_get_a_packed_offset_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
-        tqt_get_b_packed_offset_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
-        tqt_get_bias_offset_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
-        tqt_get_d_offset_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
-        tqt_get_d_size_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
-        tqt_get_a_packed_size_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
-        tqt_get_b_packed_size_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
-        tqt_run_a_pack_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
-        tqt_run_bt_pack_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
-        clamp_test_run<tqt_run_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv, float16_t, 13, 11,
-                       12, 14, ClampSource::kColumnBias, false, 5, false>(),
+        tqt_get_m_step_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
+        tqt_get_n_step_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
+        tqt_get_a_packed_offset_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
+        tqt_get_b_packed_offset_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
+        tqt_get_bias_offset_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
+        tqt_get_d_offset_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
+        tqt_get_d_size_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
+        tqt_get_a_packed_size_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
+        tqt_get_b_packed_size_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
+        tqt_run_a_pack_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
+        tqt_run_bt_pack_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
+        clamp_test_run<tqt_run_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv, float16_t, 13,
+                       11, 12, 14, ClampSource::kColumnBias, false, 5, false, float>(),
     };
 }
 
-class Test_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv
+class Test_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv
     : public testing::TestWithParam<GemmTestParams>
 {
 };
 
-TEST_P(Test_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv, Correctness)
+TEST_P(Test_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv, Correctness)
 {
-    auto funcs = make_packed_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv_funcs();
-    run_packed_1xnbias_clamp_fp_qai8dxp_qsi8cxp_gemm_test<float16_t, float16_t>(GetParam(), funcs);
+    auto funcs = make_packed_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv_funcs();
+    run_packed_1xnbias_clamp_fp_qai8dxp_qsi8cxp_gemm_test<float16_t>(GetParam(), funcs);
 }
 
-TEST_P(Test_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv, ClampSpecialValues)
+TEST_P(Test_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv, ClampSpecialValues)
 {
     ScopedGemmClampProbe probe;
-    auto funcs = make_packed_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv_funcs();
-    run_packed_1xnbias_clamp_fp_qai8dxp_qsi8cxp_gemm_test<float16_t, float16_t>(GetParam(), funcs);
+    auto funcs = make_packed_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv_funcs();
+    run_packed_1xnbias_clamp_fp_qai8dxp_qsi8cxp_gemm_test<float16_t>(GetParam(), funcs);
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    GemmTests, Test_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
+    GemmTests, Test_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
     with_clamp_dimensions(int8_common_test_values(),
-                          tqt_get_m_step_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv(),
-                          tqt_get_n_step_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv(), 1,
+                          tqt_get_m_step_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv(),
+                          tqt_get_n_step_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv(), 1,
                           true, false),
     GemmTestParamNameGenerator());
 #endif  // TORQ_TILE_HAS_RVV_F16
@@ -530,7 +531,7 @@ TEST(GemmI8I8Rvv, PackedNonzeroKOrigin)
         m, n, k, split, make_packed_1xnbias_clamp_f32_qai8dxp_qsi8cxp_4x1vl_rvv_funcs());
 #if TORQ_TILE_HAS_RVV_F16
     run_packed_clamp_fp_i8_nonzero_origin_test(
-        m, n, k, split, make_packed_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv_funcs());
+        m, n, k, split, make_packed_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv_funcs());
 #endif
 }
 
@@ -780,6 +781,205 @@ TEST(RequantizedI8Contract, gemm_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8p_4x1
         });
 }
 
+#if TORQ_TILE_HAS_RVV_F16
+
+TEST(F32BiasContract, gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv)
+{
+    const size_t ms = tqt_get_m_step_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv();
+    const size_t ns = tqt_get_n_step_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv();
+    const size_t m = ms + 1, n = ns + 1, full_m = ms + m, full_n = ns + n;
+    const size_t full_k = 96, ki = 32, k = 32, ld = 128, bl = 16, lds = 8;
+    std::vector<int8_t> a(full_m * ld, static_cast<int8_t>(0));
+    std::vector<int8_t> b(full_n * ld, static_cast<int8_t>(0));
+    for (size_t i = ms; i < full_m; ++i) {
+        for (size_t p = ki; p < ki + k; ++p)
+            a[i * ld + p] = 81;
+    }
+    for (size_t j = ns; j < full_n; ++j) {
+        for (size_t p = ki; p < ki + k; ++p)
+            b[j * ld + p] = 32;
+    }
+    const void *aw =
+        reinterpret_cast<const uint8_t *>(a.data()) +
+        tqt_get_a_offset_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv(ms, ki, ld);
+    const void *bw =
+        reinterpret_cast<const uint8_t *>(b.data()) +
+        tqt_get_b_offset_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv(ns, ki, ld);
+    std::vector<float> sa(full_m * lds, 1.0f), sb(full_n * lds, 1.0f);
+    std::vector<int32_t> za(full_m, 17);
+    tqt_qai8dxp_qsi8cxp_params params{sa.data() + ms, za.data() + ms, sb.data() + ns};
+    EXPECT_EQ(tqt_get_bias_offset_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv(ns),
+              ns * sizeof(float));
+    check_f32_bias_epilogue<float16_t>(
+        m, n, 65536.0f, false,
+        [&](const float16_t *c, size_t stride, const float *bias, float16_t *d, float16_t lo,
+            float16_t hi) {
+            std::vector<float> full_bias(full_n, 999.0f);
+            if (bias)
+                std::copy(bias, bias + n, full_bias.begin() + ns);
+            const float *bw_bias =
+                bias ? full_bias.data() +
+                           tqt_get_bias_offset_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv(
+                               ns) /
+                               sizeof(float)
+                     : nullptr;
+            tqt_run_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv(
+                m, n, k, aw, ld, ki, bw, ld, ki, c, stride, d, stride, bw_bias, lo, hi, &params);
+        });
+}
+#endif
+
+#if TORQ_TILE_HAS_RVV_F16
+
+TEST(F32BiasContract, gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv)
+{
+    const size_t ms = tqt_get_m_step_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv();
+    const size_t ns = tqt_get_n_step_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv();
+    const size_t m = ms + 1, n = ns + 1, full_m = ms + m, full_n = ns + n;
+    const size_t full_k = 96, ki = 32, k = 32, ld = 128, bl = 16, lds = 8;
+    std::vector<int8_t> a(full_m * ld, static_cast<int8_t>(0));
+    std::vector<int8_t> b(full_n * ld, static_cast<int8_t>(0));
+    for (size_t i = ms; i < full_m; ++i) {
+        for (size_t p = ki; p < ki + k; ++p)
+            a[i * ld + p] = 81;
+    }
+    for (size_t j = ns; j < full_n; ++j) {
+        for (size_t p = ki; p < ki + k; ++p)
+            b[j * ld + p] = 32;
+    }
+    std::vector<uint8_t> ap(
+        tqt_get_a_packed_size_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv(full_m, full_k));
+    std::vector<uint8_t> bp(
+        tqt_get_b_packed_size_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv(full_n, full_k));
+    tqt_run_a_pack_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv(full_m, full_k, ld, full_k,
+                                                                       0, a.data(), ap.data());
+    tqt_run_bt_pack_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv(full_n, full_k, ld, full_k,
+                                                                        0, b.data(), bp.data());
+    const void *aw =
+        ap.data() + tqt_get_a_packed_offset_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv(
+                        ms, ki, full_k, m);
+    const void *bw =
+        bp.data() + tqt_get_b_packed_offset_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv(
+                        ns, ki, full_k, n);
+    std::vector<float> sa(full_m * lds, 1.0f), sb(full_n * lds, 1.0f);
+    std::vector<int32_t> za(full_m, 17);
+    tqt_qai8dxp_qsi8cxp_params params{sa.data() + ms, za.data() + ms, sb.data() + ns};
+    EXPECT_EQ(tqt_get_bias_offset_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv(ns),
+              ns * sizeof(float));
+    check_f32_bias_epilogue<float16_t>(
+        m, n, 65536.0f, false,
+        [&](const float16_t *c, size_t stride, const float *bias, float16_t *d, float16_t lo,
+            float16_t hi) {
+            std::vector<float> full_bias(full_n, 999.0f);
+            if (bias)
+                std::copy(bias, bias + n, full_bias.begin() + ns);
+            const float *bw_bias =
+                bias ? full_bias.data() +
+                           tqt_get_bias_offset_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv(
+                               ns) /
+                               sizeof(float)
+                     : nullptr;
+            tqt_run_gemm_1xnbiasf32_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv(
+                m, n, k, aw, full_k, ki, bw, full_k, ki, c, stride, d, stride, bw_bias, lo, hi,
+                &params);
+        });
+}
+#endif
+
+TEST(F32BiasContract, gemm_1xnbias_clamp_f32_qai8dx_qsi8cxt_4x1vl_rvv)
+{
+    const size_t ms = tqt_get_m_step_gemm_1xnbias_clamp_f32_qai8dx_qsi8cxt_4x1vl_rvv();
+    const size_t ns = tqt_get_n_step_gemm_1xnbias_clamp_f32_qai8dx_qsi8cxt_4x1vl_rvv();
+    const size_t m = ms + 1, n = ns + 1, full_m = ms + m, full_n = ns + n;
+    const size_t full_k = 96, ki = 32, k = 32, ld = 128, bl = 16, lds = 8;
+    std::vector<int8_t> a(full_m * ld, static_cast<int8_t>(0));
+    std::vector<int8_t> b(full_n * ld, static_cast<int8_t>(0));
+    for (size_t i = ms; i < full_m; ++i) {
+        for (size_t p = ki; p < ki + k; ++p)
+            a[i * ld + p] = 81;
+    }
+    for (size_t j = ns; j < full_n; ++j) {
+        for (size_t p = ki; p < ki + k; ++p)
+            b[j * ld + p] = 32;
+    }
+    const void *aw = reinterpret_cast<const uint8_t *>(a.data()) +
+                     tqt_get_a_offset_gemm_1xnbias_clamp_f32_qai8dx_qsi8cxt_4x1vl_rvv(ms, ki, ld);
+    const void *bw = reinterpret_cast<const uint8_t *>(b.data()) +
+                     tqt_get_b_offset_gemm_1xnbias_clamp_f32_qai8dx_qsi8cxt_4x1vl_rvv(ns, ki, ld);
+    std::vector<float> sa(full_m * lds, 1.0f), sb(full_n * lds, 1.0f);
+    std::vector<int32_t> za(full_m, 17);
+    tqt_qai8dxp_qsi8cxp_params params{sa.data() + ms, za.data() + ms, sb.data() + ns};
+    EXPECT_EQ(tqt_get_bias_offset_gemm_1xnbias_clamp_f32_qai8dx_qsi8cxt_4x1vl_rvv(ns),
+              ns * sizeof(float));
+    check_f32_bias_epilogue<float>(
+        m, n, 65536.0f, false,
+        [&](const float *c, size_t stride, const float *bias, float *d, float lo, float hi) {
+            std::vector<float> full_bias(full_n, 999.0f);
+            if (bias)
+                std::copy(bias, bias + n, full_bias.begin() + ns);
+            const float *bw_bias =
+                bias ? full_bias.data() +
+                           tqt_get_bias_offset_gemm_1xnbias_clamp_f32_qai8dx_qsi8cxt_4x1vl_rvv(ns) /
+                               sizeof(float)
+                     : nullptr;
+            tqt_run_gemm_1xnbias_clamp_f32_qai8dx_qsi8cxt_4x1vl_rvv(
+                m, n, k, aw, ld, ki, bw, ld, ki, c, stride, d, stride, bw_bias, lo, hi, &params);
+        });
+}
+
+TEST(F32BiasContract, gemm_1xnbias_clamp_f32_qai8dxp_qsi8cxp_4x1vl_rvv)
+{
+    const size_t ms = tqt_get_m_step_gemm_1xnbias_clamp_f32_qai8dxp_qsi8cxp_4x1vl_rvv();
+    const size_t ns = tqt_get_n_step_gemm_1xnbias_clamp_f32_qai8dxp_qsi8cxp_4x1vl_rvv();
+    const size_t m = ms + 1, n = ns + 1, full_m = ms + m, full_n = ns + n;
+    const size_t full_k = 96, ki = 32, k = 32, ld = 128, bl = 16, lds = 8;
+    std::vector<int8_t> a(full_m * ld, static_cast<int8_t>(0));
+    std::vector<int8_t> b(full_n * ld, static_cast<int8_t>(0));
+    for (size_t i = ms; i < full_m; ++i) {
+        for (size_t p = ki; p < ki + k; ++p)
+            a[i * ld + p] = 81;
+    }
+    for (size_t j = ns; j < full_n; ++j) {
+        for (size_t p = ki; p < ki + k; ++p)
+            b[j * ld + p] = 32;
+    }
+    std::vector<uint8_t> ap(
+        tqt_get_a_packed_size_gemm_1xnbias_clamp_f32_qai8dxp_qsi8cxp_4x1vl_rvv(full_m, full_k));
+    std::vector<uint8_t> bp(
+        tqt_get_b_packed_size_gemm_1xnbias_clamp_f32_qai8dxp_qsi8cxp_4x1vl_rvv(full_n, full_k));
+    tqt_run_a_pack_gemm_1xnbias_clamp_f32_qai8dxp_qsi8cxp_4x1vl_rvv(full_m, full_k, ld, full_k, 0,
+                                                                    a.data(), ap.data());
+    tqt_run_bt_pack_gemm_1xnbias_clamp_f32_qai8dxp_qsi8cxp_4x1vl_rvv(full_n, full_k, ld, full_k, 0,
+                                                                     b.data(), bp.data());
+    const void *aw =
+        ap.data() +
+        tqt_get_a_packed_offset_gemm_1xnbias_clamp_f32_qai8dxp_qsi8cxp_4x1vl_rvv(ms, ki, full_k, m);
+    const void *bw =
+        bp.data() +
+        tqt_get_b_packed_offset_gemm_1xnbias_clamp_f32_qai8dxp_qsi8cxp_4x1vl_rvv(ns, ki, full_k, n);
+    std::vector<float> sa(full_m * lds, 1.0f), sb(full_n * lds, 1.0f);
+    std::vector<int32_t> za(full_m, 17);
+    tqt_qai8dxp_qsi8cxp_params params{sa.data() + ms, za.data() + ms, sb.data() + ns};
+    EXPECT_EQ(tqt_get_bias_offset_gemm_1xnbias_clamp_f32_qai8dxp_qsi8cxp_4x1vl_rvv(ns),
+              ns * sizeof(float));
+    check_f32_bias_epilogue<float>(
+        m, n, 65536.0f, false,
+        [&](const float *c, size_t stride, const float *bias, float *d, float lo, float hi) {
+            std::vector<float> full_bias(full_n, 999.0f);
+            if (bias)
+                std::copy(bias, bias + n, full_bias.begin() + ns);
+            const float *bw_bias =
+                bias
+                    ? full_bias.data() +
+                          tqt_get_bias_offset_gemm_1xnbias_clamp_f32_qai8dxp_qsi8cxp_4x1vl_rvv(ns) /
+                              sizeof(float)
+                    : nullptr;
+            tqt_run_gemm_1xnbias_clamp_f32_qai8dxp_qsi8cxp_4x1vl_rvv(
+                m, n, k, aw, full_k, ki, bw, full_k, ki, c, stride, d, stride, bw_bias, lo, hi,
+                &params);
+        });
+}
+
 TEST(RequantizedI8Window, gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi8cxp_4x1vl_rvv)
 {
     check_requantized_i8_contract<false>(
@@ -861,3 +1061,96 @@ TEST(RequantizedI8Window, gemm_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8p_4x1vl
                 params);
         });
 }
+
+#if TORQ_TILE_HAS_RVV_F16
+// Original narrow-bias entry points remain covered after adding biasf32 variants.
+#include "src/gemm/gemm_i8_i8/gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt/tqt_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i8/gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp/tqt_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv.h"
+
+static NonPackedClampFpGemmFuncs<float16_t> make_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv_funcs()
+{
+    return {
+        tqt_get_m_step_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv,
+        tqt_get_n_step_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv,
+        tqt_get_a_offset_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv,
+        tqt_get_b_offset_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv,
+        tqt_get_bias_offset_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv,
+        tqt_get_d_offset_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv,
+        tqt_get_d_size_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv,
+        clamp_test_run<tqt_run_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv, float16_t, 13, 11,
+                       12, 14, ClampSource::kColumnBias, false, 5, false>(),
+    };
+}
+
+class Test_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv
+    : public testing::TestWithParam<GemmTestParams>
+{
+};
+
+TEST_P(Test_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv, Correctness)
+{
+    auto funcs = make_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv_funcs();
+    run_1xnbias_clamp_fp_qai8dxp_qsi8cxp_gemm_test<float16_t, float16_t>(GetParam(), funcs);
+}
+
+TEST_P(Test_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv, ClampSpecialValues)
+{
+    ScopedGemmClampProbe probe;
+    auto funcs = make_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv_funcs();
+    run_1xnbias_clamp_fp_qai8dxp_qsi8cxp_gemm_test<float16_t, float16_t>(GetParam(), funcs);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    GemmTests, Test_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv,
+    with_clamp_dimensions(int8_common_test_values(),
+                          tqt_get_m_step_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv(),
+                          tqt_get_n_step_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv(), 1, true,
+                          false),
+    GemmTestParamNameGenerator());
+
+static PackedClampFpGemmFuncs<float16_t>
+make_packed_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv_funcs()
+{
+    return {
+        tqt_get_m_step_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
+        tqt_get_n_step_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
+        tqt_get_a_packed_offset_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
+        tqt_get_b_packed_offset_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
+        tqt_get_bias_offset_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
+        tqt_get_d_offset_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
+        tqt_get_d_size_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
+        tqt_get_a_packed_size_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
+        tqt_get_b_packed_size_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
+        tqt_run_a_pack_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
+        tqt_run_bt_pack_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
+        clamp_test_run<tqt_run_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv, float16_t, 13, 11,
+                       12, 14, ClampSource::kColumnBias, false, 5, false>(),
+    };
+}
+
+class Test_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv
+    : public testing::TestWithParam<GemmTestParams>
+{
+};
+
+TEST_P(Test_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv, Correctness)
+{
+    auto funcs = make_packed_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv_funcs();
+    run_packed_1xnbias_clamp_fp_qai8dxp_qsi8cxp_gemm_test<float16_t, float16_t>(GetParam(), funcs);
+}
+
+TEST_P(Test_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv, ClampSpecialValues)
+{
+    ScopedGemmClampProbe probe;
+    auto funcs = make_packed_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv_funcs();
+    run_packed_1xnbias_clamp_fp_qai8dxp_qsi8cxp_gemm_test<float16_t, float16_t>(GetParam(), funcs);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    GemmTests, Test_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv,
+    with_clamp_dimensions(int8_common_test_values(),
+                          tqt_get_m_step_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv(),
+                          tqt_get_n_step_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv(), 1,
+                          true, false),
+    GemmTestParamNameGenerator());
+#endif  // TORQ_TILE_HAS_RVV_F16

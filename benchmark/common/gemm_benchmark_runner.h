@@ -12,10 +12,14 @@
 #include <cfloat>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <string>
+#include <type_traits>
 #include <vector>
 
 #include "benchmark/common/benchmark_common.h"
 #include "src/common/tqt_common.h"
+#include "src/gemm/gemm_f4_f4/tqt_params_f4_f4.h"
 
 namespace torq_tile
 {
@@ -27,7 +31,7 @@ namespace benchmark
 // (mirrors test/common/gemm_test_runner.h but without gtest dependency)
 // ============================================================================
 
-template <typename ClampT>
+template <typename ClampT, typename BiasT = void>
 struct NonPackedGemmFuncs
 {
     using GetMStepFunc = size_t (*)(void);
@@ -52,7 +56,7 @@ struct NonPackedGemmFuncs
 // Function pointer types for packed GEMM variants
 // ============================================================================
 
-template <typename ClampT>
+template <typename ClampT, typename BiasT = void>
 struct PackedGemmFuncs
 {
     using GetMStepFunc = size_t (*)(void);
@@ -123,7 +127,7 @@ struct BOnlyPackedGemmFuncs
 // (InputT: A/B element type, OutputT: D element type; for same-type GEMM use InputT == OutputT)
 // ============================================================================
 
-template <typename InputT, typename OutputT, typename ClampT>
+template <typename InputT, typename OutputT, typename ClampT, typename BiasT = void>
 void run_b_only_packed_gemm_benchmark(::benchmark::State &state,
                                       const BOnlyPackedGemmFuncs<ClampT> &funcs)
 {
@@ -170,7 +174,7 @@ void run_b_only_packed_gemm_benchmark(::benchmark::State &state,
 // Helper: register a B-only-packed GEMM benchmark
 // ============================================================================
 
-template <typename InputT, typename OutputT, typename ClampT>
+template <typename InputT, typename OutputT, typename ClampT, typename BiasT = void>
 inline void register_b_only_packed_gemm_benchmark(const char *name,
                                                   const BOnlyPackedGemmFuncs<ClampT> &funcs)
 {
@@ -192,9 +196,9 @@ inline void register_b_only_packed_gemm_benchmark(const char *name,
 // ============================================================================
 
 template <typename InputT, typename OutputT, BLayout kBLayout, typename ClampT,
-          typename WeightT = InputT>
+          typename WeightT = InputT, typename BiasT = void>
 void run_nonpacked_gemm_benchmark(::benchmark::State &state,
-                                  const NonPackedGemmFuncs<ClampT> &funcs)
+                                  const NonPackedGemmFuncs<ClampT, BiasT> &funcs)
 {
     const size_t m = static_cast<size_t>(state.range(0));
     const size_t n = static_cast<size_t>(state.range(1));
@@ -241,9 +245,9 @@ void run_nonpacked_gemm_benchmark(::benchmark::State &state,
 // ============================================================================
 
 template <typename InputT, typename OutputT, BLayout kBLayout, typename ClampT,
-          typename WeightT = InputT>
+          typename WeightT = InputT, typename BiasT = void>
 inline void register_nonpacked_gemm_benchmark(const char *name,
-                                              const NonPackedGemmFuncs<ClampT> &funcs)
+                                              const NonPackedGemmFuncs<ClampT, BiasT> &funcs)
 {
     auto *benchmark_instance =
         ::benchmark::RegisterBenchmark(name, [funcs](::benchmark::State &state) {
@@ -262,8 +266,10 @@ inline void register_nonpacked_gemm_benchmark(const char *name,
 // (InputT: A type, WeightT: B type, OutputT: D type; WeightT defaults to InputT)
 // ============================================================================
 
-template <typename InputT, typename OutputT, typename ClampT, typename WeightT = InputT>
-void run_packed_gemm_benchmark(::benchmark::State &state, const PackedGemmFuncs<ClampT> &funcs)
+template <typename InputT, typename OutputT, typename ClampT, typename WeightT = InputT,
+          typename BiasT = void>
+void run_packed_gemm_benchmark(::benchmark::State &state,
+                               const PackedGemmFuncs<ClampT, BiasT> &funcs)
 {
     const size_t m = static_cast<size_t>(state.range(0));
     const size_t n = static_cast<size_t>(state.range(1));
@@ -312,8 +318,10 @@ void run_packed_gemm_benchmark(::benchmark::State &state, const PackedGemmFuncs<
 // Helper: register a packed GEMM benchmark
 // ============================================================================
 
-template <typename InputT, typename OutputT, typename ClampT, typename WeightT = InputT>
-inline void register_packed_gemm_benchmark(const char *name, const PackedGemmFuncs<ClampT> &funcs)
+template <typename InputT, typename OutputT, typename ClampT, typename WeightT = InputT,
+          typename BiasT = void>
+inline void register_packed_gemm_benchmark(const char *name,
+                                           const PackedGemmFuncs<ClampT, BiasT> &funcs)
 {
     auto *benchmark_instance =
         ::benchmark::RegisterBenchmark(name, [funcs](::benchmark::State &state) {
@@ -331,8 +339,9 @@ inline void register_packed_gemm_benchmark(const char *name, const PackedGemmFun
 // Packed GEMM component benchmarks
 // ============================================================================
 
-template <typename InputT, typename ClampT>
-void run_gemm_a_pack_benchmark(::benchmark::State &state, const PackedGemmFuncs<ClampT> &funcs)
+template <typename InputT, typename ClampT, typename BiasT = void>
+void run_gemm_a_pack_benchmark(::benchmark::State &state,
+                               const PackedGemmFuncs<ClampT, BiasT> &funcs)
 {
     const size_t m = static_cast<size_t>(state.range(0));
     const size_t k = static_cast<size_t>(state.range(2));
@@ -349,8 +358,9 @@ void run_gemm_a_pack_benchmark(::benchmark::State &state, const PackedGemmFuncs<
     state.SetBytesProcessed(static_cast<int64_t>(state.iterations() * m * k * sizeof(InputT)));
 }
 
-template <typename WeightT, typename ClampT>
-void run_gemm_b_pack_benchmark(::benchmark::State &state, const PackedGemmFuncs<ClampT> &funcs)
+template <typename WeightT, typename ClampT, typename BiasT = void>
+void run_gemm_b_pack_benchmark(::benchmark::State &state,
+                               const PackedGemmFuncs<ClampT, BiasT> &funcs)
 {
     const size_t n = static_cast<size_t>(state.range(1));
     const size_t k = static_cast<size_t>(state.range(2));
@@ -367,9 +377,10 @@ void run_gemm_b_pack_benchmark(::benchmark::State &state, const PackedGemmFuncs<
     state.SetBytesProcessed(static_cast<int64_t>(state.iterations() * n * k * sizeof(WeightT)));
 }
 
-template <typename InputT, typename OutputT, typename ClampT, typename WeightT = InputT>
+template <typename InputT, typename OutputT, typename ClampT, typename WeightT = InputT,
+          typename BiasT = void>
 void run_gemm_a_pack_and_gemm_benchmark(::benchmark::State &state,
-                                        const PackedGemmFuncs<ClampT> &funcs)
+                                        const PackedGemmFuncs<ClampT, BiasT> &funcs)
 {
     const size_t m = static_cast<size_t>(state.range(0));
     const size_t n = static_cast<size_t>(state.range(1));
@@ -400,8 +411,9 @@ void run_gemm_a_pack_and_gemm_benchmark(::benchmark::State &state,
                              ::benchmark::Counter::OneK::kIs1000);
 }
 
-template <typename InputT, typename ClampT>
-inline void register_gemm_a_pack_benchmark(const char *name, const PackedGemmFuncs<ClampT> &funcs)
+template <typename InputT, typename ClampT, typename BiasT = void>
+inline void register_gemm_a_pack_benchmark(const char *name,
+                                           const PackedGemmFuncs<ClampT, BiasT> &funcs)
 {
     auto *benchmark_instance =
         ::benchmark::RegisterBenchmark(name, [funcs](::benchmark::State &state) {
@@ -414,8 +426,9 @@ inline void register_gemm_a_pack_benchmark(const char *name, const PackedGemmFun
         ->ArgNames({"m", "n", "k"});
 }
 
-template <typename WeightT, typename ClampT>
-inline void register_gemm_b_pack_benchmark(const char *name, const PackedGemmFuncs<ClampT> &funcs)
+template <typename WeightT, typename ClampT, typename BiasT = void>
+inline void register_gemm_b_pack_benchmark(const char *name,
+                                           const PackedGemmFuncs<ClampT, BiasT> &funcs)
 {
     auto *benchmark_instance =
         ::benchmark::RegisterBenchmark(name, [funcs](::benchmark::State &state) {
@@ -428,9 +441,10 @@ inline void register_gemm_b_pack_benchmark(const char *name, const PackedGemmFun
         ->ArgNames({"m", "n", "k"});
 }
 
-template <typename InputT, typename OutputT, typename ClampT, typename WeightT = InputT>
+template <typename InputT, typename OutputT, typename ClampT, typename WeightT = InputT,
+          typename BiasT = void>
 inline void register_gemm_a_pack_and_gemm_benchmark(const char *name,
-                                                    const PackedGemmFuncs<ClampT> &funcs)
+                                                    const PackedGemmFuncs<ClampT, BiasT> &funcs)
 {
     auto *benchmark_instance =
         ::benchmark::RegisterBenchmark(name, [funcs](::benchmark::State &state) {
@@ -892,6 +906,276 @@ void register_packed_qsi8_kblock_gemm_benchmark(
         [funcs](::benchmark::State &state) { run_packed_qsi8_kblock_gemm_benchmark(state, funcs); })
         ->Args({(int64_t)shape.m, (int64_t)shape.n, (int64_t)k})
         ->ArgNames({"m", "n", "k"});
+}
+
+// ============================================================================
+// Microscaled fp4 (E2M1) x fp4 (E2M1) GEMM with fp8 (E4M3) block scales.
+// Output type TD ∈ {float, bfloat16_t}. bf16 path additionally carries an
+// optional 1xN bias and an optional global_scale via params; fp32 path does
+// neither. We dispatch on TD with `if constexpr` so a single funcs/runner pair
+// covers both.
+// ============================================================================
+
+template <typename TD>
+struct Mxfp4RunGemmTraits;
+
+template <>
+struct Mxfp4RunGemmTraits<float>
+{
+    using RunGemmFunc = void (*)(size_t m, size_t n, size_t k, size_t bl,         //
+                                 const void *A, size_t lda, size_t k_idx_a,       //
+                                 const void *scale_a, size_t ldsa,                //
+                                 const void *B, size_t ldb, size_t k_idx_b,       //
+                                 const void *scale_b, size_t ldsb,                //
+                                 const void *C, size_t ldc, void *D, size_t ldd,  //
+                                 float clamp_min, float clamp_max);
+};
+
+template <>
+struct Mxfp4RunGemmTraits<bfloat16_t>
+{
+    using RunGemmFunc = void (*)(size_t m, size_t n, size_t k, size_t bl,         //
+                                 const void *A, size_t lda, size_t k_idx_a,       //
+                                 const void *scale_a, size_t ldsa,                //
+                                 const void *B, size_t ldb, size_t k_idx_b,       //
+                                 const void *scale_b, size_t ldsb,                //
+                                 const void *C, size_t ldc, void *D, size_t ldd,  //
+                                 const void *bias,                                //
+                                 bfloat16_t clamp_min, bfloat16_t clamp_max,      //
+                                 const struct tqt_rvfp4c16_rvfp4c16_params *params);
+};
+
+// ============================================================================
+// Function pointer types for non-packed mxfp4 GEMM variants (a_bt layout).
+// ============================================================================
+
+template <typename TD>
+struct Mxfp4GemmFuncs
+{
+    using GetMStepFunc = size_t (*)(void);
+    using GetNStepFunc = size_t (*)(void);
+    using GetAOffsetFunc = size_t (*)(size_t m_idx, size_t k_idx, size_t lda, size_t bl);
+    using GetBOffsetFunc = size_t (*)(size_t n_idx, size_t k_idx, size_t ldb, size_t bl);
+    using GetScaleOffsetFunc = size_t (*)(size_t idx, size_t b_idx, size_t lds);
+    using GetDOffsetFunc = size_t (*)(size_t m_idx, size_t n_idx, size_t ldd);
+    using RunGemmFunc = typename Mxfp4RunGemmTraits<TD>::RunGemmFunc;
+
+    GetMStepFunc get_m_step;
+    GetNStepFunc get_n_step;
+    GetAOffsetFunc get_a_offset;
+    GetBOffsetFunc get_b_offset;
+    GetScaleOffsetFunc get_scale_a_offset;
+    GetScaleOffsetFunc get_scale_b_offset;
+    GetDOffsetFunc get_d_offset;
+    RunGemmFunc run_gemm;
+};
+
+// ============================================================================
+// Function pointer types for packed mxfp4 GEMM variants (ap_bp layout).
+// fp4 data and fp8 scales are packed into independent buffers.
+// ============================================================================
+
+template <typename TD>
+struct PackedMxfp4GemmFuncs
+{
+    using GetMStepFunc = size_t (*)(void);
+    using GetNStepFunc = size_t (*)(void);
+    using GetPackedOffsetFunc = size_t (*)(size_t idx, size_t k_idx, size_t ld, size_t bl);
+    using GetScalePackedOffsetFunc = size_t (*)(size_t idx, size_t b_idx, size_t lds);
+    using GetDOffsetFunc = size_t (*)(size_t m_idx, size_t n_idx, size_t ldd);
+    using GetPackedSizeFunc = size_t (*)(size_t a_or_n, size_t k_or_blocks);
+    using RunDataPackFunc = void (*)(size_t a_or_n, size_t k, size_t lda, size_t lda_packed,
+                                     size_t k_idx, const void *A, void *A_packed);
+    using RunScalePackFunc = void (*)(size_t a_or_n, size_t blocks, size_t ldsa, size_t ldsa_packed,
+                                      size_t b_idx, const void *scale, void *scale_packed);
+    using RunGemmFunc = typename Mxfp4RunGemmTraits<TD>::RunGemmFunc;
+
+    GetMStepFunc get_m_step;
+    GetNStepFunc get_n_step;
+    GetPackedOffsetFunc get_a_packed_offset;
+    GetPackedOffsetFunc get_b_packed_offset;
+    GetPackedSizeFunc get_a_packed_size;
+    GetPackedSizeFunc get_b_packed_size;
+    GetScalePackedOffsetFunc get_scale_a_packed_offset;
+    GetScalePackedOffsetFunc get_scale_b_packed_offset;
+    GetPackedSizeFunc get_scale_a_packed_size;
+    GetPackedSizeFunc get_scale_b_packed_size;
+    GetDOffsetFunc get_d_offset;
+    RunDataPackFunc run_a_pack;
+    RunDataPackFunc run_bt_pack;
+    RunScalePackFunc run_scale_a_pack;
+    RunScalePackFunc run_scale_bt_pack;
+    RunGemmFunc run_gemm;
+};
+
+// ============================================================================
+// RVFP4 data and E4M3 scale initializers.
+// ============================================================================
+
+inline void fill_mxfp4_data(std::vector<uint8_t> &buf, unsigned int seed)
+{
+    std::srand(seed);
+    for (auto &b : buf) {
+        b = static_cast<uint8_t>(std::rand() & 0xFF);
+    }
+}
+
+inline void fill_mxfp8_scale(std::vector<uint8_t> &buf, unsigned int seed)
+{
+    // exponent 1..8, mantissa 0..7 (sign bit = 0, no NaN); positive E4M3 range ~ 0.25..16
+    std::srand(seed);
+    for (auto &b : buf) {
+        const uint32_t e = 1u + (std::rand() & 0x7);
+        const uint32_t m = std::rand() & 0x7;
+        b = static_cast<uint8_t>((e << 3) | m);
+    }
+}
+
+// ============================================================================
+// Non-packed mxfp4 GEMM benchmark runner.
+// ============================================================================
+
+template <typename TD>
+void run_mxfp4_gemm_benchmark(::benchmark::State &state, const Mxfp4GemmFuncs<TD> &funcs)
+{
+    (void)funcs;  // silence unused-warning before use in the lambda below
+    const size_t m = static_cast<size_t>(state.range(0));
+    const size_t n = static_cast<size_t>(state.range(1));
+    const size_t k = static_cast<size_t>(state.range(2));
+    const size_t bl = static_cast<size_t>(state.range(3));
+    const size_t blocks = k / bl;
+    const size_t lda = k;
+    const size_t ldb = k;
+    const size_t ldsa = blocks;
+    const size_t ldsb = blocks;
+    const size_t ldd = n;
+
+    std::vector<uint8_t> A((m * k) / 2);
+    std::vector<uint8_t> B((n * k) / 2);
+    std::vector<uint8_t> scale_a(m * ldsa);
+    std::vector<uint8_t> scale_b(n * ldsb);
+    fill_mxfp4_data(A, 0xA001);
+    fill_mxfp4_data(B, 0xB002);
+    fill_mxfp8_scale(scale_a, 0xC003);
+    fill_mxfp8_scale(scale_b, 0xD004);
+
+    std::vector<TD> D(m * n, static_cast<TD>(0));
+
+    for (auto _ : state) {
+        if constexpr (std::is_same_v<TD, float>) {
+            funcs.run_gemm(m, n, k, bl,                             //
+                           A.data(), lda, 0, scale_a.data(), ldsa,  //
+                           B.data(), ldb, 0, scale_b.data(), ldsb,  //
+                           nullptr, ldd, D.data(), ldd, -FLT_MAX, FLT_MAX);
+        } else {
+            funcs.run_gemm(m, n, k, bl,                             //
+                           A.data(), lda, 0, scale_a.data(), ldsa,  //
+                           B.data(), ldb, 0, scale_b.data(), ldsb,  //
+                           nullptr, ldd, D.data(), ldd, nullptr,    //
+                           static_cast<bfloat16_t>(-FLT_MAX), static_cast<bfloat16_t>(FLT_MAX),
+                           nullptr);
+        }
+        ::benchmark::DoNotOptimize(D.data());
+    }
+
+    state.counters["GFLOPS"] =
+        ::benchmark::Counter(gemm_flops(m, n, k), ::benchmark::Counter::kIsIterationInvariantRate,
+                             ::benchmark::Counter::OneK::kIs1000);
+}
+
+// ============================================================================
+// Packed mxfp4 GEMM benchmark runner. Packs both fp4 data and fp8 scales
+// outside the timing loop so the measured cost is the GEMM itself.
+// ============================================================================
+
+template <typename TD>
+void run_packed_mxfp4_gemm_benchmark(::benchmark::State &state,
+                                     const PackedMxfp4GemmFuncs<TD> &funcs)
+{
+    const size_t m = static_cast<size_t>(state.range(0));
+    const size_t n = static_cast<size_t>(state.range(1));
+    const size_t k = static_cast<size_t>(state.range(2));
+    const size_t bl = static_cast<size_t>(state.range(3));
+    const size_t blocks = k / bl;
+    const size_t lda = k;
+    const size_t ldb = k;
+    const size_t ldsa = blocks;
+    const size_t ldsb = blocks;
+    const size_t ldd = n;
+
+    std::vector<uint8_t> A((m * k) / 2);
+    std::vector<uint8_t> B((n * k) / 2);
+    std::vector<uint8_t> scale_a(m * ldsa);
+    std::vector<uint8_t> scale_b(n * ldsb);
+    fill_mxfp4_data(A, 0xA001);
+    fill_mxfp4_data(B, 0xB002);
+    fill_mxfp8_scale(scale_a, 0xC003);
+    fill_mxfp8_scale(scale_b, 0xD004);
+
+    std::vector<uint8_t> A_packed(funcs.get_a_packed_size(m, k));
+    std::vector<uint8_t> B_packed(funcs.get_b_packed_size(n, k));
+    std::vector<uint8_t> scale_a_packed(funcs.get_scale_a_packed_size(m, blocks));
+    std::vector<uint8_t> scale_b_packed(funcs.get_scale_b_packed_size(n, blocks));
+
+    funcs.run_a_pack(m, k, lda, lda, 0, A.data(), A_packed.data());
+    funcs.run_bt_pack(n, k, ldb, ldb, 0, B.data(), B_packed.data());
+    funcs.run_scale_a_pack(m, blocks, ldsa, ldsa, 0, scale_a.data(), scale_a_packed.data());
+    funcs.run_scale_bt_pack(n, blocks, ldsb, ldsb, 0, scale_b.data(), scale_b_packed.data());
+
+    std::vector<TD> D(m * n, static_cast<TD>(0));
+
+    for (auto _ : state) {
+        if constexpr (std::is_same_v<TD, float>) {
+            funcs.run_gemm(m, n, k, bl,                                           //
+                           A_packed.data(), lda, 0, scale_a_packed.data(), ldsa,  //
+                           B_packed.data(), ldb, 0, scale_b_packed.data(), ldsb,  //
+                           nullptr, ldd, D.data(), ldd, -FLT_MAX, FLT_MAX);
+        } else {
+            funcs.run_gemm(m, n, k, bl,                                           //
+                           A_packed.data(), lda, 0, scale_a_packed.data(), ldsa,  //
+                           B_packed.data(), ldb, 0, scale_b_packed.data(), ldsb,  //
+                           nullptr, ldd, D.data(), ldd, nullptr,                  //
+                           static_cast<bfloat16_t>(-FLT_MAX), static_cast<bfloat16_t>(FLT_MAX),
+                           nullptr);
+        }
+        ::benchmark::DoNotOptimize(D.data());
+    }
+
+    state.counters["GFLOPS"] =
+        ::benchmark::Counter(gemm_flops(m, n, k), ::benchmark::Counter::kIsIterationInvariantRate,
+                             ::benchmark::Counter::OneK::kIs1000);
+}
+
+// ============================================================================
+// Register helpers for the two mxfp4 runners.
+// ============================================================================
+
+template <typename TD>
+inline void register_mxfp4_gemm_benchmark(const char *name, const Mxfp4GemmFuncs<TD> &funcs)
+{
+    auto *benchmark_instance = ::benchmark::RegisterBenchmark(
+        name, [funcs](::benchmark::State &state) { run_mxfp4_gemm_benchmark<TD>(state, funcs); });
+
+    const auto &shape = global_gemm_shape();
+    benchmark_instance
+        ->Args({static_cast<int64_t>(shape.m), static_cast<int64_t>(shape.n),
+                static_cast<int64_t>(shape.k), 32})
+        ->ArgNames({"m", "n", "k", "bl"});
+}
+
+template <typename TD>
+inline void register_packed_mxfp4_gemm_benchmark(const char *name,
+                                                 const PackedMxfp4GemmFuncs<TD> &funcs)
+{
+    auto *benchmark_instance = ::benchmark::RegisterBenchmark(
+        name,
+        [funcs](::benchmark::State &state) { run_packed_mxfp4_gemm_benchmark<TD>(state, funcs); });
+
+    const auto &shape = global_gemm_shape();
+    benchmark_instance
+        ->Args({static_cast<int64_t>(shape.m), static_cast<int64_t>(shape.n),
+                static_cast<int64_t>(shape.k), 32})
+        ->ArgNames({"m", "n", "k", "bl"});
 }
 
 }  // namespace benchmark

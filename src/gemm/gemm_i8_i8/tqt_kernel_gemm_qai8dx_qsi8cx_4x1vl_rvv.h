@@ -33,8 +33,7 @@
 ///   v0-v3:   fp32 bias broadcast vector (lmul=4) in dequant_fp32 — REUSES
 ///            the v0-v3 group that previously held the raw RHS row; the K-loop
 ///            has finished by this point so the reuse is safe.
-///   v2-v3:   fp16 bias broadcast vector (lmul=2) in dequant_fp16 (subset of
-///            the same v0-v3 group reuse).
+///   v8-v9:   fp16 store scratch in dequant_fp16 (lmul=2).
 ///   v4-v7:   fp32 scale_b vector (lmul=4) loaded once at the start of dequant.
 ///   v12-v15: scratch fp32 sigma = scale_b * scale_a[m] (lmul=4).
 ///   v16-v31: same accumulator group, converted in-place from i32 to fp.
@@ -239,6 +238,116 @@ static inline void tqt_dequant_fp32_kernel_gemm_qai8dx_qsi8cx_4x1vl_rvv(
 }
 
 #if defined(__riscv_zfh) && defined(__riscv_zvfh)
+/// Dequantize, add F32 bias, and clamp in F32 before narrowing once to F16.
+template <size_t MR>
+static inline void tqt_dequant_fp16_kernel_gemm_qai8dx_qsi8cx_4x1vl_rvv(
+    size_t vl, const float scale_a[MR], const float *scale_b, const float *bias,
+    float16_t clamp_min, float16_t clamp_max, bool apply_clamp, float16_t *D, size_t stride_row)
+{
+    static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
+
+    asm volatile(
+        "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"
+        "vle32.v v4, (%[sb])\n\t"
+        :
+        : [vl] "r"(vl), [sb] "r"(scale_b)
+        : "v4", "v5", "v6", "v7", "memory");
+
+    if (bias) {
+        asm volatile("vle32.v v0, (%[bs])\n\t"
+                     :
+                     : [bs] "r"(bias)
+                     : "v0", "v1", "v2", "v3", "memory");
+    } else {
+        asm volatile("vmv.v.i v0, 0\n\t" : : : "v0", "v1", "v2", "v3");
+    }
+
+    if constexpr (MR >= 1) {
+        // Skip min/max only for the explicitly unbounded range.
+        asm volatile(
+            "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"
+            "vfcvt.f.x.v v16, v16\n\t"
+            "vfmul.vf v12, v4, %[sa]\n\t"
+            "vfmul.vv v16, v16, v12\n\t"
+            "vfadd.vv v16, v16, v0\n\t"
+            "beqz %[apply_clamp], 90f\n\t"
+            "vfmax.vf v16, v16, %[cmin]\n\t"
+            "vfmin.vf v16, v16, %[cmax]\n\t"
+            "90:\n\t"
+            "vsetvli zero, %[vl], e16, m2, ta, ma\n\t"
+            "vfncvt.f.f.w v8, v16\n\t"
+            "vse16.v v8, (%[d])\n\t"
+            :
+            : [vl] "r"(vl), [sa] "f"(scale_a[0]), [cmin] "f"(static_cast<float>(clamp_min)),
+              [cmax] "f"(static_cast<float>(clamp_max)), [d] "r"(D + 0 * stride_row),
+              [apply_clamp] "r"(apply_clamp)
+            : "v8", "v9", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "memory");
+    }
+    if constexpr (MR >= 2) {
+        // Skip min/max only for the explicitly unbounded range.
+        asm volatile(
+            "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"
+            "vfcvt.f.x.v v20, v20\n\t"
+            "vfmul.vf v12, v4, %[sa]\n\t"
+            "vfmul.vv v20, v20, v12\n\t"
+            "vfadd.vv v20, v20, v0\n\t"
+            "beqz %[apply_clamp], 90f\n\t"
+            "vfmax.vf v20, v20, %[cmin]\n\t"
+            "vfmin.vf v20, v20, %[cmax]\n\t"
+            "90:\n\t"
+            "vsetvli zero, %[vl], e16, m2, ta, ma\n\t"
+            "vfncvt.f.f.w v8, v20\n\t"
+            "vse16.v v8, (%[d])\n\t"
+            :
+            : [vl] "r"(vl), [sa] "f"(scale_a[1]), [cmin] "f"(static_cast<float>(clamp_min)),
+              [cmax] "f"(static_cast<float>(clamp_max)), [d] "r"(D + 1 * stride_row),
+              [apply_clamp] "r"(apply_clamp)
+            : "v8", "v9", "v12", "v13", "v14", "v15", "v20", "v21", "v22", "v23", "memory");
+    }
+    if constexpr (MR >= 3) {
+        // Skip min/max only for the explicitly unbounded range.
+        asm volatile(
+            "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"
+            "vfcvt.f.x.v v24, v24\n\t"
+            "vfmul.vf v12, v4, %[sa]\n\t"
+            "vfmul.vv v24, v24, v12\n\t"
+            "vfadd.vv v24, v24, v0\n\t"
+            "beqz %[apply_clamp], 90f\n\t"
+            "vfmax.vf v24, v24, %[cmin]\n\t"
+            "vfmin.vf v24, v24, %[cmax]\n\t"
+            "90:\n\t"
+            "vsetvli zero, %[vl], e16, m2, ta, ma\n\t"
+            "vfncvt.f.f.w v8, v24\n\t"
+            "vse16.v v8, (%[d])\n\t"
+            :
+            : [vl] "r"(vl), [sa] "f"(scale_a[2]), [cmin] "f"(static_cast<float>(clamp_min)),
+              [cmax] "f"(static_cast<float>(clamp_max)), [d] "r"(D + 2 * stride_row),
+              [apply_clamp] "r"(apply_clamp)
+            : "v8", "v9", "v12", "v13", "v14", "v15", "v24", "v25", "v26", "v27", "memory");
+    }
+    if constexpr (MR >= 4) {
+        // Skip min/max only for the explicitly unbounded range.
+        asm volatile(
+            "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"
+            "vfcvt.f.x.v v28, v28\n\t"
+            "vfmul.vf v12, v4, %[sa]\n\t"
+            "vfmul.vv v28, v28, v12\n\t"
+            "vfadd.vv v28, v28, v0\n\t"
+            "beqz %[apply_clamp], 90f\n\t"
+            "vfmax.vf v28, v28, %[cmin]\n\t"
+            "vfmin.vf v28, v28, %[cmax]\n\t"
+            "90:\n\t"
+            "vsetvli zero, %[vl], e16, m2, ta, ma\n\t"
+            "vfncvt.f.f.w v8, v28\n\t"
+            "vse16.v v8, (%[d])\n\t"
+            :
+            : [vl] "r"(vl), [sa] "f"(scale_a[3]), [cmin] "f"(static_cast<float>(clamp_min)),
+              [cmax] "f"(static_cast<float>(clamp_max)), [d] "r"(D + 3 * stride_row),
+              [apply_clamp] "r"(apply_clamp)
+            : "v8", "v9", "v12", "v13", "v14", "v15", "v28", "v29", "v30", "v31", "memory");
+    }
+}
+
 /// Dequantize int32 accumulator into fp16 output: dequant in fp32, narrow,
 /// then add fp16 bias and clamp in fp16 domain (consistent with existing f16 kernels).
 template <size_t MR>

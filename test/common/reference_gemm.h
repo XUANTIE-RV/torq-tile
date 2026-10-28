@@ -38,12 +38,16 @@ namespace test
 /// @param bias_mode  BiasMode::kNone, k1xN (bias[1,N]), or kMx1 (bias[M,1])
 /// @param clamp_min  Minimum clamp value (as TD)
 /// @param clamp_max  Maximum clamp value (as TD)
-template <typename TA, typename TD, typename TB = TA>
+template <typename TA, typename TD, typename TB = TA, typename TBias = TD>
 void reference_gemm(size_t m, size_t n, size_t k, const TA *A, size_t lda, const TB *B, size_t ldb,
-                    BLayout b_layout, const TD *C, size_t ldc, TD *D, size_t ldd, const TD *bias,
+                    BLayout b_layout, const TD *C, size_t ldc, TD *D, size_t ldd, const TBias *bias,
                     BiasMode bias_mode, TD clamp_min, TD clamp_max);
 
 // Explicit instantiation declarations
+extern template void reference_gemm<bfloat16_t, float16_t, bfloat16_t, float>(
+    size_t, size_t, size_t, const bfloat16_t *, size_t, const bfloat16_t *, size_t, BLayout,
+    const float16_t *, size_t, float16_t *, size_t, const float *, BiasMode, float16_t, float16_t);
+
 extern template void reference_gemm<float, float>(size_t, size_t, size_t, const float *, size_t,
                                                   const float *, size_t, BLayout, const float *,
                                                   size_t, float *, size_t, const float *, BiasMode,

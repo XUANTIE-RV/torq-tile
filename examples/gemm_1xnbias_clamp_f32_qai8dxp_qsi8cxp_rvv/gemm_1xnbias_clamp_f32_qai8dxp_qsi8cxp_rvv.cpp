@@ -244,7 +244,7 @@ int main()
                 (const uint8_t *)A_packed + ukernel.get_a_packed_offset(m_idx, 0, K, actual_m);
             const uint8_t *b_ptr =
                 (const uint8_t *)B_packed + ukernel.get_b_packed_offset(n_idx, 0, K, actual_n);
-            const uint8_t *bias_ptr = (const uint8_t *)bias_fp32 + ukernel.get_bias_offset(n_idx);
+            const float *bias_ptr = bias_fp32 + (ukernel.get_bias_offset(n_idx)) / sizeof(float);
             uint8_t *d_ptr = (uint8_t *)D_act_fp32 + ukernel.get_d_offset(m_idx, n_idx, N);
 
             ukernel.run_gemm(actual_m, actual_n, K, a_ptr, K, 0, b_ptr, K, 0, nullptr, N, d_ptr, N,

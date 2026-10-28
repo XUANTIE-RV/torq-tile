@@ -14,6 +14,9 @@
 #include "src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f16_bf16_bf16/tqt_gemm_1xnbias_clamp_f16_bf16_bf16_8x1vl_rvv.h"
 #include "src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f16_bf16_bf16t/tqt_gemm_1xnbias_clamp_f16_bf16_bf16t_8x1vl_rvv.h"
 #include "src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f16_bf16p_bf16p/tqt_gemm_1xnbias_clamp_f16_bf16p_bf16p_8x1vl_rvv.h"
+#include "src/gemm/gemm_bf16_bf16/gemm_1xnbiasf32_clamp_f16_bf16_bf16/tqt_gemm_1xnbiasf32_clamp_f16_bf16_bf16_8x1vl_rvv.h"
+#include "src/gemm/gemm_bf16_bf16/gemm_1xnbiasf32_clamp_f16_bf16_bf16t/tqt_gemm_1xnbiasf32_clamp_f16_bf16_bf16t_8x1vl_rvv.h"
+#include "src/gemm/gemm_bf16_bf16/gemm_1xnbiasf32_clamp_f16_bf16p_bf16p/tqt_gemm_1xnbiasf32_clamp_f16_bf16p_bf16p_8x1vl_rvv.h"
 #endif
 #include "src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f32_bf16_bf16/tqt_gemm_1xnbias_clamp_f32_bf16_bf16_8x1vl_rvv.h"
 #include "src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f32_bf16_bf16t/tqt_gemm_1xnbias_clamp_f32_bf16_bf16t_8x1vl_rvv.h"
@@ -98,10 +101,22 @@ static BOnlyPackedGemmFuncs<bfloat16_t> make_b_only_packed_1xnbias_bf16_bf16_bf1
 
 #if TORQ_TILE_HAS_RVV_BF16_TO_F16
 // ============================================================================
-// D=f16, NonPacked, B RowMajor: gemm_1xnbias_clamp_f16_bf16_bf16_8x1vl_rvv
+// D=f16, NonPacked, B RowMajor: gemm_1xnbiasf32_clamp_f16_bf16_bf16_8x1vl_rvv
 // ============================================================================
 
-static NonPackedGemmFuncs<float16_t> make_nonpacked_f16_bf16_bf16_8x1vl_rvv()
+static NonPackedGemmFuncs<float16_t, float> make_nonpacked_f16_bf16_bf16_8x1vl_rvv()
+{
+    return {
+        tqt_get_m_step_gemm_1xnbiasf32_clamp_f16_bf16_bf16_8x1vl_rvv,
+        tqt_get_n_step_gemm_1xnbiasf32_clamp_f16_bf16_bf16_8x1vl_rvv,
+        tqt_get_a_offset_gemm_1xnbiasf32_clamp_f16_bf16_bf16_8x1vl_rvv,
+        tqt_get_b_offset_gemm_1xnbiasf32_clamp_f16_bf16_bf16_8x1vl_rvv,
+        tqt_get_d_offset_gemm_1xnbiasf32_clamp_f16_bf16_bf16_8x1vl_rvv,
+        tqt_run_gemm_1xnbiasf32_clamp_f16_bf16_bf16_8x1vl_rvv,
+    };
+}
+
+static NonPackedGemmFuncs<float16_t, float> make_nonpacked_f16_bf16_bf16_8x1vl_rvv_legacy()
 {
     return {
         tqt_get_m_step_gemm_1xnbias_clamp_f16_bf16_bf16_8x1vl_rvv,
@@ -114,10 +129,22 @@ static NonPackedGemmFuncs<float16_t> make_nonpacked_f16_bf16_bf16_8x1vl_rvv()
 }
 
 // ============================================================================
-// D=f16, NonPacked, B Transposed: gemm_1xnbias_clamp_f16_bf16_bf16t_8x1vl_rvv
+// D=f16, NonPacked, B Transposed: gemm_1xnbiasf32_clamp_f16_bf16_bf16t_8x1vl_rvv
 // ============================================================================
 
-static NonPackedGemmFuncs<float16_t> make_nonpacked_f16_bf16_bf16t_8x1vl_rvv()
+static NonPackedGemmFuncs<float16_t, float> make_nonpacked_f16_bf16_bf16t_8x1vl_rvv()
+{
+    return {
+        tqt_get_m_step_gemm_1xnbiasf32_clamp_f16_bf16_bf16t_8x1vl_rvv,
+        tqt_get_n_step_gemm_1xnbiasf32_clamp_f16_bf16_bf16t_8x1vl_rvv,
+        tqt_get_a_offset_gemm_1xnbiasf32_clamp_f16_bf16_bf16t_8x1vl_rvv,
+        tqt_get_b_offset_gemm_1xnbiasf32_clamp_f16_bf16_bf16t_8x1vl_rvv,
+        tqt_get_d_offset_gemm_1xnbiasf32_clamp_f16_bf16_bf16t_8x1vl_rvv,
+        tqt_run_gemm_1xnbiasf32_clamp_f16_bf16_bf16t_8x1vl_rvv,
+    };
+}
+
+static NonPackedGemmFuncs<float16_t, float> make_nonpacked_f16_bf16_bf16t_8x1vl_rvv_legacy()
 {
     return {
         tqt_get_m_step_gemm_1xnbias_clamp_f16_bf16_bf16t_8x1vl_rvv,
@@ -130,10 +157,26 @@ static NonPackedGemmFuncs<float16_t> make_nonpacked_f16_bf16_bf16t_8x1vl_rvv()
 }
 
 // ============================================================================
-// D=f16, Packed, 1xN bias: gemm_1xnbias_clamp_f16_bf16p_bf16p_8x1vl_rvv
+// D=f16, Packed, 1xN bias: gemm_1xnbiasf32_clamp_f16_bf16p_bf16p_8x1vl_rvv
 // ============================================================================
 
-static PackedGemmFuncs<float16_t> make_packed_1xnbias_f16_bf16p_bf16p_8x1vl_rvv()
+static PackedGemmFuncs<float16_t, float> make_packed_1xnbias_f16_bf16p_bf16p_8x1vl_rvv()
+{
+    return {
+        tqt_get_m_step_gemm_1xnbiasf32_clamp_f16_bf16p_bf16p_8x1vl_rvv,
+        tqt_get_n_step_gemm_1xnbiasf32_clamp_f16_bf16p_bf16p_8x1vl_rvv,
+        tqt_get_a_packed_offset_gemm_1xnbiasf32_clamp_f16_bf16p_bf16p_8x1vl_rvv,
+        tqt_get_b_packed_offset_gemm_1xnbiasf32_clamp_f16_bf16p_bf16p_8x1vl_rvv,
+        tqt_get_d_offset_gemm_1xnbiasf32_clamp_f16_bf16p_bf16p_8x1vl_rvv,
+        tqt_get_a_packed_size_gemm_1xnbiasf32_clamp_f16_bf16p_bf16p_8x1vl_rvv,
+        tqt_get_b_packed_size_gemm_1xnbiasf32_clamp_f16_bf16p_bf16p_8x1vl_rvv,
+        tqt_run_a_pack_gemm_1xnbiasf32_clamp_f16_bf16p_bf16p_8x1vl_rvv,
+        tqt_run_bt_pack_gemm_1xnbiasf32_clamp_f16_bf16p_bf16p_8x1vl_rvv,
+        tqt_run_gemm_1xnbiasf32_clamp_f16_bf16p_bf16p_8x1vl_rvv,
+    };
+}
+
+static PackedGemmFuncs<float16_t, float> make_packed_1xnbias_f16_bf16p_bf16p_8x1vl_rvv_legacy()
 {
     return {
         tqt_get_m_step_gemm_1xnbias_clamp_f16_bf16p_bf16p_8x1vl_rvv,
@@ -263,15 +306,25 @@ void register_gemm_bf16_bf16_rvv_benchmarks()
 
 #if TORQ_TILE_HAS_RVV_BF16_TO_F16
     register_nonpacked_gemm_benchmark<bfloat16_t, float16_t, BLayout::kRowMajor>(
-        "tqt_gemm_1xnbias_clamp_f16_bf16_bf16_8x1vl_rvv", make_nonpacked_f16_bf16_bf16_8x1vl_rvv());
+        "tqt_gemm_1xnbiasf32_clamp_f16_bf16_bf16_8x1vl_rvv",
+        make_nonpacked_f16_bf16_bf16_8x1vl_rvv());
+    register_nonpacked_gemm_benchmark<bfloat16_t, float16_t, BLayout::kRowMajor>(
+        "tqt_gemm_1xnbias_clamp_f16_bf16_bf16_8x1vl_rvv",
+        make_nonpacked_f16_bf16_bf16_8x1vl_rvv_legacy());
 
     register_nonpacked_gemm_benchmark<bfloat16_t, float16_t, BLayout::kTransposed>(
-        "tqt_gemm_1xnbias_clamp_f16_bf16_bf16t_8x1vl_rvv",
+        "tqt_gemm_1xnbiasf32_clamp_f16_bf16_bf16t_8x1vl_rvv",
         make_nonpacked_f16_bf16_bf16t_8x1vl_rvv());
+    register_nonpacked_gemm_benchmark<bfloat16_t, float16_t, BLayout::kTransposed>(
+        "tqt_gemm_1xnbias_clamp_f16_bf16_bf16t_8x1vl_rvv",
+        make_nonpacked_f16_bf16_bf16t_8x1vl_rvv_legacy());
 
     register_packed_gemm_benchmark<bfloat16_t, float16_t>(
-        "tqt_gemm_1xnbias_clamp_f16_bf16p_bf16p_8x1vl_rvv",
+        "tqt_gemm_1xnbiasf32_clamp_f16_bf16p_bf16p_8x1vl_rvv",
         make_packed_1xnbias_f16_bf16p_bf16p_8x1vl_rvv());
+    register_packed_gemm_benchmark<bfloat16_t, float16_t>(
+        "tqt_gemm_1xnbias_clamp_f16_bf16p_bf16p_8x1vl_rvv",
+        make_packed_1xnbias_f16_bf16p_bf16p_8x1vl_rvv_legacy());
 #endif
 
     register_nonpacked_gemm_benchmark<bfloat16_t, float, BLayout::kRowMajor>(

@@ -42,9 +42,9 @@ void reference_dwconv(const T *input, const T *weight, const T *bias, T *output,
     const size_t PH = params->pad[1];
     const size_t PW = params->pad[2];
 
-    // dwconv constraint: groups == IC. PyTorch ordering oc = ic + m*IC -> ic = oc % IC.
+    // Each input channel owns OC / IC consecutive output channels (groups == IC).
     for (size_t oc = 0; oc < OC; ++oc) {
-        const size_t ic = oc % IC;
+        const size_t ic = oc / (OC / IC);
 
         for (size_t od = 0; od < OD; ++od) {
             for (size_t oh = 0; oh < OH; ++oh) {

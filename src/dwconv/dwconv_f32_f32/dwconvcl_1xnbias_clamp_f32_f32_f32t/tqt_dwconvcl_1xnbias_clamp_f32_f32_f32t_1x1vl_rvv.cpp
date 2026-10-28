@@ -62,23 +62,22 @@ void tqt_run_dwconv_dwconvcl_1xnbias_clamp_f32_f32_f32t_1x1vl_rvv(const void *in
     const size_t PW = params->pad[2];
 
     // CL layout: channels are innermost; vectorize along channel dimension.
-    // Loop split: outer m (0..dm-1), inner ic (vectorized) so that oc = ic + m*IC,
-    // and within a single vl chunk all oc values share the same input ic group
-    // (continuous in cl input layout).
+    // Input lanes are contiguous; output channels follow oc = ic * dm + m.
     for (size_t m = 0; m < dm; ++m) {
-        const size_t oc_off = m * IC;
-
         for (size_t od = 0; od < OD; ++od) {
             for (size_t oh = 0; oh < OH; ++oh) {
                 for (size_t ow = 0; ow < OW; ++ow) {
                     size_t ic = 0;
                     while (ic < IC) {
                         const size_t vl = __riscv_vsetvl_e32m1(IC - ic);
-                        const size_t oc = oc_off + ic;
+                        const size_t oc = ic * dm + m;
 
                         vfloat32m1_t acc;
                         if (bias_base != nullptr) {
-                            acc = __riscv_vle32_v_f32m1(bias_base + oc, vl);
+                            acc = (dm == 1
+                                       ? __riscv_vle32_v_f32m1(bias_base + oc, vl)
+                                       : __riscv_vlse32_v_f32m1(
+                                             bias_base + oc, (ptrdiff_t)(dm * sizeof(float)), vl));
                         } else {
                             acc = __riscv_vfmv_v_f_f32m1(0.0f, vl);
                         }
@@ -107,7 +106,11 @@ void tqt_run_dwconv_dwconvcl_1xnbias_clamp_f32_f32_f32t_1x1vl_rvv(const void *in
                                         wt_base + (kd * KH * KW + kh * KW + kw) * OC + oc;
 
                                     vfloat32m1_t v_in = __riscv_vle32_v_f32m1(in_pos, vl);
-                                    vfloat32m1_t v_w = __riscv_vle32_v_f32m1(wt_pos, vl);
+                                    vfloat32m1_t v_w =
+                                        (dm == 1
+                                             ? __riscv_vle32_v_f32m1(wt_pos, vl)
+                                             : __riscv_vlse32_v_f32m1(
+                                                   wt_pos, (ptrdiff_t)(dm * sizeof(float)), vl));
                                     acc = __riscv_vfmacc_vv_f32m1(acc, v_in, v_w, vl);
                                 }
                             }
@@ -121,7 +124,12 @@ void tqt_run_dwconv_dwconvcl_1xnbias_clamp_f32_f32_f32t_1x1vl_rvv(const void *in
                         float *out_pos =
                             out_base + ((size_t)od * OH * OW + (size_t)oh * OW + (size_t)ow) * OC +
                             oc;
-                        __riscv_vse32_v_f32m1(out_pos, acc, vl);
+                        if (dm == 1) {
+                            __riscv_vse32_v_f32m1(out_pos, acc, vl);
+                        } else {
+                            __riscv_vsse32_v_f32m1(out_pos, (ptrdiff_t)(dm * sizeof(float)), acc,
+                                                   vl);
+                        }
 
                         ic += vl;
                     }

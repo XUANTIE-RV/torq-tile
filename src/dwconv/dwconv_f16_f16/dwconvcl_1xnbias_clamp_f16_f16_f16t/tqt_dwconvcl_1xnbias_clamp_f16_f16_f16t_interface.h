@@ -18,7 +18,7 @@ extern "C" {
 //   weight layout: [KD, KH, KW, 1, OC]   (HWIO style)
 //   bias   layout: [OC] or nullptr
 //   output layout: [OD, OH, OW, OC]
-// Constraints: groups == IC, OC % IC == 0, oc = ic + m * IC.
+// Constraints: groups == IC, OC % IC == 0, oc = ic * (OC / IC) + m.
 
 typedef size_t (*tqt_dwconvcl_1xnbias_clamp_f16_f16_f16t_get_output_size_func_t)(
     const tqt_conv_params *params);

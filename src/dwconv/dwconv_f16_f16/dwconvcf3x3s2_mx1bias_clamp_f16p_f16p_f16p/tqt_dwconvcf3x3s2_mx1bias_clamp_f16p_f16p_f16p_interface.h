@@ -18,6 +18,8 @@ extern "C" {
 //   weight layout: cf [OC, 1, KH=3, KW=3] packed -> [OC1, 3, 3, OC0]
 //   bias   layout: [OC]
 //   output layout: NC1HWC0 (caller unpacks via run_unpack_output)
+//   Raw weight/bias/output channels: oc = ic * (OC / IC) + m.
+//   Packed weight/output blocks: oc1 = m * IC1 + ic1, with compact IC tails.
 // Caller invokes run_dwconv per OH chunk of size get_oh_step() (= 2).
 // dilation=1 only. KD=ID=OD=1 asserted.
 

@@ -8,9 +8,14 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <array>
 #include <cfloat>
+#include <cmath>
 #include <cstring>
+#include <limits>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "src/common/tqt_common.h"
@@ -497,6 +502,222 @@ void run_spec_weight_packed_dwconv_test(const SpecWeightPackedDwconvFuncs<T> &fu
                               DefaultThreshold<T>::abs_error, DefaultThreshold<T>::cosine_sim);
     EXPECT_TRUE(vr.passed) << vr.error_message << " (max_abs=" << vr.max_abs_error
                            << ", cos=" << vr.cosine_similarity << ")";
+}
+
+// ============================================================================
+// Shared DWConv execution and multiplier regression checks
+// ============================================================================
+
+template <typename T>
+void run_clamp_dwconv(const NonPackedDwconvFuncs<T> &f, const tqt_conv_params &p, const T *a,
+                      const T *w, const T *bias, T *out, T lo, T hi)
+{
+    f.run_dwconv(a, w, bias, out, &p, lo, hi);
+}
+
+template <typename T, typename Funcs>
+void run_clamp_packed_dwconv(const Funcs &f, const tqt_conv_params &p, const T *a, const T *w,
+                             const T *bias, T *out, T lo, T hi)
+{
+    std::vector<T> ap(f.get_packed_input_size(&p) / sizeof(T) + 16, T(37));
+    std::vector<T> wp(f.get_packed_weight_size(&p) / sizeof(T) + 16, T(37));
+    const size_t bytes = f.get_output_size(&p);
+    std::vector<T> dp(bytes / sizeof(T) + 16, T(37));
+    f.run_pack_input(a, ap.data() + 8, &p);
+    f.run_pack_weight(w, wp.data() + 8, &p);
+    if constexpr (std::is_same_v<Funcs, SpecPackedDwconvFuncs<T>>) {
+        for (size_t h = 0; h < p.output_shape[1]; h += f.get_oh_step())
+            f.run_dwconv(h, std::min(h + f.get_oh_step(), p.output_shape[1]), ap.data() + 8,
+                         wp.data() + 8, bias, dp.data() + 8, &p, lo, hi);
+    } else {
+        f.run_dwconv(ap.data() + 8, wp.data() + 8, bias, dp.data() + 8, &p, lo, hi);
+    }
+    f.run_unpack_output(dp.data() + 8, out, &p);
+    for (size_t i = 0; i < 8; ++i) {
+        EXPECT_EQ(float(dp[i]), 37);
+        EXPECT_EQ(float(dp[8 + bytes / sizeof(T) + i]), 37);
+        EXPECT_EQ(float(ap[i]), 37);
+        EXPECT_EQ(float(ap[ap.size() - 8 + i]), 37);
+        EXPECT_EQ(float(wp[i]), 37);
+        EXPECT_EQ(float(wp[wp.size() - 8 + i]), 37);
+    }
+}
+
+template <typename T>
+void run_clamp_dwconv(const GenericPackedDwconvFuncs<T> &f, const tqt_conv_params &p, const T *a,
+                      const T *w, const T *bias, T *out, T lo, T hi)
+{
+    run_clamp_packed_dwconv(f, p, a, w, bias, out, lo, hi);
+}
+
+template <typename T>
+void run_clamp_dwconv(const SpecPackedDwconvFuncs<T> &f, const tqt_conv_params &p, const T *a,
+                      const T *w, const T *bias, T *out, T lo, T hi)
+{
+    run_clamp_packed_dwconv(f, p, a, w, bias, out, lo, hi);
+}
+
+template <typename T>
+void run_clamp_dwconv(const SpecWeightPackedDwconvFuncs<T> &f, const tqt_conv_params &p, const T *a,
+                      const T *w, const T *bias, T *out, T lo, T hi)
+{
+    std::vector<T> wp(f.get_packed_weight_size(&p) / sizeof(T) + 16, T(37));
+    f.run_pack_weight(w, wp.data() + 8, &p);
+    for (size_t h = 0; h < p.output_shape[1]; h += f.get_oh_step())
+        f.run_dwconv(h, std::min(h + f.get_oh_step(), p.output_shape[1]), a, wp.data() + 8, bias,
+                     out, &p, lo, hi);
+    for (size_t i = 0; i < 8; ++i) {
+        EXPECT_EQ(float(wp[i]), 37);
+        EXPECT_EQ(float(wp[wp.size() - 8 + i]), 37);
+    }
+}
+
+template <typename T, typename Funcs>
+void check_dwconv_multiplier_packing(const Funcs &f, const tqt_conv_params &p, ConvLayout layout,
+                                     const T *weight, size_t channel_step)
+{
+    if constexpr (!std::is_same_v<Funcs, NonPackedDwconvFuncs<T>>) {
+        const size_t ic_count = p.input_channel, oc_count = p.output_channel;
+        const size_t multiplier = oc_count / ic_count;
+        const size_t taps = p.kernel_shape[0] * p.kernel_shape[1] * p.kernel_shape[2];
+        const size_t spatial = p.output_shape[0] * p.output_shape[1] * p.output_shape[2];
+        std::vector<T> packed(f.get_packed_weight_size(&p) / sizeof(T) + 16, T(37));
+        f.run_pack_weight(weight, packed.data() + 8, &p);
+        for (size_t i = 0; i < 8; ++i) {
+            ASSERT_EQ(float(packed[i]), 37);
+            ASSERT_EQ(float(packed[packed.size() - 8 + i]), 37);
+        }
+        std::vector<T> packed_out(oc_count * spatial), unpacked(oc_count * spatial + 16, T(37));
+        for (size_t m = 0; m < multiplier; ++m) {
+            for (size_t c = 0; c < ic_count; c += channel_step) {
+                const size_t lanes = std::min(channel_step, ic_count - c);
+                for (size_t lane = 0; lane < lanes; ++lane) {
+                    const size_t oc = (c + lane) * multiplier + m;
+                    for (size_t k = 0; k < taps; ++k) {
+                        const size_t raw =
+                            layout == ConvLayout::kChannelFirst ? oc * taps + k : k * oc_count + oc;
+                        const size_t index = (m * ic_count + c) * taps + k * lanes + lane;
+                        ASSERT_EQ(float(packed[index + 8]), float(weight[raw]));
+                    }
+                    for (size_t pos = 0; pos < spatial; ++pos) {
+                        const size_t index = (m * ic_count + c) * spatial + pos * lanes + lane;
+                        packed_out[index] = T(1 + oc % 31 + pos % 7);
+                    }
+                }
+            }
+        }
+        if constexpr (!std::is_same_v<Funcs, SpecWeightPackedDwconvFuncs<T>>) {
+            f.run_unpack_output(packed_out.data(), unpacked.data() + 8, &p);
+            for (size_t oc = 0; oc < oc_count; ++oc) {
+                for (size_t pos = 0; pos < spatial; ++pos) {
+                    const size_t index = layout == ConvLayout::kChannelFirst ? oc * spatial + pos
+                                                                             : pos * oc_count + oc;
+                    ASSERT_EQ(float(unpacked[index + 8]), float(1 + oc % 31 + pos % 7));
+                }
+            }
+            for (size_t i = 0; i < 8; ++i) {
+                ASSERT_EQ(float(unpacked[i]), 37);
+                ASSERT_EQ(float(unpacked[unpacked.size() - 8 + i]), 37);
+            }
+        }
+    }
+}
+
+// One nonzero tap per output makes the expected result an exact integer expression.
+// Enumerate each input channel's output filters independently of reference_dwconv.
+template <typename T, typename Funcs>
+void check_dwconv_multiplier(const Funcs &f, ConvLayout layout, size_t kh, size_t kw, size_t stride,
+                             size_t channel_step, const std::array<size_t, 5> &widths)
+{
+    const size_t channels[] = {1,
+                               2,
+                               std::max(size_t(1), channel_step - 1),
+                               channel_step,
+                               channel_step + 1,
+                               2 * channel_step + 1};
+    for (size_t shape = 0; shape < 6; ++shape) {
+        for (size_t multiplier : {size_t(1), size_t(2), size_t(3)}) {
+            for (size_t pad : {size_t(0), size_t(1)}) {
+                const size_t ic_count = channels[shape], oc_count = ic_count * multiplier;
+                const size_t ph = pad * (kh / 2), pw = pad * ((kw - 1) / 2);
+                const size_t ih = kh == 1 ? 1 : 4 * stride + kh - 2 * ph;
+                const size_t iw = (widths[shape % widths.size()] - 1) * stride + kw - 2 * pw;
+                auto tp = ConvTestParams(ic_count, oc_count, ic_count, ih, iw, kh, kw);
+                tp.set_pad(ph, pw).set_stride(stride, stride);
+                const auto p = tp.to_conv_params();
+                const size_t oh = p.output_shape[1], ow = p.output_shape[2];
+                std::vector<T> input(dwconv_input_elements(p));
+                std::vector<T> weight(dwconv_weight_elements(p), T(0));
+                std::vector<T> bias(oc_count), output(dwconv_output_elements(p) + 16, T(37));
+                for (size_t ic = 0; ic < ic_count; ++ic) {
+                    for (size_t pos = 0; pos < ih * iw; ++pos) {
+                        const size_t index = layout == ConvLayout::kChannelFirst
+                                                 ? ic * ih * iw + pos
+                                                 : pos * ic_count + ic;
+                        input[index] = T(1 + ic % 7 + pos % 3);
+                    }
+                    for (size_t m = 0; m < multiplier; ++m) {
+                        const size_t oc = ic * multiplier + m;
+                        const size_t tap = oc % (kh * kw);
+                        const size_t index = layout == ConvLayout::kChannelFirst
+                                                 ? oc * kh * kw + tap
+                                                 : tap * oc_count + oc;
+                        weight[index] = T(1 + oc % 3);
+                        bias[oc] = T(int(oc % 5) - 2);
+                    }
+                }
+                check_dwconv_multiplier_packing(f, p, layout, weight.data(), channel_step);
+                for (bool has_bias : {false, true}) {
+                    for (bool clamp : {false, true}) {
+                        SCOPED_TRACE(testing::Message()
+                                     << "IC=" << ic_count << " multiplier=" << multiplier << " pad="
+                                     << pad << " bias=" << has_bias << " clamp=" << clamp);
+                        std::fill(output.begin(), output.end(), T(37));
+                        run_clamp_dwconv(f, p, input.data(), weight.data(),
+                                         has_bias ? bias.data() : nullptr, output.data() + 8,
+                                         T(clamp ? -3 : -INFINITY), T(clamp ? 13 : INFINITY));
+                        for (size_t ic = 0; ic < ic_count; ++ic) {
+                            for (size_t m = 0; m < multiplier; ++m) {
+                                const size_t oc = ic * multiplier + m;
+                                const size_t tap = oc % (kh * kw);
+                                for (size_t y = 0; y < oh; ++y) {
+                                    for (size_t x = 0; x < ow; ++x) {
+                                        const long iy = long(y * stride + tap / kw) - long(ph);
+                                        const long ix = long(x * stride + tap % kw) - long(pw);
+                                        int expected = has_bias ? int(oc % 5) - 2 : 0;
+                                        if (iy >= 0 && iy < long(ih) && ix >= 0 && ix < long(iw)) {
+                                            expected += int(1 + ic % 7 + (iy * iw + ix) % 3) *
+                                                        int(1 + oc % 3);
+                                        }
+                                        if (clamp)
+                                            expected = std::min(std::max(expected, -3), 13);
+                                        const size_t index = layout == ConvLayout::kChannelFirst
+                                                                 ? (oc * oh + y) * ow + x
+                                                                 : (y * ow + x) * oc_count + oc;
+                                        ASSERT_EQ(float(output[index + 8]), float(expected))
+                                            << "oc=" << oc << " y=" << y << " x=" << x;
+                                    }
+                                }
+                            }
+                        }
+                        for (size_t i = 0; i < 8; ++i) {
+                            ASSERT_EQ(float(output[i]), 37);
+                            ASSERT_EQ(float(output[output.size() - 8 + i]), 37);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+template <typename T, typename Funcs>
+void check_dwconv_multiplier(const Funcs &f, ConvLayout layout, size_t kh, size_t kw, size_t stride,
+                             size_t channel_step, size_t width_step)
+{
+    check_dwconv_multiplier<T>(
+        f, layout, kh, kw, stride, channel_step,
+        std::array<size_t, 5>{1, 2, width_step, width_step + 1, 2 * width_step + 3});
 }
 
 }  // namespace test

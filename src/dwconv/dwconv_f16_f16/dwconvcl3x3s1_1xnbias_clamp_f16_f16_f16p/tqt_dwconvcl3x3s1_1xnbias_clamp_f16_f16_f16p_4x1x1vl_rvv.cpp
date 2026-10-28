@@ -107,6 +107,7 @@ void tqt_run_dwconv_dwconvcl3x3s1_1xnbias_clamp_f16_f16_f16p_4x1x1vl_rvv(
 
     const size_t IC = params->input_channel;
     const size_t OC = params->output_channel;
+    const size_t dm = OC / IC;
     const size_t IH = params->input_shape[1];
     const size_t IW = params->input_shape[2];
     const size_t OW = params->output_shape[2];
@@ -134,17 +135,21 @@ void tqt_run_dwconv_dwconvcl3x3s1_1xnbias_clamp_f16_f16_f16p_4x1x1vl_rvv(
         const size_t vl = __riscv_vsetvl_e16m1(requested_vl);
 
         const size_t ic_offset = ic1 * C0;
-        const size_t oc_offset = m_idx * IC + ic1 * C0;
+        const size_t packed_offset = m_idx * IC + ic_offset;
+        const size_t oc_offset = ic_offset * dm + m_idx;
 
         const float16_t *in_channel_base =
             input_base + ic_offset;  // NHWC (ih=0, iw=0, ic=ic_offset)
-        const float16_t *wt_block = weight_base + oc_offset * kernel_size;
+        const float16_t *wt_block = weight_base + packed_offset * kernel_size;
         float16_t *out_channel_base = output_base + oc_offset;  // NHWC (oh=0, ow=0, oc=oc_offset)
         const float16_t *bias_block = (bias_base != nullptr) ? (bias_base + oc_offset) : nullptr;
 
         // Preload bias and 9 weight vectors held across all (oh, ow) iterations.
-        vfloat16m1_t v_bias = bias_block ? __riscv_vle16_v_f16m1(bias_block, vl)
-                                         : __riscv_vfmv_v_f_f16m1((float16_t)0.0f, vl);
+        vfloat16m1_t v_bias =
+            bias_block ? (dm == 1 ? __riscv_vle16_v_f16m1(bias_block, vl)
+                                  : __riscv_vlse16_v_f16m1(bias_block,
+                                                           (ptrdiff_t)(dm * sizeof(float16_t)), vl))
+                       : __riscv_vfmv_v_f_f16m1((float16_t)0.0f, vl);
         vfloat16m1_t w00 = __riscv_vle16_v_f16m1(wt_block + 0 * vl, vl);
         vfloat16m1_t w01 = __riscv_vle16_v_f16m1(wt_block + 1 * vl, vl);
         vfloat16m1_t w02 = __riscv_vle16_v_f16m1(wt_block + 2 * vl, vl);
@@ -292,10 +297,30 @@ void tqt_run_dwconv_dwconvcl3x3s1_1xnbias_clamp_f16_f16_f16p_4x1x1vl_rvv(
                     acc3 = __riscv_vfmin_vf_f16m1(acc3, clamp_max, vl);
                 }
 
-                __riscv_vse16_v_f16m1(out_channel_base + ((oh + 0) * OW + ow) * OC, acc0, vl);
-                __riscv_vse16_v_f16m1(out_channel_base + ((oh + 1) * OW + ow) * OC, acc1, vl);
-                __riscv_vse16_v_f16m1(out_channel_base + ((oh + 2) * OW + ow) * OC, acc2, vl);
-                __riscv_vse16_v_f16m1(out_channel_base + ((oh + 3) * OW + ow) * OC, acc3, vl);
+                if (dm == 1) {
+                    __riscv_vse16_v_f16m1(out_channel_base + ((oh + 0) * OW + ow) * OC, acc0, vl);
+                } else {
+                    __riscv_vsse16_v_f16m1(out_channel_base + ((oh + 0) * OW + ow) * OC,
+                                           (ptrdiff_t)(dm * sizeof(float16_t)), acc0, vl);
+                }
+                if (dm == 1) {
+                    __riscv_vse16_v_f16m1(out_channel_base + ((oh + 1) * OW + ow) * OC, acc1, vl);
+                } else {
+                    __riscv_vsse16_v_f16m1(out_channel_base + ((oh + 1) * OW + ow) * OC,
+                                           (ptrdiff_t)(dm * sizeof(float16_t)), acc1, vl);
+                }
+                if (dm == 1) {
+                    __riscv_vse16_v_f16m1(out_channel_base + ((oh + 2) * OW + ow) * OC, acc2, vl);
+                } else {
+                    __riscv_vsse16_v_f16m1(out_channel_base + ((oh + 2) * OW + ow) * OC,
+                                           (ptrdiff_t)(dm * sizeof(float16_t)), acc2, vl);
+                }
+                if (dm == 1) {
+                    __riscv_vse16_v_f16m1(out_channel_base + ((oh + 3) * OW + ow) * OC, acc3, vl);
+                } else {
+                    __riscv_vsse16_v_f16m1(out_channel_base + ((oh + 3) * OW + ow) * OC,
+                                           (ptrdiff_t)(dm * sizeof(float16_t)), acc3, vl);
+                }
             }
         }
 
@@ -340,7 +365,12 @@ void tqt_run_dwconv_dwconvcl3x3s1_1xnbias_clamp_f16_f16_f16p_4x1x1vl_rvv(
                     acc = __riscv_vfmax_vf_f16m1(acc, clamp_min, vl);
                     acc = __riscv_vfmin_vf_f16m1(acc, clamp_max, vl);
                 }
-                __riscv_vse16_v_f16m1(out_channel_base + (oh * OW + ow) * OC, acc, vl);
+                if (dm == 1) {
+                    __riscv_vse16_v_f16m1(out_channel_base + (oh * OW + ow) * OC, acc, vl);
+                } else {
+                    __riscv_vsse16_v_f16m1(out_channel_base + (oh * OW + ow) * OC,
+                                           (ptrdiff_t)(dm * sizeof(float16_t)), acc, vl);
+                }
             }
         }
     }

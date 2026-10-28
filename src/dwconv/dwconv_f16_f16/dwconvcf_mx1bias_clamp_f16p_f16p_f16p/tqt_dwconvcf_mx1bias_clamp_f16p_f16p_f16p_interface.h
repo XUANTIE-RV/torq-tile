@@ -18,6 +18,8 @@ extern "C" {
 //   weight layout: cf [OC, 1, KD, KH, KW] -> pack -> [OC1, KD, KH, KW, OC0]
 //   bias   layout: [OC] (NEVER packed)
 //   output layout: NC1DHWC0 -> unpack -> NCDHW
+//   Raw weight/bias/output channels: oc = ic * (OC / IC) + m.
+//   Packed weight/output blocks: oc1 = m * IC1 + ic1, with compact IC tails.
 //
 // All packed buffers are SINGLE-BATCH; caller loops batch.
 // Tail channel block: vl = IC - (IC1-1)*C0; never zero-padded.

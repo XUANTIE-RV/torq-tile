@@ -20,6 +20,7 @@
 #include "src/dwconv/dwconv_f16_f16/dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p/tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_2x1x1vl_rvv.h"
 #include "src/dwconv/dwconv_f16_f16/dwconvcl5x5s1_1xnbias_clamp_f16p_f16p_f16p/tqt_dwconvcl5x5s1_1xnbias_clamp_f16p_f16p_f16p_4x1x1vl_rvv.h"
 #include "test/common/conv_clamp_test_utils.h"
+#include "test/common/dwconv_test_runner.h"
 
 using namespace torq_tile::test;
 
@@ -392,10 +393,26 @@ TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcf_generic, ClampSpecialValues)
         std::array<size_t, 5>{1, std::max(size_t(1), vl - 1), vl, vl + 1, 2 * vl + 1});
 }
 
+TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcf_generic, MultiplierOrdering)
+{
+    const size_t vl = __riscv_vsetvlmax_e16m1();
+    RecordProperty("vlmax", static_cast<int>(vl));
+    // Raw CF vectorizes output width, so exercise its runtime vector boundaries.
+    check_dwconv_multiplier<float16_t>(
+        make_funcs_dwconvcf_generic(), ConvLayout::kChannelFirst, 3, 3, 1, vl,
+        std::array<size_t, 5>{1, std::max(size_t(1), vl - 1), vl, vl + 1, 2 * vl + 1});
+}
+
 TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcl_generic, ClampSpecialValues)
 {
     check_dwconv_clamp<float16_t>(make_funcs_dwconvcl_generic(), ConvLayout::kChannelLast, 3, 3, 1,
                                   __riscv_vsetvlmax_e16m1(), 4);
+}
+
+TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcl_generic, MultiplierOrdering)
+{
+    check_dwconv_multiplier<float16_t>(make_funcs_dwconvcl_generic(), ConvLayout::kChannelLast, 3,
+                                       3, 1, __riscv_vsetvlmax_e16m1(), 4);
 }
 
 TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcf_generic_packed, ClampSpecialValues)
@@ -404,10 +421,24 @@ TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcf_generic_packed, ClampSpecialVal
                                   3, 3, 1, __riscv_vsetvlmax_e16m1(), 4);
 }
 
+TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcf_generic_packed, MultiplierOrdering)
+{
+    check_dwconv_multiplier<float16_t>(make_funcs_dwconvcf_generic_packed(),
+                                       ConvLayout::kChannelFirst, 3, 3, 1,
+                                       __riscv_vsetvlmax_e16m1(), 4);
+}
+
 TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcl_generic_packed, ClampSpecialValues)
 {
     check_dwconv_clamp<float16_t>(make_funcs_dwconvcl_generic_packed(), ConvLayout::kChannelLast, 3,
                                   3, 1, __riscv_vsetvlmax_e16m1(), 4);
+}
+
+TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcl_generic_packed, MultiplierOrdering)
+{
+    check_dwconv_multiplier<float16_t>(make_funcs_dwconvcl_generic_packed(),
+                                       ConvLayout::kChannelLast, 3, 3, 1, __riscv_vsetvlmax_e16m1(),
+                                       4);
 }
 
 TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcf3x3s1, ClampSpecialValues)
@@ -416,10 +447,22 @@ TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcf3x3s1, ClampSpecialValues)
                                   __riscv_vsetvlmax_e16m1(), 4);
 }
 
+TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcf3x3s1, MultiplierOrdering)
+{
+    check_dwconv_multiplier<float16_t>(make_funcs_dwconvcf3x3s1(), ConvLayout::kChannelFirst, 3, 3,
+                                       1, __riscv_vsetvlmax_e16m1(), 4);
+}
+
 TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcf3x3s2, ClampSpecialValues)
 {
     check_dwconv_clamp<float16_t>(make_funcs_dwconvcf3x3s2(), ConvLayout::kChannelFirst, 3, 3, 2,
                                   __riscv_vsetvlmax_e16m1(), 4);
+}
+
+TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcf3x3s2, MultiplierOrdering)
+{
+    check_dwconv_multiplier<float16_t>(make_funcs_dwconvcf3x3s2(), ConvLayout::kChannelFirst, 3, 3,
+                                       2, __riscv_vsetvlmax_e16m1(), 4);
 }
 
 TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcf5x5s1, ClampSpecialValues)
@@ -428,10 +471,22 @@ TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcf5x5s1, ClampSpecialValues)
                                   __riscv_vsetvlmax_e16m1(), 4);
 }
 
+TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcf5x5s1, MultiplierOrdering)
+{
+    check_dwconv_multiplier<float16_t>(make_funcs_dwconvcf5x5s1(), ConvLayout::kChannelFirst, 5, 5,
+                                       1, __riscv_vsetvlmax_e16m1(), 4);
+}
+
 TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcl3x3s1, ClampSpecialValues)
 {
     check_dwconv_clamp<float16_t>(make_funcs_dwconvcl3x3s1(), ConvLayout::kChannelLast, 3, 3, 1,
                                   __riscv_vsetvlmax_e16m1(), 4);
+}
+
+TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcl3x3s1, MultiplierOrdering)
+{
+    check_dwconv_multiplier<float16_t>(make_funcs_dwconvcl3x3s1(), ConvLayout::kChannelLast, 3, 3,
+                                       1, __riscv_vsetvlmax_e16m1(), 4);
 }
 
 TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcl3x3s2, ClampSpecialValues)
@@ -440,14 +495,33 @@ TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcl3x3s2, ClampSpecialValues)
                                   __riscv_vsetvlmax_e16m1(), 4);
 }
 
+TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcl3x3s2, MultiplierOrdering)
+{
+    check_dwconv_multiplier<float16_t>(make_funcs_dwconvcl3x3s2(), ConvLayout::kChannelLast, 3, 3,
+                                       2, __riscv_vsetvlmax_e16m1(), 4);
+}
+
 TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcl5x5s1, ClampSpecialValues)
 {
     check_dwconv_clamp<float16_t>(make_funcs_dwconvcl5x5s1(), ConvLayout::kChannelLast, 5, 5, 1,
                                   __riscv_vsetvlmax_e16m1(), 4);
 }
 
+TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcl5x5s1, MultiplierOrdering)
+{
+    check_dwconv_multiplier<float16_t>(make_funcs_dwconvcl5x5s1(), ConvLayout::kChannelLast, 5, 5,
+                                       1, __riscv_vsetvlmax_e16m1(), 4);
+}
+
 TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcl3x3s1_f16_f16_f16p, ClampSpecialValues)
 {
     check_dwconv_clamp<float16_t>(make_funcs_dwconvcl3x3s1_f16_f16_f16p(), ConvLayout::kChannelLast,
                                   3, 3, 1, __riscv_vsetvlmax_e16m1(), 4);
+}
+
+TEST(test_dwconv_f16_f16_rvv_make_funcs_dwconvcl3x3s1_f16_f16_f16p, MultiplierOrdering)
+{
+    check_dwconv_multiplier<float16_t>(make_funcs_dwconvcl3x3s1_f16_f16_f16p(),
+                                       ConvLayout::kChannelLast, 3, 3, 1, __riscv_vsetvlmax_e16m1(),
+                                       4);
 }

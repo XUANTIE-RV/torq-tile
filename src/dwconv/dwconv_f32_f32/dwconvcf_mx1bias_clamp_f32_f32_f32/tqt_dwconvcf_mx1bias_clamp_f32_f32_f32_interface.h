@@ -22,7 +22,7 @@ extern "C" {
 // Constraints (asserted at runtime):
 //   params->groups == params->input_channel  (dwconv requirement)
 //   params->output_channel % params->input_channel == 0
-//   PyTorch OC ordering: oc = ic + m * IC,  ic = oc % IC
+//   PyTorch OC ordering: oc = ic * (OC / IC) + m,  ic = oc / (OC / IC)
 
 /// Returns size in bytes of the output buffer (single batch).
 typedef size_t (*tqt_dwconvcf_mx1bias_clamp_f32_f32_f32_get_output_size_func_t)(

@@ -19,8 +19,9 @@
 //
 // Packed layout: [C1, D, H, W, C0]
 //   C0 = vlmax for the dtype/LMUL=1 (e.g., fp32 + VLEN=128 -> C0=4)
-//   C1 = ceil(C / C0)
-//   Tail block (c1 = C1-1) holds tail_vl = C - (C1-1) * C0 elements (no zero-padding).
+//   Input: C1 = IC1 = ceil(IC / C0). Weight/output: C1 = (OC / IC) * IC1.
+//   Each multiplier has IC1 blocks; its last block holds IC - (IC1-1) * C0 lanes.
+//   No zero-padding. Raw output channels follow oc = ic * (OC / IC) + m.
 //
 // All functions process ONE batch. Caller loops over batch dimension.
 // ============================================================================
@@ -108,14 +109,16 @@ static inline void tqt_dwconv_pack_input_cl_f32_rvv(const float *input, float *p
 // pack_weight_cf : [OC, 1, KD, KH, KW] -> [OC1, KD, KH, KW, OC0]
 // ----------------------------------------------------------------------------
 //   PyTorch dwconv weight: 2nd dim (IC_per_group) is always 1, treated as [OC, KD*KH*KW].
-//   OC ordering: oc = ic + m * IC (PyTorch convention). dm encoded via OC1 = dm * IC1.
-//   For dm > 1 with tail_vl < C0: each dm cycle has IC1 blocks (IC1-1 full + 1 tail);
-//   block oc1 starts at oc_base = (oc1/IC1)*IC + (oc1%IC1)*C0, i.e. NOT oc1*C0.
+//   Standard OC ordering: oc = ic * dm + m, where dm = OC / IC.
+//   Packed blocks remain multiplier-major: oc1 = m * IC1 + ic1.
+//   Each multiplier has IC1 blocks (IC1-1 full + one compact tail).
+//   Packed block offsets use m * IC + ic1 * C0, not the standard OC index.
 static inline void tqt_dwconv_pack_weight_cf_f32_rvv(const float *weight, float *packed,
                                                      const tqt_conv_params *params)
 {
     const size_t IC = params->input_channel;
     const size_t OC = params->output_channel;
+    const size_t dm = OC / IC;
     const size_t kernel_size =
         params->kernel_shape[0] * params->kernel_shape[1] * params->kernel_shape[2];
     const size_t C0 = __riscv_vsetvlmax_e32m1();
@@ -128,14 +131,15 @@ static inline void tqt_dwconv_pack_weight_cf_f32_rvv(const float *weight, float 
         const size_t m_idx = oc1 / IC1;
         const size_t requested = (ic1 == IC1 - 1) ? tail_vl : C0;
         const size_t vl = __riscv_vsetvl_e32m1(requested);
-        const size_t oc_base = m_idx * IC + ic1 * C0;
+        const size_t packed_offset = m_idx * IC + ic1 * C0;
+        const size_t oc_base = ic1 * C0 * dm + m_idx;
 
         const float *src_base = weight + oc_base * kernel_size;
-        float *dst_base = packed + oc_base * kernel_size;
+        float *dst_base = packed + packed_offset * kernel_size;
 
         for (size_t k = 0; k < kernel_size; ++k) {
-            vfloat32m1_t v =
-                __riscv_vlse32_v_f32m1(src_base + k, (ptrdiff_t)(kernel_size * sizeof(float)), vl);
+            vfloat32m1_t v = __riscv_vlse32_v_f32m1(
+                src_base + k, (ptrdiff_t)(dm * kernel_size * sizeof(float)), vl);
             __riscv_vse32_v_f32m1(dst_base + k * vl, v, vl);
         }
     }
@@ -150,6 +154,7 @@ static inline void tqt_dwconv_pack_weight_cl_f32_rvv(const float *weight, float 
 {
     const size_t IC = params->input_channel;
     const size_t OC = params->output_channel;
+    const size_t dm = OC / IC;
     const size_t kernel_size =
         params->kernel_shape[0] * params->kernel_shape[1] * params->kernel_shape[2];
     const size_t C0 = __riscv_vsetvlmax_e32m1();
@@ -162,13 +167,16 @@ static inline void tqt_dwconv_pack_weight_cl_f32_rvv(const float *weight, float 
         const size_t m_idx = oc1 / IC1;
         const size_t requested = (ic1 == IC1 - 1) ? tail_vl : C0;
         const size_t vl = __riscv_vsetvl_e32m1(requested);
-        const size_t oc_base = m_idx * IC + ic1 * C0;
+        const size_t packed_offset = m_idx * IC + ic1 * C0;
+        const size_t oc_base = ic1 * C0 * dm + m_idx;
 
-        float *dst_base = packed + oc_base * kernel_size;
+        float *dst_base = packed + packed_offset * kernel_size;
 
         for (size_t k = 0; k < kernel_size; ++k) {
             const float *src = weight + k * OC + oc_base;
-            vfloat32m1_t v = __riscv_vle32_v_f32m1(src, vl);
+            vfloat32m1_t v =
+                (dm == 1 ? __riscv_vle32_v_f32m1(src, vl)
+                         : __riscv_vlse32_v_f32m1(src, (ptrdiff_t)(dm * sizeof(float)), vl));
             __riscv_vse32_v_f32m1(dst_base + k * vl, v, vl);
         }
     }
@@ -182,6 +190,7 @@ static inline void tqt_dwconv_unpack_output_cf_f32_rvv(const float *packed, floa
 {
     const size_t IC = params->input_channel;
     const size_t OC = params->output_channel;
+    const size_t dm = OC / IC;
     const size_t spatial =
         params->output_shape[0] * params->output_shape[1] * params->output_shape[2];
     const size_t C0 = __riscv_vsetvlmax_e32m1();
@@ -194,14 +203,16 @@ static inline void tqt_dwconv_unpack_output_cf_f32_rvv(const float *packed, floa
         const size_t m_idx = oc1 / IC1;
         const size_t requested = (ic1 == IC1 - 1) ? tail_vl : C0;
         const size_t vl = __riscv_vsetvl_e32m1(requested);
-        const size_t oc_base = m_idx * IC + ic1 * C0;
+        const size_t packed_offset = m_idx * IC + ic1 * C0;
+        const size_t oc_base = ic1 * C0 * dm + m_idx;
 
-        const float *src_base = packed + oc_base * spatial;
+        const float *src_base = packed + packed_offset * spatial;
         float *dst_base = output + oc_base * spatial;
 
         for (size_t pos = 0; pos < spatial; ++pos) {
             vfloat32m1_t v = __riscv_vle32_v_f32m1(src_base + pos * vl, vl);
-            __riscv_vsse32_v_f32m1(dst_base + pos, (ptrdiff_t)(spatial * sizeof(float)), v, vl);
+            __riscv_vsse32_v_f32m1(dst_base + pos, (ptrdiff_t)(dm * spatial * sizeof(float)), v,
+                                   vl);
         }
     }
 }
@@ -214,6 +225,7 @@ static inline void tqt_dwconv_unpack_output_cl_f32_rvv(const float *packed, floa
 {
     const size_t IC = params->input_channel;
     const size_t OC = params->output_channel;
+    const size_t dm = OC / IC;
     const size_t spatial =
         params->output_shape[0] * params->output_shape[1] * params->output_shape[2];
     const size_t C0 = __riscv_vsetvlmax_e32m1();
@@ -226,14 +238,19 @@ static inline void tqt_dwconv_unpack_output_cl_f32_rvv(const float *packed, floa
         const size_t m_idx = oc1 / IC1;
         const size_t requested = (ic1 == IC1 - 1) ? tail_vl : C0;
         const size_t vl = __riscv_vsetvl_e32m1(requested);
-        const size_t oc_base = m_idx * IC + ic1 * C0;
+        const size_t packed_offset = m_idx * IC + ic1 * C0;
+        const size_t oc_base = ic1 * C0 * dm + m_idx;
 
-        const float *src_base = packed + oc_base * spatial;
+        const float *src_base = packed + packed_offset * spatial;
 
         for (size_t pos = 0; pos < spatial; ++pos) {
             float *dst = output + pos * OC + oc_base;
             vfloat32m1_t v = __riscv_vle32_v_f32m1(src_base + pos * vl, vl);
-            __riscv_vse32_v_f32m1(dst, v, vl);
+            if (dm == 1) {
+                __riscv_vse32_v_f32m1(dst, v, vl);
+            } else {
+                __riscv_vsse32_v_f32m1(dst, (ptrdiff_t)(dm * sizeof(float)), v, vl);
+            }
         }
     }
 }
@@ -308,6 +325,7 @@ static inline void tqt_dwconv_pack_weight_cf_f16_rvv(const float16_t *weight, fl
 {
     const size_t IC = params->input_channel;
     const size_t OC = params->output_channel;
+    const size_t dm = OC / IC;
     const size_t kernel_size =
         params->kernel_shape[0] * params->kernel_shape[1] * params->kernel_shape[2];
     const size_t C0 = __riscv_vsetvlmax_e16m1();
@@ -320,14 +338,15 @@ static inline void tqt_dwconv_pack_weight_cf_f16_rvv(const float16_t *weight, fl
         const size_t m_idx = oc1 / IC1;
         const size_t requested = (ic1 == IC1 - 1) ? tail_vl : C0;
         const size_t vl = __riscv_vsetvl_e16m1(requested);
-        const size_t oc_base = m_idx * IC + ic1 * C0;
+        const size_t packed_offset = m_idx * IC + ic1 * C0;
+        const size_t oc_base = ic1 * C0 * dm + m_idx;
 
         const float16_t *src_base = weight + oc_base * kernel_size;
-        float16_t *dst_base = packed + oc_base * kernel_size;
+        float16_t *dst_base = packed + packed_offset * kernel_size;
 
         for (size_t k = 0; k < kernel_size; ++k) {
             vfloat16m1_t v = __riscv_vlse16_v_f16m1(
-                src_base + k, (ptrdiff_t)(kernel_size * sizeof(float16_t)), vl);
+                src_base + k, (ptrdiff_t)(dm * kernel_size * sizeof(float16_t)), vl);
             __riscv_vse16_v_f16m1(dst_base + k * vl, v, vl);
         }
     }
@@ -338,6 +357,7 @@ static inline void tqt_dwconv_pack_weight_cl_f16_rvv(const float16_t *weight, fl
 {
     const size_t IC = params->input_channel;
     const size_t OC = params->output_channel;
+    const size_t dm = OC / IC;
     const size_t kernel_size =
         params->kernel_shape[0] * params->kernel_shape[1] * params->kernel_shape[2];
     const size_t C0 = __riscv_vsetvlmax_e16m1();
@@ -350,13 +370,16 @@ static inline void tqt_dwconv_pack_weight_cl_f16_rvv(const float16_t *weight, fl
         const size_t m_idx = oc1 / IC1;
         const size_t requested = (ic1 == IC1 - 1) ? tail_vl : C0;
         const size_t vl = __riscv_vsetvl_e16m1(requested);
-        const size_t oc_base = m_idx * IC + ic1 * C0;
+        const size_t packed_offset = m_idx * IC + ic1 * C0;
+        const size_t oc_base = ic1 * C0 * dm + m_idx;
 
-        float16_t *dst_base = packed + oc_base * kernel_size;
+        float16_t *dst_base = packed + packed_offset * kernel_size;
 
         for (size_t k = 0; k < kernel_size; ++k) {
             const float16_t *src = weight + k * OC + oc_base;
-            vfloat16m1_t v = __riscv_vle16_v_f16m1(src, vl);
+            vfloat16m1_t v =
+                (dm == 1 ? __riscv_vle16_v_f16m1(src, vl)
+                         : __riscv_vlse16_v_f16m1(src, (ptrdiff_t)(dm * sizeof(float16_t)), vl));
             __riscv_vse16_v_f16m1(dst_base + k * vl, v, vl);
         }
     }
@@ -367,6 +390,7 @@ static inline void tqt_dwconv_unpack_output_cf_f16_rvv(const float16_t *packed, 
 {
     const size_t IC = params->input_channel;
     const size_t OC = params->output_channel;
+    const size_t dm = OC / IC;
     const size_t spatial =
         params->output_shape[0] * params->output_shape[1] * params->output_shape[2];
     const size_t C0 = __riscv_vsetvlmax_e16m1();
@@ -379,14 +403,16 @@ static inline void tqt_dwconv_unpack_output_cf_f16_rvv(const float16_t *packed, 
         const size_t m_idx = oc1 / IC1;
         const size_t requested = (ic1 == IC1 - 1) ? tail_vl : C0;
         const size_t vl = __riscv_vsetvl_e16m1(requested);
-        const size_t oc_base = m_idx * IC + ic1 * C0;
+        const size_t packed_offset = m_idx * IC + ic1 * C0;
+        const size_t oc_base = ic1 * C0 * dm + m_idx;
 
-        const float16_t *src_base = packed + oc_base * spatial;
+        const float16_t *src_base = packed + packed_offset * spatial;
         float16_t *dst_base = output + oc_base * spatial;
 
         for (size_t pos = 0; pos < spatial; ++pos) {
             vfloat16m1_t v = __riscv_vle16_v_f16m1(src_base + pos * vl, vl);
-            __riscv_vsse16_v_f16m1(dst_base + pos, (ptrdiff_t)(spatial * sizeof(float16_t)), v, vl);
+            __riscv_vsse16_v_f16m1(dst_base + pos, (ptrdiff_t)(dm * spatial * sizeof(float16_t)), v,
+                                   vl);
         }
     }
 }
@@ -396,6 +422,7 @@ static inline void tqt_dwconv_unpack_output_cl_f16_rvv(const float16_t *packed, 
 {
     const size_t IC = params->input_channel;
     const size_t OC = params->output_channel;
+    const size_t dm = OC / IC;
     const size_t spatial =
         params->output_shape[0] * params->output_shape[1] * params->output_shape[2];
     const size_t C0 = __riscv_vsetvlmax_e16m1();
@@ -408,14 +435,19 @@ static inline void tqt_dwconv_unpack_output_cl_f16_rvv(const float16_t *packed, 
         const size_t m_idx = oc1 / IC1;
         const size_t requested = (ic1 == IC1 - 1) ? tail_vl : C0;
         const size_t vl = __riscv_vsetvl_e16m1(requested);
-        const size_t oc_base = m_idx * IC + ic1 * C0;
+        const size_t packed_offset = m_idx * IC + ic1 * C0;
+        const size_t oc_base = ic1 * C0 * dm + m_idx;
 
-        const float16_t *src_base = packed + oc_base * spatial;
+        const float16_t *src_base = packed + packed_offset * spatial;
 
         for (size_t pos = 0; pos < spatial; ++pos) {
             float16_t *dst = output + pos * OC + oc_base;
             vfloat16m1_t v = __riscv_vle16_v_f16m1(src_base + pos * vl, vl);
-            __riscv_vse16_v_f16m1(dst, v, vl);
+            if (dm == 1) {
+                __riscv_vse16_v_f16m1(dst, v, vl);
+            } else {
+                __riscv_vsse16_v_f16m1(dst, (ptrdiff_t)(dm * sizeof(float16_t)), v, vl);
+            }
         }
     }
 }

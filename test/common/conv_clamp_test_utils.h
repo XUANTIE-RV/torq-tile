@@ -58,61 +58,6 @@ inline testing::AssertionResult conv_clamp_equal(float actual, float expected)
     return testing::AssertionFailure() << "actual=" << actual << " expected=" << expected;
 }
 
-template <typename T>
-void run_clamp_dwconv(const NonPackedDwconvFuncs<T> &f, const tqt_conv_params &p, const T *a,
-                      const T *w, const T *bias, T *out, T lo, T hi)
-{
-    f.run_dwconv(a, w, bias, out, &p, lo, hi);
-}
-
-template <typename T, typename Funcs>
-void run_clamp_packed_dwconv(const Funcs &f, const tqt_conv_params &p, const T *a, const T *w,
-                             const T *bias, T *out, T lo, T hi)
-{
-    std::vector<uint8_t> ap(f.get_packed_input_size(&p)), wp(f.get_packed_weight_size(&p));
-    const size_t bytes = f.get_output_size(&p);
-    std::vector<T> dp(bytes / sizeof(T) + 16, T(37));
-    f.run_pack_input(a, ap.data(), &p);
-    f.run_pack_weight(w, wp.data(), &p);
-    if constexpr (std::is_same_v<Funcs, SpecPackedDwconvFuncs<T>>) {
-        for (size_t h = 0; h < p.output_shape[1]; h += f.get_oh_step())
-            f.run_dwconv(h, std::min(h + f.get_oh_step(), p.output_shape[1]), ap.data(), wp.data(),
-                         bias, dp.data() + 8, &p, lo, hi);
-    } else {
-        f.run_dwconv(ap.data(), wp.data(), bias, dp.data() + 8, &p, lo, hi);
-    }
-    f.run_unpack_output(dp.data() + 8, out, &p);
-    for (size_t i = 0; i < 8; ++i) {
-        EXPECT_EQ(float(dp[i]), 37);
-        EXPECT_EQ(float(dp[8 + bytes / sizeof(T) + i]), 37);
-    }
-}
-
-template <typename T>
-void run_clamp_dwconv(const GenericPackedDwconvFuncs<T> &f, const tqt_conv_params &p, const T *a,
-                      const T *w, const T *bias, T *out, T lo, T hi)
-{
-    run_clamp_packed_dwconv(f, p, a, w, bias, out, lo, hi);
-}
-
-template <typename T>
-void run_clamp_dwconv(const SpecPackedDwconvFuncs<T> &f, const tqt_conv_params &p, const T *a,
-                      const T *w, const T *bias, T *out, T lo, T hi)
-{
-    run_clamp_packed_dwconv(f, p, a, w, bias, out, lo, hi);
-}
-
-template <typename T>
-void run_clamp_dwconv(const SpecWeightPackedDwconvFuncs<T> &f, const tqt_conv_params &p, const T *a,
-                      const T *w, const T *bias, T *out, T lo, T hi)
-{
-    std::vector<uint8_t> wp(f.get_packed_weight_size(&p));
-    f.run_pack_weight(w, wp.data(), &p);
-    for (size_t h = 0; h < p.output_shape[1]; h += f.get_oh_step())
-        f.run_dwconv(h, std::min(h + f.get_oh_step(), p.output_shape[1]), a, wp.data(), bias, out,
-                     &p, lo, hi);
-}
-
 template <typename T, typename Funcs>
 void check_dwconv_clamp(const Funcs &f, ConvLayout layout, size_t kh, size_t kw, size_t stride,
                         size_t channels_step, const std::array<size_t, 5> &widths)

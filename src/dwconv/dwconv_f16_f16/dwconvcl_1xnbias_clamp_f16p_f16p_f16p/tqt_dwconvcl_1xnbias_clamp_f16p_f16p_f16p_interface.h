@@ -18,6 +18,8 @@ extern "C" {
 //   weight layout: cl [KD, KH, KW, 1, OC] -> pack -> [OC1, KD, KH, KW, OC0]
 //   bias   layout: [OC]
 //   output layout: NC1DHWC0 -> unpack -> NDHWC
+//   Raw weight/bias/output channels: oc = ic * (OC / IC) + m.
+//   Packed weight/output blocks: oc1 = m * IC1 + ic1, with compact IC tails.
 // Compute core is identical to cf-packed; only pack/unpack helpers differ.
 
 typedef size_t (*tqt_dwconvcl_1xnbias_clamp_f16p_f16p_f16p_get_output_size_func_t)(

@@ -36,6 +36,7 @@ static inline void tqt_dwconv_generic_packed_kernel_f32_rvv(const float *packed_
 
     const size_t IC = params->input_channel;
     const size_t OC = params->output_channel;
+    const size_t dm = OC / IC;
     const size_t ID = params->input_shape[0];
     const size_t IH = params->input_shape[1];
     const size_t IW = params->input_shape[2];
@@ -74,10 +75,13 @@ static inline void tqt_dwconv_generic_packed_kernel_f32_rvv(const float *packed_
         const float *in_block = packed_input + ic1 * C0 * in_spatial;
         const float *wt_block = packed_weight + channel_offset * kernel_size;
         float *out_block = packed_output + channel_offset * out_spatial;
-        const float *bias_block = (bias != nullptr) ? (bias + channel_offset) : nullptr;
+        const float *bias_block = (bias != nullptr) ? (bias + ic1 * C0 * dm + m_idx) : nullptr;
 
-        vfloat32m1_t v_bias =
-            bias_block ? __riscv_vle32_v_f32m1(bias_block, vl) : __riscv_vfmv_v_f_f32m1(0.0f, vl);
+        vfloat32m1_t v_bias = bias_block
+                                  ? (dm == 1 ? __riscv_vle32_v_f32m1(bias_block, vl)
+                                             : __riscv_vlse32_v_f32m1(
+                                                   bias_block, (ptrdiff_t)(dm * sizeof(float)), vl))
+                                  : __riscv_vfmv_v_f_f32m1(0.0f, vl);
 
         for (size_t od = 0; od < OD; ++od) {
             for (size_t oh = 0; oh < OH; ++oh) {

@@ -23,8 +23,8 @@ namespace test
 ///   params->groups == params->input_channel  (dwconv requirement)
 ///   params->output_channel % params->input_channel == 0  (dm = OC / IC, integer)
 ///
-/// PyTorch OC ordering:  oc = ic + m * IC,  m in [0, dm), ic in [0, IC).
-/// Therefore: ic = oc % IC.
+/// PyTorch OC ordering:  oc = ic * (OC / IC) + m,  m in [0, dm), ic in [0, IC).
+/// Therefore: ic = oc / (OC / IC).
 ///
 /// For channel-first (NCDHW):
 ///   input:  [IC, ID, IH, IW]

@@ -55,6 +55,7 @@ static inline void tqt_dwconv_3x3s1_packed_kernel_f16_rvv(
 
     const size_t IC = params->input_channel;
     const size_t OC = params->output_channel;
+    const size_t dm = OC / IC;
     const size_t IH = params->input_shape[1];
     const size_t IW = params->input_shape[2];
     const size_t OW = params->output_shape[2];
@@ -86,11 +87,14 @@ static inline void tqt_dwconv_3x3s1_packed_kernel_f16_rvv(
         const float16_t *in_block = packed_input + ic1 * C0 * in_spatial;
         const float16_t *wt_block = packed_weight + channel_offset * kernel_size;
         float16_t *out_block = packed_output + channel_offset * out_spatial;
-        const float16_t *bias_block = (bias != nullptr) ? (bias + channel_offset) : nullptr;
+        const float16_t *bias_block = (bias != nullptr) ? (bias + ic1 * C0 * dm + m_idx) : nullptr;
 
         // Preload bias and 9 weight vectors held across all (oh, ow) iterations.
-        vfloat16m1_t v_bias = bias_block ? __riscv_vle16_v_f16m1(bias_block, vl)
-                                         : __riscv_vfmv_v_f_f16m1((float16_t)0.0f, vl);
+        vfloat16m1_t v_bias =
+            bias_block ? (dm == 1 ? __riscv_vle16_v_f16m1(bias_block, vl)
+                                  : __riscv_vlse16_v_f16m1(bias_block,
+                                                           (ptrdiff_t)(dm * sizeof(float16_t)), vl))
+                       : __riscv_vfmv_v_f_f16m1((float16_t)0.0f, vl);
         vfloat16m1_t w00 = __riscv_vle16_v_f16m1(wt_block + 0 * vl, vl);
         vfloat16m1_t w01 = __riscv_vle16_v_f16m1(wt_block + 1 * vl, vl);
         vfloat16m1_t w02 = __riscv_vle16_v_f16m1(wt_block + 2 * vl, vl);

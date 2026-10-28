@@ -69,7 +69,7 @@ void tqt_run_dwconv_dwconvcf_mx1bias_clamp_f32_f32_f32_1x1vl_rvv(const void *inp
     // For each (oc, od, oh): inner OW loop with vlmax-step vectorization.
     // Inputs are gathered per-(kd,kh,kw) using strided load when SW != 1.
     for (size_t oc = 0; oc < OC; ++oc) {
-        const size_t ic = oc % IC;
+        const size_t ic = oc / (OC / IC);
         const float *in_ic = in_base + ic * in_spatial;
         const float *wt_oc = wt_base + oc * kernel_size;
         float *out_oc = out_base + oc * out_spatial;

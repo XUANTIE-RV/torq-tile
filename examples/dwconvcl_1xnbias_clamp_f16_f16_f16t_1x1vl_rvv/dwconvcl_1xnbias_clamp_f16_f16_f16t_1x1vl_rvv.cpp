@@ -43,7 +43,7 @@ void reference_dwconv_cl(const float16_t *input, const float16_t *weight, const 
     const size_t OD = p->output_shape[0], OH = p->output_shape[1], OW = p->output_shape[2];
     const size_t KD = p->kernel_shape[0], KH = p->kernel_shape[1], KW = p->kernel_shape[2];
     for (size_t oc = 0; oc < OC; ++oc) {
-        const size_t ic = oc % IC;
+        const size_t ic = oc / (OC / IC);
         for (size_t od = 0; od < OD; ++od)
             for (size_t oh = 0; oh < OH; ++oh)
                 for (size_t ow = 0; ow < OW; ++ow) {

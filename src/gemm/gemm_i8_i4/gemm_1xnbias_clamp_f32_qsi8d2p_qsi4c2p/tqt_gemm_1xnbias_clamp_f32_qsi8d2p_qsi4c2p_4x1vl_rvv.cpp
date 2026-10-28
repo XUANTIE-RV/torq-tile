@@ -150,7 +150,7 @@ static void gemm_kernel(size_t K, size_t bl, float *D, const int8_t *A_packed,
                         const uint8_t *B_packed, const float *scale_a, const float *scale_b,
                         const float *C, const float *bias, size_t ldd, size_t lda, size_t ldb,
                         size_t ldsa, size_t ldsb, size_t ldc, float clamp_min, float clamp_max,
-                        bool apply_clamp, size_t vl)
+                        bool apply_clamp, size_t vl, const int8_t *lut)
 {
     static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
     TQT_UNUSED(lda);
@@ -160,11 +160,12 @@ static void gemm_kernel(size_t K, size_t bl, float *D, const int8_t *A_packed,
     const size_t d_stride_row = ldd;
     const size_t c_stride_row = ldc;
 
-    tqt_init_fzero_acc_kernel_bq<MR>(vl);
+    tqt_init_fzero_acc_kernel_gemm_i8_i4_4x1vl_blockquant_rvv<MR>(vl);
 
     const size_t num_blocks = K / bl;
     for (size_t blk = 0; blk < num_blocks; ++blk) {
-        tqt_load_scale_b_block_kernel_bq(vl, scale_b + blk, scale_byte_stride);
+        tqt_load_scale_b_block_kernel_gemm_i8_i4_4x1vl_blockquant_rvv(vl, scale_b + blk,
+                                                                      scale_byte_stride);
 
         float sa_blk[MR];
         if constexpr (MR >= 1)
@@ -205,7 +206,8 @@ static void gemm_kernel(size_t K, size_t bl, float *D, const int8_t *A_packed,
                 a_hi[2] = (float)a_hi_base[2] * sa_blk[2];
             if constexpr (MR >= 4)
                 a_hi[3] = (float)a_hi_base[3] * sa_blk[3];
-            tqt_dot_b_pair_fp32_qsi4c2_kernel_bq<MR>(vl, b_col, a_lo, a_hi);
+            tqt_dot_b_pair_fp32_qsi4c2_kernel_gemm_i8_i4_4x1vl_blockquant_rvv<MR>(vl, b_col, a_lo,
+                                                                                  a_hi, lut);
         }
     }
 
@@ -229,7 +231,7 @@ using gemm_kernel_fn_t = void (*)(size_t K, size_t bl, float *D, const int8_t *A
                                   const float *scale_b, const float *C, const float *bias,
                                   size_t ldd, size_t lda, size_t ldb, size_t ldsa, size_t ldsb,
                                   size_t ldc, float clamp_min, float clamp_max, bool apply_clamp,
-                                  size_t vl);
+                                  size_t vl, const int8_t *lut);
 
 static constexpr gemm_kernel_fn_t kernel_table[4] = {
     gemm_kernel<1>,
@@ -290,7 +292,7 @@ void tqt_run_gemm_1xnbias_clamp_f32_qsi8d2p_qsi4c2p_4x1vl_rvv(
             const size_t mr_idx = actual_m - 1;
             kernel_table[mr_idx](k, bl, d_tile, a_tile, b_tile, scale_a_tile, scale_b_tile, c_tile,
                                  bias_tile, ldd, lda, ldb, ldsa, ldsb, ldc, clamp_min, clamp_max,
-                                 apply_clamp, actual_n);
+                                 apply_clamp, actual_n, params->lut);
         }
     }
 }

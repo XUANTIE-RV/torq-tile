@@ -176,7 +176,8 @@ int main()
     std::vector<uint8_t> B(N * (K / 2));
     std::vector<float> scale_a(M), scale_b(N);
     std::vector<int32_t> zp_a(M);
-    std::vector<float> bias(N), D_ref(M * N), D(M * N, 0.0f);
+    std::vector<float> bias(N);
+    std::vector<float> D_ref(M * N), D(M * N, 0.0f);
 
     fill_random(M * K, A_fp32.data(), -1.0f, 1.0f);
     fill_random(N * K, B_fp32.data(), -1.0f, 1.0f);
@@ -210,7 +211,7 @@ int main()
 
             const uint8_t *a_ptr = A_packed.data() + ukernel.get_a_packed_offset(m_idx, 0, K, M);
             const uint8_t *b_ptr = B_packed.data() + ukernel.get_b_packed_offset(n_idx, 0, K, N);
-            const uint8_t *bias_ptr = (const uint8_t *)bias.data() + ukernel.get_bias_offset(n_idx);
+            const float *bias_ptr = bias.data() + (ukernel.get_bias_offset(n_idx)) / sizeof(float);
             uint8_t *d_ptr = (uint8_t *)D.data() + ukernel.get_d_offset(m_idx, n_idx, N);
 
             ukernel.run_gemm(actual_m, actual_n, K, a_ptr, K, 0, b_ptr, K, 0, nullptr, N, d_ptr,

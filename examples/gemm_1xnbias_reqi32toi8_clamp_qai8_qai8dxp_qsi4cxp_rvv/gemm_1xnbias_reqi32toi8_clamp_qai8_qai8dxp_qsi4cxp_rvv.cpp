@@ -217,7 +217,9 @@ int main()
     int32_t zp_d;
     compute_asym_quant_i8(D_real.data(), M * N, scale_d, zp_d);
 
-    struct tqt_qai8_qai8dx_qsi4cx_params params;
+    struct tqt_qai8_qai8dx_qsi4cx_params params
+    {
+    };
     params.scale_a = scale_a.data();
     params.zero_point_a = zp_a.data();
     params.scale_b = scale_b.data();

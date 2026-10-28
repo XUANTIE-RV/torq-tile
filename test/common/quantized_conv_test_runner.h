@@ -41,7 +41,7 @@ struct NonPackedRequantizedConvCfFuncs
     using GetNStepFunc = size_t (*)(void);
     using GetBIm2colSizeFunc = size_t (*)(size_t k, size_t n);
     using RunIm2colFunc = void (*)(size_t group_idx, const void *activation, void *im2col_buf,
-                                   const tqt_conv_params *params);
+                                   const tqt_conv_params *params, int8_t padding_value);
     using RunConvFunc = void (*)(size_t m, size_t n, size_t k, const void *A, size_t lda,
                                  size_t k_idx_a, const void *B, size_t ldb, size_t k_idx_b,
                                  const void *C, size_t ldc, void *D, size_t ldd, const void *bias,
@@ -65,7 +65,7 @@ struct NonPackedRequantizedConvClFuncs
     using GetNStepFunc = size_t (*)(void);
     using GetAIm2colSizeFunc = size_t (*)(size_t m, size_t k);
     using RunIm2colFunc = void (*)(size_t group_idx, const void *activation, void *im2col_buf,
-                                   const tqt_conv_params *params);
+                                   const tqt_conv_params *params, int8_t padding_value);
     using RunConvFunc = void (*)(size_t m, size_t n, size_t k, const void *A, size_t lda,
                                  size_t k_idx_a, const void *B, size_t ldb, size_t k_idx_b,
                                  const void *C, size_t ldc, void *D, size_t ldd, const void *bias,
@@ -92,8 +92,8 @@ struct PackedRequantizedConvCfFuncs
     using RunAPackFunc = void (*)(size_t m, size_t k, size_t lda, size_t lda_packed, size_t k_idx,
                                   const void *A, void *A_packed);
     using RunBIm2colpackFunc = void (*)(size_t group_idx, const void *activation, size_t ldb_packed,
-                                        size_t k_idx, void *B_packed,
-                                        const tqt_conv_params *params);
+                                        size_t k_idx, void *B_packed, const tqt_conv_params *params,
+                                        int8_t padding_value);
     using RunConvFunc = void (*)(size_t m, size_t n, size_t k, const void *A_packed, size_t lda,
                                  size_t k_idx_a, const void *B_packed, size_t ldb, size_t k_idx_b,
                                  const void *C, size_t ldc, void *D, size_t ldd, const void *bias,
@@ -122,8 +122,8 @@ struct PackedRequantizedConvClFuncs
     using RunBtPackFunc = void (*)(size_t n, size_t k, size_t ldb, size_t ldb_packed, size_t k_idx,
                                    const void *B, void *B_packed);
     using RunAIm2colpackFunc = void (*)(size_t group_idx, const void *activation, size_t lda_packed,
-                                        size_t k_idx, void *A_packed,
-                                        const tqt_conv_params *params);
+                                        size_t k_idx, void *A_packed, const tqt_conv_params *params,
+                                        int8_t padding_value);
     using RunConvFunc = void (*)(size_t m, size_t n, size_t k, const void *A_packed, size_t lda,
                                  size_t k_idx_a, const void *B_packed, size_t ldb, size_t k_idx_b,
                                  const void *C, size_t ldc, void *D, size_t ldd, const void *bias,
@@ -214,10 +214,6 @@ inline void run_nonpacked_convcf_reqi32toi8_test(
         bias_i32[ch] = quantize_bias_i32(bias_fp32[ch], bias_scale);
     }
 
-    // Fuse zero_point_b into bias: bias_fused[m] = bias[m] - zp_b * sum(weight_i8[m, 0..K-1])
-    std::vector<int32_t> bias_fused(M);
-    fuse_zp_to_bias(bias_fused.data(), bias_i32.data(), weight_i8.data(), zp_b, M, K);
-
     // Compute D quantization parameters from reference result
     float scale_d;
     int32_t zp_d;
@@ -235,7 +231,8 @@ inline void run_nonpacked_convcf_reqi32toi8_test(
     // Im2col activation
     size_t im2col_size = funcs.get_b_im2col_size(K, N);
     std::vector<uint8_t> im2col_buf(im2col_size);
-    funcs.run_im2col(0, activation_i8.data(), im2col_buf.data(), &params);
+    funcs.run_im2col(0, activation_i8.data(), im2col_buf.data(), &params,
+                     (int8_t)qparams.zero_point_b);
 
     // Execute kernel
     const int8_t clamp_min = -128;
@@ -243,7 +240,7 @@ inline void run_nonpacked_convcf_reqi32toi8_test(
     std::vector<int8_t> D_i8(M * N, 0);
 
     funcs.run_conv(M, N, K, weight_i8.data(), K, 0, im2col_buf.data(), N, 0, nullptr, N,
-                   D_i8.data(), N, bias_fused.data(), clamp_min, clamp_max, &qparams);
+                   D_i8.data(), N, bias_i32.data(), clamp_min, clamp_max, &qparams);
 
     // Dequantize kernel output and compare with fp32 reference
     std::vector<float> D_act_fp32(M * N);
@@ -337,10 +334,6 @@ inline void run_nonpacked_convcl_reqi32toi8_test(
         bias_i32[ch] = quantize_bias_i32(bias_fp32[ch], bias_scale);
     }
 
-    // Fuse zero_point_a into bias: bias_fused[n] = bias[n] - zp_a * sum(weight_i8[n, 0..K-1])
-    std::vector<int32_t> bias_fused(N);
-    fuse_zp_to_bias(bias_fused.data(), bias_i32.data(), weight_i8.data(), zp_a, N, K);
-
     // Compute D quantization parameters from reference result
     float scale_d;
     int32_t zp_d;
@@ -358,7 +351,8 @@ inline void run_nonpacked_convcl_reqi32toi8_test(
     // Im2col activation
     size_t im2col_size = funcs.get_a_im2col_size(M, K);
     std::vector<uint8_t> im2col_buf(im2col_size);
-    funcs.run_im2col(0, activation_i8.data(), im2col_buf.data(), &params);
+    funcs.run_im2col(0, activation_i8.data(), im2col_buf.data(), &params,
+                     (int8_t)qparams.zero_point_a);
 
     // Execute kernel
     const int8_t clamp_min = -128;
@@ -366,7 +360,7 @@ inline void run_nonpacked_convcl_reqi32toi8_test(
     std::vector<int8_t> D_i8(M * N, 0);
 
     funcs.run_conv(M, N, K, im2col_buf.data(), K, 0, weight_i8.data(), K, 0, nullptr, N,
-                   D_i8.data(), N, bias_fused.data(), clamp_min, clamp_max, &qparams);
+                   D_i8.data(), N, bias_i32.data(), clamp_min, clamp_max, &qparams);
 
     // Dequantize kernel output and compare with fp32 reference
     std::vector<float> D_act_fp32(M * N);
@@ -453,9 +447,6 @@ inline void run_packed_convcf_reqi32toi8_test(
         bias_i32[ch] = quantize_bias_i32(bias_fp32[ch], bias_scale);
     }
 
-    std::vector<int32_t> bias_fused(M);
-    fuse_zp_to_bias(bias_fused.data(), bias_i32.data(), weight_i8.data(), zp_b, M, K);
-
     float scale_d;
     int32_t zp_d;
     compute_asym_quant_params_i8(D_ref_fp32.data(), M * N, scale_d, zp_d);
@@ -476,7 +467,8 @@ inline void run_packed_convcf_reqi32toi8_test(
     // Fused im2col+pack B (activation) -> B_packed
     size_t b_packed_size = funcs.get_b_im2colpack_size(N, K);
     std::vector<uint8_t> B_packed(b_packed_size);
-    funcs.run_b_im2colpack(0, activation_i8.data(), K, 0, B_packed.data(), &params);
+    funcs.run_b_im2colpack(0, activation_i8.data(), K, 0, B_packed.data(), &params,
+                           (int8_t)qparams.zero_point_b);
 
     // Execute kernel
     const int8_t clamp_min = -128;
@@ -484,7 +476,7 @@ inline void run_packed_convcf_reqi32toi8_test(
     std::vector<int8_t> D_i8(M * N, 0);
 
     funcs.run_conv(M, N, K, A_packed.data(), K, 0, B_packed.data(), K, 0, nullptr, N, D_i8.data(),
-                   N, bias_fused.data(), clamp_min, clamp_max, &qparams);
+                   N, bias_i32.data(), clamp_min, clamp_max, &qparams);
 
     // Dequantize and verify
     std::vector<float> D_act_fp32(M * N);
@@ -570,9 +562,6 @@ inline void run_packed_convcl_reqi32toi8_test(
         bias_i32[ch] = quantize_bias_i32(bias_fp32[ch], bias_scale);
     }
 
-    std::vector<int32_t> bias_fused(N);
-    fuse_zp_to_bias(bias_fused.data(), bias_i32.data(), weight_i8.data(), zp_a, N, K);
-
     float scale_d;
     int32_t zp_d;
     compute_asym_quant_params_i8(D_ref_fp32.data(), M * N, scale_d, zp_d);
@@ -588,7 +577,8 @@ inline void run_packed_convcl_reqi32toi8_test(
     // Fused im2col+pack A (activation) -> A_packed
     size_t a_packed_size = funcs.get_a_im2colpack_size(M, K);
     std::vector<uint8_t> A_packed(a_packed_size);
-    funcs.run_a_im2colpack(0, activation_i8.data(), K, 0, A_packed.data(), &params);
+    funcs.run_a_im2colpack(0, activation_i8.data(), K, 0, A_packed.data(), &params,
+                           (int8_t)qparams.zero_point_a);
 
     // Pack B (weight) [N, K] transposed -> packed
     size_t b_packed_size = funcs.get_b_packed_size(N, K);
@@ -601,7 +591,7 @@ inline void run_packed_convcl_reqi32toi8_test(
     std::vector<int8_t> D_i8(M * N, 0);
 
     funcs.run_conv(M, N, K, A_packed.data(), K, 0, B_packed.data(), K, 0, nullptr, N, D_i8.data(),
-                   N, bias_fused.data(), clamp_min, clamp_max, &qparams);
+                   N, bias_i32.data(), clamp_min, clamp_max, &qparams);
 
     // Dequantize and verify
     std::vector<float> D_act_fp32(M * N);
@@ -616,6 +606,64 @@ inline void run_packed_convcl_reqi32toi8_test(
                                << "\n  IC=" << IC << " OC=" << params.output_channel
                                << "\n  Max abs error: " << result.max_abs_error
                                << "\n  Cosine similarity: " << result.cosine_similarity;
+}
+
+// A real-zero activation must remain zero through padding, groups, dilation
+// and both input layouts. Other groups deliberately contain nonzero values.
+template <bool ChannelFirst, typename Run>
+void check_quantized_padding_contract(Run run)
+{
+    const tqt_conv_params conv = {{3, 5, 6}, {4, 3, 6}, {2, 3, 3}, {1, 2, 1}, {1, 1, 2},
+                                  {1, 1, 2}, 6,         34,        2};
+    const size_t k = 3 * 2 * 3 * 3;
+    const size_t spatial = 4 * 3 * 6;
+    const size_t m = ChannelFirst ? 17 : spatial;
+    const size_t n = ChannelFirst ? spatial : 17;
+    std::vector<int8_t> input(3 * 5 * 6 * 6, 11), weight(17 * k, 3);
+    std::vector<int32_t> bias(17);
+    std::vector<float> scale(17, 0.5f);
+    for (size_t i = 0; i < bias.size(); ++i)
+        bias[i] = (int32_t)(i % 11) - 5;
+    for (int32_t zp : {-128, 37, 127}) {
+        for (size_t i = 0; i < 3 * 5 * 6; ++i) {
+            for (size_t ch = 3; ch < 6; ++ch)
+                input[ChannelFirst ? ch * 3 * 5 * 6 + i : i * 6 + ch] = (int8_t)zp;
+        }
+        std::vector<int8_t> output(m * (n + 5) + 16, 93);
+        if constexpr (ChannelFirst) {
+            tqt_qai8_qsi8dx_qai8_params params{};
+            params.scale_a = scale.data();
+            params.quant_channel_a = 17;
+            params.scale_b = 1.0f;
+            params.zero_point_b = zp;
+            params.scale_d = 1.0f;
+            params.zero_point_d = -7;
+            run(m, n, k, input.data(), weight.data(), bias.data(), output.data(), n + 5, &conv,
+                &params, (int8_t)zp);
+        } else {
+            tqt_qai8_qai8_qsi8cx_params params{};
+            params.scale_a = 1.0f;
+            params.zero_point_a = zp;
+            params.scale_b = scale.data();
+            params.quant_channel_b = 17;
+            params.scale_d = 1.0f;
+            params.zero_point_d = -7;
+            run(m, n, k, input.data(), weight.data(), bias.data(), output.data(), n + 5, &conv,
+                &params, (int8_t)zp);
+        }
+        for (size_t row = 0; row < m; ++row) {
+            for (size_t col = 0; col < n; ++col) {
+                const size_t oc = ChannelFirst ? row : col;
+                ASSERT_EQ(output[row * (n + 5) + col],
+                          reference_requantized_i8(bias[oc], 0.5f, -7, -23, 19))
+                    << "row=" << row << " col=" << col << " zp=" << zp;
+            }
+            for (size_t col = n; col < n + 5; ++col)
+                ASSERT_EQ(output[row * (n + 5) + col], 93);
+        }
+        for (size_t i = m * (n + 5); i < output.size(); ++i)
+            ASSERT_EQ(output[i], 93);
+    }
 }
 
 }  // namespace test

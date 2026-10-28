@@ -180,6 +180,8 @@ void tqt_run_bt_pack_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi8cxp_4x1vl_rvv(
 ///
 /// @note A_packed and B_packed are pre-packed using the pack functions.
 /// @note k_idx_a and k_idx_b are used when A and B are sub-buffers with different sizes.
+/// Bias is raw I32 in the accumulator domain; the kernel corrects input zero points.
+/// Requantization uses one nearest-even rounding of the full Q31 product.
 void tqt_run_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi8cxp_4x1vl_rvv(
     size_t m, size_t n, size_t k, const void *A_packed, size_t lda, size_t k_idx_a,
     const void *B_packed, size_t ldb, size_t k_idx_b, const void *C, size_t ldc, void *D,

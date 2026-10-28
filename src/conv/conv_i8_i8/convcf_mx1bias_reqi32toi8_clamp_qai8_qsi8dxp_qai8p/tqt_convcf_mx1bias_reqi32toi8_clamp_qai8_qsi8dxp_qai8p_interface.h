@@ -51,7 +51,7 @@ typedef void (*tqt_convcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8p_run_a_pack
 /// Fused im2col+pack for B (activation)
 typedef void (*tqt_convcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8p_run_b_im2colpack_func_t)(
     size_t group_idx, const void *activation, size_t ldb_packed, size_t k_idx, void *B_packed,
-    const tqt_conv_params *params);
+    const tqt_conv_params *params, int8_t padding_value);
 
 /// Core function
 typedef void (*tqt_convcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8p_run_conv_func_t)(

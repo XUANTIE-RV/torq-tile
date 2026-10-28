@@ -71,15 +71,15 @@ size_t tqt_get_scale_b_offset_gemm_1xnbias_clamp_f16_qsi8d2p_qai4c2p_4x1vl_rvv(s
     return (n_idx * ldsb + b_idx) * sizeof(float);
 }
 
-size_t tqt_get_zp_b_offset_gemm_1xnbias_clamp_f16_qsi8d2p_qai4c2p_4x1vl_rvv(size_t n_idx,
-                                                                            size_t b_idx,
-                                                                            size_t ldzpb)
+size_t tqt_get_offset_b_offset_gemm_1xnbias_clamp_f16_qsi8d2p_qai4c2p_4x1vl_rvv(size_t n_idx,
+                                                                                size_t b_idx,
+                                                                                size_t ldob)
 {
     const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = VLENB;
 
     TQT_ASSUME(n_idx % n_step == 0);
-    return (n_idx * ldzpb + b_idx) * sizeof(float);
+    return (n_idx * ldob + b_idx) * sizeof(float);
 }
 
 size_t tqt_get_c_offset_gemm_1xnbias_clamp_f16_qsi8d2p_qai4c2p_4x1vl_rvv(size_t m_idx, size_t n_idx,
@@ -147,25 +147,27 @@ void tqt_run_bt_pack_gemm_1xnbias_clamp_f16_qsi8d2p_qai4c2p_4x1vl_rvv(size_t n, 
 template <size_t MR>
 static void gemm_kernel(size_t K, size_t bl, float16_t *D, const int8_t *A_packed,
                         const uint8_t *B_packed, const float *scale_a, const float *scale_b,
-                        const float *zp_b, const float16_t *C, const float16_t *bias, size_t ldd,
-                        size_t lda, size_t ldb, size_t ldsa, size_t ldsb, size_t ldzpb, size_t ldc,
-                        float16_t clamp_min, float16_t clamp_max, bool apply_clamp, size_t vl)
+                        const float *offset_b, const float16_t *C, const float16_t *bias,
+                        size_t ldd, size_t lda, size_t ldb, size_t ldsa, size_t ldsb, size_t ldob,
+                        size_t ldc, float16_t clamp_min, float16_t clamp_max, bool apply_clamp,
+                        size_t vl)
 {
     static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
     TQT_UNUSED(lda);
     TQT_UNUSED(ldb);
 
     const size_t scale_byte_stride = ldsb * sizeof(float);
-    const size_t zp_byte_stride = ldzpb * sizeof(float);
+    const size_t offset_byte_stride = ldob * sizeof(float);
     const size_t d_stride_row = ldd;
     const size_t c_stride_row = ldc;
 
-    tqt_init_fzero_acc_kernel_bq<MR>(vl);
+    tqt_init_fzero_acc_kernel_gemm_i8_i4_4x1vl_blockquant_rvv<MR>(vl);
 
     const size_t num_blocks = K / bl;
     for (size_t blk = 0; blk < num_blocks; ++blk) {
-        tqt_load_scale_b_block_kernel_bq(vl, scale_b + blk, scale_byte_stride);
-        const float *zp_b_lane = zp_b + blk;
+        tqt_load_scale_b_block_kernel_gemm_i8_i4_4x1vl_blockquant_rvv(vl, scale_b + blk,
+                                                                      scale_byte_stride);
+        const float *offset_b_lane = offset_b + blk;
 
         float sa_blk[MR];
         if constexpr (MR >= 1)
@@ -204,8 +206,8 @@ static void gemm_kernel(size_t K, size_t bl, float16_t *D, const int8_t *A_packe
                 a_hi[2] = (float)a_hi_base[2] * sa_blk[2];
             if constexpr (MR >= 4)
                 a_hi[3] = (float)a_hi_base[3] * sa_blk[3];
-            tqt_dot_b_pair_fp32_qai4c2_kernel_bq<MR>(vl, b_col, zp_b_lane, zp_byte_stride, a_lo,
-                                                     a_hi);
+            tqt_dot_b_pair_fp32_qai4c2_kernel_gemm_i8_i4_4x1vl_blockquant_rvv<MR>(
+                vl, b_col, offset_b_lane, offset_byte_stride, a_lo, a_hi);
         }
     }
 
@@ -229,9 +231,9 @@ static void gemm_kernel(size_t K, size_t bl, float16_t *D, const int8_t *A_packe
 
 using gemm_kernel_fn_t = void (*)(size_t K, size_t bl, float16_t *D, const int8_t *A_packed,
                                   const uint8_t *B_packed, const float *scale_a,
-                                  const float *scale_b, const float *zp_b, const float16_t *C,
+                                  const float *scale_b, const float *offset_b, const float16_t *C,
                                   const float16_t *bias, size_t ldd, size_t lda, size_t ldb,
-                                  size_t ldsa, size_t ldsb, size_t ldzpb, size_t ldc,
+                                  size_t ldsa, size_t ldsb, size_t ldob, size_t ldc,
                                   float16_t clamp_min, float16_t clamp_max, bool apply_clamp,
                                   size_t vl);
 
@@ -271,7 +273,7 @@ void tqt_run_gemm_1xnbias_clamp_f16_qsi8d2p_qai4c2p_4x1vl_rvv(
     const size_t origin_n = TQT_MIN(n, n_step);
     const size_t ldsa = params->ldsa;
     const size_t ldsb = params->ldsb;
-    const size_t ldzpb = params->ldzpb;
+    const size_t ldob = params->ldob;
 
     for (size_t m_idx = 0; m_idx < m; m_idx += m_step) {
         for (size_t n_idx = 0; n_idx < n; n_idx += n_step) {
@@ -287,11 +289,11 @@ void tqt_run_gemm_1xnbias_clamp_f16_qsi8d2p_qai4c2p_4x1vl_rvv(
 
             const float *scale_a_tile = params->scale_a + m_idx * ldsa + k_idx_a / bl;
             const float *scale_b_tile = params->scale_b + n_idx * ldsb + k_idx_b / bl;
-            const float *zp_b_tile = params->zp_b + n_idx * ldzpb + k_idx_b / bl;
+            const float *offset_b_tile = params->offset_b + n_idx * ldob + k_idx_b / bl;
 
             const size_t mr_idx = actual_m - 1;
             kernel_table[mr_idx](k, bl, d_tile, a_tile, b_tile, scale_a_tile, scale_b_tile,
-                                 zp_b_tile, c_tile, bias_tile, ldd, lda, ldb, ldsa, ldsb, ldzpb,
+                                 offset_b_tile, c_tile, bias_tile, ldd, lda, ldb, ldsa, ldsb, ldob,
                                  ldc, clamp_min, clamp_max, apply_clamp, actual_n);
         }
     }

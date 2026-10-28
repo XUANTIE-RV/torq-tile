@@ -309,7 +309,9 @@ int main()
     ref_qsi8d2_qsi4c2(M, N, K, BL, A.data(), B.data(), scale_a.data(), ldsa, scale_b.data(), ldsb,
                       bias_fp32.data(), CLAMP_MIN, CLAMP_MAX, D_ref_fp32.data());
 
-    struct tqt_qsi8d2_qsi4c2_params params;
+    struct tqt_qsi8d2_qsi4c2_params params
+    {
+    };
     params.scale_a = scale_a.data();
     params.ldsa = ldsa;
     params.scale_b = scale_b.data();

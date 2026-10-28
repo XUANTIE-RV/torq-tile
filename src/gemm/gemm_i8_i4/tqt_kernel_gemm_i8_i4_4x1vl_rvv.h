@@ -626,3 +626,23 @@ static inline void tqt_add_c_bf16_kernel_gemm_i8_i4_4x1vl_rvv(size_t vl, const b
     }
 }
 #endif  // zvfbfwma
+
+/// Add raw accumulator-domain I32 bias before conversion to F32.
+template <size_t MR>
+static inline void tqt_add_1xnbias_i32_kernel_gemm_i8_i4_4x1vl_rvv(size_t vl, const int32_t *bias)
+{
+    asm volatile(
+        "vsetvli zero, %0, e32, m4, ta, ma\n\t"
+        "vle32.v v0, (%1)"
+        :
+        : "r"(vl), "r"(bias)
+        : "v0", "v1", "v2", "v3", "memory");
+    if constexpr (MR >= 1)
+        asm volatile("vadd.vv v16, v16, v0" : : : "v16", "v17", "v18", "v19");
+    if constexpr (MR >= 2)
+        asm volatile("vadd.vv v20, v20, v0" : : : "v20", "v21", "v22", "v23");
+    if constexpr (MR >= 3)
+        asm volatile("vadd.vv v24, v24, v0" : : : "v24", "v25", "v26", "v27");
+    if constexpr (MR >= 4)
+        asm volatile("vadd.vv v28, v28, v0" : : : "v28", "v29", "v30", "v31");
+}

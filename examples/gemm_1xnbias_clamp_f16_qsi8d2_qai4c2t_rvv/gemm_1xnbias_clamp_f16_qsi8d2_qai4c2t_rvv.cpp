@@ -154,10 +154,10 @@ void quantize_b_qsi4c2(const float *B_fp32, size_t n, size_t k, size_t bl, uint8
 
 // ---------------------------------------------------------------------------
 // B quantization: per-block ASYMMETRIC int4 (qai4c2). ZP=0 encoding.
-// Dequant: (q - zp_b) * scale_b.
+// Dequant: q * scale_b + offset_b.
 // ---------------------------------------------------------------------------
 void quantize_b_qai4c2(const float *B_fp32, size_t n, size_t k, size_t bl, uint8_t *B_packed,
-                       float *scale_b, float *zp_b, size_t ldsb, size_t ldzpb)
+                       float *scale_b, float *offset_b, size_t ldsb, size_t ldob)
 {
     memset(B_packed, 0, n * (k / 2));
     const size_t num_blocks = k / bl;
@@ -173,8 +173,8 @@ void quantize_b_qai4c2(const float *B_fp32, size_t n, size_t k, size_t bl, uint8
             }
             float s = (fmax - fmin) / 15.0f;
             if (s == 0.0f) {
-                scale_b[row * ldsb + blk] = 1.0f;
-                zp_b[row * ldzpb + blk] = 0.0f;
+                scale_b[row * ldsb + blk] = 0.0f;
+                offset_b[row * ldob + blk] = fmin;
                 for (size_t i = 0; i < bl; ++i) {
                     size_t kidx = blk * bl + i;
                     size_t byte_idx = row * (k / 2) + kidx / 2;
@@ -191,7 +191,7 @@ void quantize_b_qai4c2(const float *B_fp32, size_t n, size_t k, size_t bl, uint8
             if (zp_f > 15.0f)
                 zp_f = 15.0f;
             scale_b[row * ldsb + blk] = s;
-            zp_b[row * ldzpb + blk] = zp_f;
+            offset_b[row * ldob + blk] = -zp_f * s;
             for (size_t i = 0; i < bl; ++i) {
                 float q = nearbyintf(blk_ptr[i] / s + zp_f);
                 if (q > 15.0f)
@@ -224,11 +224,11 @@ float cosine_similarity_fp32(size_t size, const float *a, const float *b)
 }
 
 // Class 3: qsi8d2 x qai4c2.
-//   acc = sum_blk( scale_a[m, blk] * scale_b[n, blk]
-//           * sum_k( qa[m, k] * (qb_unsigned[n, k] - zp_b[n, blk]) ) )
+//   acc = sum_blk( scale_a[m, blk]
+//           * sum_k( qa[m, k] * (qb_unsigned[n, k] * scale_b[n, blk] + offset_b[n, blk]) ) )
 void ref_qsi8d2_qai4c2(size_t m, size_t n, size_t k, size_t bl, const int8_t *A_i8,
                        const uint8_t *B_packed, const float *scale_a, size_t ldsa,
-                       const float *scale_b, size_t ldsb, const float *zp_b, size_t ldzpb,
+                       const float *scale_b, size_t ldsb, const float *offset_b, size_t ldob,
                        const float *bias, float clamp_min, float clamp_max, float *D)
 {
     const size_t num_blocks = k / bl;
@@ -236,16 +236,16 @@ void ref_qsi8d2_qai4c2(size_t m, size_t n, size_t k, size_t bl, const int8_t *A_
         for (size_t ni = 0; ni < n; ++ni) {
             float acc = 0.0f;
             for (size_t blk = 0; blk < num_blocks; ++blk) {
-                float zpb = zp_b[ni * ldzpb + blk];
+                float ob = offset_b[ni * ldob + blk];
                 float blk_acc = 0.0f;
                 for (size_t kk = 0; kk < bl; ++kk) {
                     size_t kidx = blk * bl + kk;
                     uint8_t byte = B_packed[ni * (k / 2) + kidx / 2];
                     float qb = (kidx & 1) ? (float)(byte >> 4) : (float)(byte & 0xf);
                     float qa = (float)A_i8[mi * k + kidx];
-                    blk_acc += qa * (qb - zpb);
+                    blk_acc += qa * (qb * scale_b[ni * ldsb + blk] + ob);
                 }
-                acc += scale_a[mi * ldsa + blk] * scale_b[ni * ldsb + blk] * blk_acc;
+                acc += scale_a[mi * ldsa + blk] * blk_acc;
             }
             if (bias)
                 acc += bias[ni];
@@ -270,12 +270,12 @@ int main()
     const size_t ldb = K;
     const size_t ldsa = K / BL;
     const size_t ldsb = K / BL;
-    const size_t ldzpb = K / BL;
+    const size_t ldob = K / BL;
     const size_t ldd = N;
     (void)lda;
     (void)ldb;
     (void)ldsa;
-    (void)ldzpb;
+    (void)ldob;
 
     srand(42);
 
@@ -290,8 +290,9 @@ int main()
 
     std::vector<uint8_t> B(N * (K / 2));
     std::vector<float> scale_b(N * ldsb);
-    std::vector<float> zp_b(N * ldzpb);
-    quantize_b_qai4c2(B_fp32.data(), N, K, BL, B.data(), scale_b.data(), zp_b.data(), ldsb, ldzpb);
+    std::vector<float> offset_b(N * ldob);
+    quantize_b_qai4c2(B_fp32.data(), N, K, BL, B.data(), scale_b.data(), offset_b.data(), ldsb,
+                      ldob);
 
     std::vector<float> bias_fp32(N);
     fill_random_f32(N, bias_fp32.data(), -0.5f, 0.5f);
@@ -308,7 +309,7 @@ int main()
     std::vector<float16_t> D(M * N, static_cast<float16_t>(0));
 
     ref_qsi8d2_qai4c2(M, N, K, BL, A.data(), B.data(), scale_a.data(), ldsa, scale_b.data(), ldsb,
-                      zp_b.data(), ldzpb, bias_fp32.data(), CLAMP_MIN, CLAMP_MAX,
+                      offset_b.data(), ldob, bias_fp32.data(), CLAMP_MIN, CLAMP_MAX,
                       D_ref_fp32.data());
 
     struct tqt_qsi8d2_qai4c2_params params;
@@ -316,8 +317,8 @@ int main()
     params.ldsa = ldsa;
     params.scale_b = scale_b.data();
     params.ldsb = ldsb;
-    params.zp_b = zp_b.data();
-    params.ldzpb = ldzpb;
+    params.offset_b = offset_b.data();
+    params.ldob = ldob;
 
     // The kernel does its own M / N tiling internally based on get_m_step /
     // get_n_step, so we just invoke it once with the full shape.

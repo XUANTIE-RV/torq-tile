@@ -115,8 +115,10 @@ size_t tqt_get_b_im2col_offset_convcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dx_qai8_
 /// @param[in] activation Input activation tensor.
 /// @param[out] im2col_buf Output im2col buffer.
 /// @param[in] params Convolution parameters.
+/// padding_value is the activation zero point.
 void tqt_run_im2col_convcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dx_qai8_4x1vl_rvv(
-    size_t group_idx, const void *activation, void *im2col_buf, const tqt_conv_params *params);
+    size_t group_idx, const void *activation, void *im2col_buf, const tqt_conv_params *params,
+    int8_t padding_value);
 
 /// Runs the convolution microkernel with Mx1 bias, requantization, and clamp.
 ///
@@ -146,6 +148,8 @@ void tqt_run_im2col_convcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dx_qai8_4x1vl_rvv(
 /// @note B is the im2col-transformed activation with shape [K, N].
 /// @note The bias vector has shape [m, 1] and is added to each column of the result.
 /// @note k_idx_a and k_idx_b are used when A and B are sub-buffers with different sizes.
+/// Bias is raw I32 in the accumulator domain; the kernel corrects input zero points.
+/// Requantization uses one nearest-even rounding of the full Q31 product.
 void tqt_run_conv_convcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dx_qai8_4x1vl_rvv(
     size_t m, size_t n, size_t k, const void *A, size_t lda, size_t k_idx_a, const void *B,
     size_t ldb, size_t k_idx_b, const void *C, size_t ldc, void *D, size_t ldd, const void *bias,

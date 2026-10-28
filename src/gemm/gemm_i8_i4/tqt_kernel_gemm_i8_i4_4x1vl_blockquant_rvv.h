@@ -21,8 +21,8 @@
 ///   v0:      B lo nibble buffer (uint8 m1)         -- K-pair scratch
 ///   v1:      B hi nibble buffer (uint8 m1)         -- K-pair scratch
 ///   v2:      B raw byte load destination (uint8 m1) -- K-pair scratch
-///   v3:      reserved temporary
-///   v4-v7:   zp_b vector or scratch (e32 m4)       -- K-pair scratch
+///   v3:      LUT lookup result (int8 m1)
+///   v4-v7:   offset_b vector or scratch (e32 m4)       -- K-pair scratch
 ///   v8-v11:  B dequant fp32 lane (e32 m4)          -- K-pair scratch (lo/hi
 ///                                                    serialized through this
 ///                                                    slot, fmacc consumes
@@ -52,7 +52,7 @@
 // ============================================================================
 
 template <size_t MR>
-static inline void tqt_init_fzero_acc_kernel_bq(size_t vl)
+static inline void tqt_init_fzero_acc_kernel_gemm_i8_i4_4x1vl_blockquant_rvv(size_t vl)
 {
     static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
 
@@ -76,8 +76,8 @@ static inline void tqt_init_fzero_acc_kernel_bq(size_t vl)
 // Loads with vlse32.v at stride = ldsb * sizeof(float).
 // ============================================================================
 
-static inline void tqt_load_scale_b_block_kernel_bq(size_t vl, const float *scale_b_lane,
-                                                    size_t scale_byte_stride)
+static inline void tqt_load_scale_b_block_kernel_gemm_i8_i4_4x1vl_blockquant_rvv(
+    size_t vl, const float *scale_b_lane, size_t scale_byte_stride)
 {
     asm volatile("vsetvli zero, %0, e32, m4, ta, ma\n\t" : : "r"(vl) :);
     asm volatile("vlse32.v v12, (%0), %1"
@@ -91,141 +91,180 @@ static inline void tqt_load_scale_b_block_kernel_bq(size_t vl, const float *scal
 // for qai4, the zero-point vector across the complete K pair.
 // ============================================================================
 
-#define TQT_VFMACC_LO_ROWS_KERNEL_BQ   \
-    "vfmacc.vf v16, %[a_lo_0], v8\n\t" \
-    ".if %[mr] >= 2\n\t"               \
-    "vfmacc.vf v20, %[a_lo_1], v8\n\t" \
-    ".endif\n\t"                       \
-    ".if %[mr] >= 3\n\t"               \
-    "vfmacc.vf v24, %[a_lo_2], v8\n\t" \
-    ".endif\n\t"                       \
-    ".if %[mr] >= 4\n\t"               \
-    "vfmacc.vf v28, %[a_lo_3], v8\n\t" \
+#define TQT_VFMACC_LO_ROWS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV \
+    "vfmacc.vf v16, %[a_lo_0], v8\n\t"                            \
+    ".if %[mr] >= 2\n\t"                                          \
+    "vfmacc.vf v20, %[a_lo_1], v8\n\t"                            \
+    ".endif\n\t"                                                  \
+    ".if %[mr] >= 3\n\t"                                          \
+    "vfmacc.vf v24, %[a_lo_2], v8\n\t"                            \
+    ".endif\n\t"                                                  \
+    ".if %[mr] >= 4\n\t"                                          \
+    "vfmacc.vf v28, %[a_lo_3], v8\n\t"                            \
     ".endif\n\t"
 
-#define TQT_VFMACC_HI_ROWS_KERNEL_BQ   \
-    "vfmacc.vf v16, %[a_hi_0], v8\n\t" \
-    ".if %[mr] >= 2\n\t"               \
-    "vfmacc.vf v20, %[a_hi_1], v8\n\t" \
-    ".endif\n\t"                       \
-    ".if %[mr] >= 3\n\t"               \
-    "vfmacc.vf v24, %[a_hi_2], v8\n\t" \
-    ".endif\n\t"                       \
-    ".if %[mr] >= 4\n\t"               \
-    "vfmacc.vf v28, %[a_hi_3], v8\n\t" \
+#define TQT_VFMACC_HI_ROWS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV \
+    "vfmacc.vf v16, %[a_hi_0], v8\n\t"                            \
+    ".if %[mr] >= 2\n\t"                                          \
+    "vfmacc.vf v20, %[a_hi_1], v8\n\t"                            \
+    ".endif\n\t"                                                  \
+    ".if %[mr] >= 3\n\t"                                          \
+    "vfmacc.vf v24, %[a_hi_2], v8\n\t"                            \
+    ".endif\n\t"                                                  \
+    ".if %[mr] >= 4\n\t"                                          \
+    "vfmacc.vf v28, %[a_hi_3], v8\n\t"                            \
     ".endif\n\t"
 
-#define TQT_QSI4_PAIR_BODY_KERNEL_BQ(B_LOAD)                \
-    "vsetvli zero, %[vl], e8, m1, ta, ma\n\t" B_LOAD        \
-    "vand.vi v0, v2, 0xf\n\t"                               \
-    "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"              \
-    "vzext.vf4 v8, v0\n\t"                                  \
-    "vfcvt.f.x.v v8, v8\n\t"                                \
-    "vfadd.vf v8, v8, %[negative_eight]\n\t"                \
-    "vfmul.vv v8, v8, v12\n\t" TQT_VFMACC_LO_ROWS_KERNEL_BQ \
-    "vsetvli zero, %[vl], e8, m1, ta, ma\n\t"               \
-    "vsrl.vi v1, v2, 4\n\t"                                 \
-    "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"              \
-    "vzext.vf4 v8, v1\n\t"                                  \
-    "vfcvt.f.x.v v8, v8\n\t"                                \
-    "vfadd.vf v8, v8, %[negative_eight]\n\t"                \
-    "vfmul.vv v8, v8, v12\n\t" TQT_VFMACC_HI_ROWS_KERNEL_BQ
+#define TQT_QSI4_PAIR_BODY_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV(B_LOAD)                \
+    "vsetvli zero, %[vl], e8, m1, ta, ma\n\t" B_LOAD                                     \
+    "vand.vi v0, v2, 0xf\n\t"                                                            \
+    "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"                                           \
+    "vzext.vf4 v8, v0\n\t"                                                               \
+    "vfcvt.f.x.v v8, v8\n\t"                                                             \
+    "vfadd.vf v8, v8, %[negative_eight]\n\t"                                             \
+    "vfmul.vv v8, v8, v12\n\t" TQT_VFMACC_LO_ROWS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV \
+    "vsetvli zero, %[vl], e8, m1, ta, ma\n\t"                                            \
+    "vsrl.vi v1, v2, 4\n\t"                                                              \
+    "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"                                           \
+    "vzext.vf4 v8, v1\n\t"                                                               \
+    "vfcvt.f.x.v v8, v8\n\t"                                                             \
+    "vfadd.vf v8, v8, %[negative_eight]\n\t"                                             \
+    "vfmul.vv v8, v8, v12\n\t" TQT_VFMACC_HI_ROWS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV
 
-#define TQT_QAI4_PAIR_BODY_KERNEL_BQ(B_LOAD)                \
-    "vsetvli zero, %[vl], e8, m1, ta, ma\n\t" B_LOAD        \
-    "vand.vi v0, v2, 0xf\n\t"                               \
-    "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"              \
-    "vlse32.v v4, (%[zp_b_lane]), %[zp_byte_stride]\n\t"    \
-    "vzext.vf4 v8, v0\n\t"                                  \
-    "vfcvt.f.x.v v8, v8\n\t"                                \
-    "vfsub.vv v8, v8, v4\n\t"                               \
-    "vfmul.vv v8, v8, v12\n\t" TQT_VFMACC_LO_ROWS_KERNEL_BQ \
-    "vsetvli zero, %[vl], e8, m1, ta, ma\n\t"               \
-    "vsrl.vi v1, v2, 4\n\t"                                 \
-    "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"              \
-    "vzext.vf4 v8, v1\n\t"                                  \
-    "vfcvt.f.x.v v8, v8\n\t"                                \
-    "vfsub.vv v8, v8, v4\n\t"                               \
-    "vfmul.vv v8, v8, v12\n\t" TQT_VFMACC_HI_ROWS_KERNEL_BQ
+#define TQT_LUT4_PAIR_BODY_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV(B_LOAD)                \
+    "vsetvli zero, %[vl], e8, m1, ta, ma\n\t" B_LOAD                                     \
+    "vand.vi v0, v2, 0xf\n\t"                                                            \
+    "vluxei8.v v3, (%[lut]), v0\n\t"                                                     \
+    "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"                                           \
+    "vsext.vf4 v8, v3\n\t"                                                               \
+    "vfcvt.f.x.v v8, v8\n\t"                                                             \
+    "vfmul.vv v8, v8, v12\n\t" TQT_VFMACC_LO_ROWS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV \
+    "vsetvli zero, %[vl], e8, m1, ta, ma\n\t"                                            \
+    "vsrl.vi v1, v2, 4\n\t"                                                              \
+    "vluxei8.v v3, (%[lut]), v1\n\t"                                                     \
+    "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"                                           \
+    "vsext.vf4 v8, v3\n\t"                                                               \
+    "vfcvt.f.x.v v8, v8\n\t"                                                             \
+    "vfmul.vv v8, v8, v12\n\t" TQT_VFMACC_HI_ROWS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV
 
-#define TQT_PAIR_ACTIVATION_INPUTS_KERNEL_BQ(MR, A_LO, A_HI)                          \
-    [mr] "i"(MR), [a_lo_0] "f"((A_LO)[0]), [a_lo_1] "f"((A_LO)[MR >= 2 ? 1 : 0]),     \
-        [a_lo_2] "f"((A_LO)[MR >= 3 ? 2 : 0]), [a_lo_3] "f"((A_LO)[MR >= 4 ? 3 : 0]), \
-        [a_hi_0] "f"((A_HI)[0]), [a_hi_1] "f"((A_HI)[MR >= 2 ? 1 : 0]),               \
+#define TQT_QAI4_PAIR_BODY_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV(B_LOAD)               \
+    "vsetvli zero, %[vl], e8, m1, ta, ma\n\t" B_LOAD                                    \
+    "vand.vi v0, v2, 0xf\n\t"                                                           \
+    "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"                                          \
+    "vlse32.v v4, (%[offset_b_lane]), %[offset_byte_stride]\n\t"                        \
+    "vzext.vf4 v8, v0\n\t"                                                              \
+    "vfcvt.f.x.v v8, v8\n\t"                                                            \
+    "vfmul.vv v8, v8, v12\n\t"                                                          \
+    "vfadd.vv v8, v8, v4\n\t" TQT_VFMACC_LO_ROWS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV \
+    "vsetvli zero, %[vl], e8, m1, ta, ma\n\t"                                           \
+    "vsrl.vi v1, v2, 4\n\t"                                                             \
+    "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"                                          \
+    "vzext.vf4 v8, v1\n\t"                                                              \
+    "vfcvt.f.x.v v8, v8\n\t"                                                            \
+    "vfmul.vv v8, v8, v12\n\t"                                                          \
+    "vfadd.vv v8, v8, v4\n\t" TQT_VFMACC_HI_ROWS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV
+
+#define TQT_PAIR_ACTIVATION_INPUTS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV(MR, A_LO, A_HI) \
+    [mr] "i"(MR), [a_lo_0] "f"((A_LO)[0]), [a_lo_1] "f"((A_LO)[MR >= 2 ? 1 : 0]),         \
+        [a_lo_2] "f"((A_LO)[MR >= 3 ? 2 : 0]), [a_lo_3] "f"((A_LO)[MR >= 4 ? 3 : 0]),     \
+        [a_hi_0] "f"((A_HI)[0]), [a_hi_1] "f"((A_HI)[MR >= 2 ? 1 : 0]),                   \
         [a_hi_2] "f"((A_HI)[MR >= 3 ? 2 : 0]), [a_hi_3] "f"((A_HI)[MR >= 4 ? 3 : 0])
 
-#define TQT_QSI4_PAIR_CLOBBERS_KERNEL_BQ                                                         \
-    "v0", "v1", "v2", "v8", "v9", "v10", "v11", "v16", "v17", "v18", "v19", "v20", "v21", "v22", \
-        "v23", "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31", "memory"
+#define TQT_QSI4_PAIR_CLOBBERS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV                           \
+    "v0", "v1", "v2", "v3", "v8", "v9", "v10", "v11", "v16", "v17", "v18", "v19", "v20", "v21", \
+        "v22", "v23", "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31", "memory"
 
-#define TQT_QAI4_PAIR_CLOBBERS_KERNEL_BQ                                                           \
+#define TQT_QAI4_PAIR_CLOBBERS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV                              \
     "v0", "v1", "v2", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v16", "v17", "v18",       \
         "v19", "v20", "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31", \
         "memory"
 
 template <size_t MR>
-static inline void tqt_dot_bt_pair_fp32_qsi4c2_kernel_bq(size_t vl, const uint8_t *b_col,
-                                                         size_t b_byte_stride, const float a_lo[MR],
-                                                         const float a_hi[MR])
+static inline void tqt_dot_bt_pair_fp32_qsi4c2_kernel_gemm_i8_i4_4x1vl_blockquant_rvv(
+    size_t vl, const uint8_t *b_col, size_t b_byte_stride, const float a_lo[MR],
+    const float a_hi[MR], const int8_t *lut)
 {
     static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
-    asm volatile(TQT_QSI4_PAIR_BODY_KERNEL_BQ("vlse8.v v2, (%[b_col]), %[b_byte_stride]\n\t")
+    if (lut) {
+        asm volatile(
+            TQT_LUT4_PAIR_BODY_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV(
+                "vlse8.v v2, (%[b_col]), %[b_byte_stride]\n\t")
+            :
+            : [vl] "r"(vl), [b_col] "r"(b_col), [b_byte_stride] "r"(b_byte_stride), [lut] "r"(lut),
+              TQT_PAIR_ACTIVATION_INPUTS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV(MR, a_lo, a_hi)
+            : TQT_QSI4_PAIR_CLOBBERS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV);
+    } else {
+        asm volatile(
+            TQT_QSI4_PAIR_BODY_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV(
+                "vlse8.v v2, (%[b_col]), %[b_byte_stride]\n\t")
+            :
+            : [vl] "r"(vl), [b_col] "r"(b_col), [b_byte_stride] "r"(b_byte_stride),
+              [negative_eight] "f"(-8.0f),
+              TQT_PAIR_ACTIVATION_INPUTS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV(MR, a_lo, a_hi)
+            : TQT_QSI4_PAIR_CLOBBERS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV);
+    }
+}
+
+template <size_t MR>
+static inline void tqt_dot_b_pair_fp32_qsi4c2_kernel_gemm_i8_i4_4x1vl_blockquant_rvv(
+    size_t vl, const uint8_t *b_col, const float a_lo[MR], const float a_hi[MR], const int8_t *lut)
+{
+    static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
+    if (lut) {
+        asm volatile(
+            TQT_LUT4_PAIR_BODY_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV("vle8.v v2, (%[b_col])\n\t")
+            :
+            : [vl] "r"(vl), [b_col] "r"(b_col), [lut] "r"(lut),
+              TQT_PAIR_ACTIVATION_INPUTS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV(MR, a_lo, a_hi)
+            : TQT_QSI4_PAIR_CLOBBERS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV);
+    } else {
+        asm volatile(
+            TQT_QSI4_PAIR_BODY_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV("vle8.v v2, (%[b_col])\n\t")
+            :
+            : [vl] "r"(vl), [b_col] "r"(b_col), [negative_eight] "f"(-8.0f),
+              TQT_PAIR_ACTIVATION_INPUTS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV(MR, a_lo, a_hi)
+            : TQT_QSI4_PAIR_CLOBBERS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV);
+    }
+}
+
+template <size_t MR>
+static inline void tqt_dot_bt_pair_fp32_qai4c2_kernel_gemm_i8_i4_4x1vl_blockquant_rvv(
+    size_t vl, const uint8_t *b_col, size_t b_byte_stride, const float *offset_b_lane,
+    size_t offset_byte_stride, const float a_lo[MR], const float a_hi[MR])
+{
+    static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
+    asm volatile(TQT_QAI4_PAIR_BODY_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV(
+                     "vlse8.v v2, (%[b_col]), %[b_byte_stride]\n\t")
                  :
                  : [vl] "r"(vl), [b_col] "r"(b_col), [b_byte_stride] "r"(b_byte_stride),
-                   [negative_eight] "f"(-8.0f), TQT_PAIR_ACTIVATION_INPUTS_KERNEL_BQ(MR, a_lo, a_hi)
-                 : TQT_QSI4_PAIR_CLOBBERS_KERNEL_BQ);
+                   [offset_b_lane] "r"(offset_b_lane), [offset_byte_stride] "r"(offset_byte_stride),
+                   TQT_PAIR_ACTIVATION_INPUTS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV(MR, a_lo, a_hi)
+                 : TQT_QAI4_PAIR_CLOBBERS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV);
 }
 
 template <size_t MR>
-static inline void tqt_dot_b_pair_fp32_qsi4c2_kernel_bq(size_t vl, const uint8_t *b_col,
-                                                        const float a_lo[MR], const float a_hi[MR])
+static inline void tqt_dot_b_pair_fp32_qai4c2_kernel_gemm_i8_i4_4x1vl_blockquant_rvv(
+    size_t vl, const uint8_t *b_col, const float *offset_b_lane, size_t offset_byte_stride,
+    const float a_lo[MR], const float a_hi[MR])
 {
     static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
-    asm volatile(TQT_QSI4_PAIR_BODY_KERNEL_BQ("vle8.v v2, (%[b_col])\n\t")
-                 :
-                 : [vl] "r"(vl), [b_col] "r"(b_col), [negative_eight] "f"(-8.0f),
-                   TQT_PAIR_ACTIVATION_INPUTS_KERNEL_BQ(MR, a_lo, a_hi)
-                 : TQT_QSI4_PAIR_CLOBBERS_KERNEL_BQ);
+    asm volatile(
+        TQT_QAI4_PAIR_BODY_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV("vle8.v v2, (%[b_col])\n\t")
+        :
+        : [vl] "r"(vl), [b_col] "r"(b_col), [offset_b_lane] "r"(offset_b_lane),
+          [offset_byte_stride] "r"(offset_byte_stride),
+          TQT_PAIR_ACTIVATION_INPUTS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV(MR, a_lo, a_hi)
+        : TQT_QAI4_PAIR_CLOBBERS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV);
 }
 
-template <size_t MR>
-static inline void tqt_dot_bt_pair_fp32_qai4c2_kernel_bq(size_t vl, const uint8_t *b_col,
-                                                         size_t b_byte_stride,
-                                                         const float *zp_b_lane,
-                                                         size_t zp_byte_stride,
-                                                         const float a_lo[MR], const float a_hi[MR])
-{
-    static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
-    asm volatile(TQT_QAI4_PAIR_BODY_KERNEL_BQ("vlse8.v v2, (%[b_col]), %[b_byte_stride]\n\t")
-                 :
-                 : [vl] "r"(vl), [b_col] "r"(b_col), [b_byte_stride] "r"(b_byte_stride),
-                   [zp_b_lane] "r"(zp_b_lane), [zp_byte_stride] "r"(zp_byte_stride),
-                   TQT_PAIR_ACTIVATION_INPUTS_KERNEL_BQ(MR, a_lo, a_hi)
-                 : TQT_QAI4_PAIR_CLOBBERS_KERNEL_BQ);
-}
-
-template <size_t MR>
-static inline void tqt_dot_b_pair_fp32_qai4c2_kernel_bq(size_t vl, const uint8_t *b_col,
-                                                        const float *zp_b_lane,
-                                                        size_t zp_byte_stride, const float a_lo[MR],
-                                                        const float a_hi[MR])
-{
-    static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
-    asm volatile(TQT_QAI4_PAIR_BODY_KERNEL_BQ("vle8.v v2, (%[b_col])\n\t")
-                 :
-                 : [vl] "r"(vl), [b_col] "r"(b_col), [zp_b_lane] "r"(zp_b_lane),
-                   [zp_byte_stride] "r"(zp_byte_stride),
-                   TQT_PAIR_ACTIVATION_INPUTS_KERNEL_BQ(MR, a_lo, a_hi)
-                 : TQT_QAI4_PAIR_CLOBBERS_KERNEL_BQ);
-}
-
-#undef TQT_QAI4_PAIR_CLOBBERS_KERNEL_BQ
-#undef TQT_QSI4_PAIR_CLOBBERS_KERNEL_BQ
-#undef TQT_PAIR_ACTIVATION_INPUTS_KERNEL_BQ
-#undef TQT_QAI4_PAIR_BODY_KERNEL_BQ
-#undef TQT_QSI4_PAIR_BODY_KERNEL_BQ
-#undef TQT_VFMACC_HI_ROWS_KERNEL_BQ
-#undef TQT_VFMACC_LO_ROWS_KERNEL_BQ
+#undef TQT_QAI4_PAIR_CLOBBERS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV
+#undef TQT_QSI4_PAIR_CLOBBERS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV
+#undef TQT_PAIR_ACTIVATION_INPUTS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV
+#undef TQT_QAI4_PAIR_BODY_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV
+#undef TQT_LUT4_PAIR_BODY_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV
+#undef TQT_QSI4_PAIR_BODY_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV
+#undef TQT_VFMACC_HI_ROWS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV
+#undef TQT_VFMACC_LO_ROWS_KERNEL_GEMM_I8_I4_4X1VL_BLOCKQUANT_RVV
 
 // ============================================================================
 // Multiply each accumulator row by the per-row scale_a[r] (fp32). Used by
@@ -234,7 +273,8 @@ static inline void tqt_dot_b_pair_fp32_qai4c2_kernel_bq(size_t vl, const uint8_t
 // ============================================================================
 
 template <size_t MR>
-static inline void tqt_apply_scale_a_per_row_kernel_bq(size_t vl, const float scale_a[MR])
+static inline void tqt_apply_scale_a_per_row_kernel_gemm_i8_i4_4x1vl_blockquant_rvv(
+    size_t vl, const float scale_a[MR])
 {
     static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
 

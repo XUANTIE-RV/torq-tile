@@ -228,7 +228,6 @@ inline void run_1xnbias_reqi32toi8_gemm_test(
     std::vector<int8_t> A_i8(m * k);
     std::vector<int8_t> B_i8(n * k);  // [N, K]
     std::vector<int32_t> bias_i32(n);
-    std::vector<int32_t> bias_fused(n);
 
     // Quantize A (global asymmetric)
     quantize_matrix_i8(A_fp32.data(), A_i8.data(), m * k, scale_a, zp_a);
@@ -243,9 +242,6 @@ inline void run_1xnbias_reqi32toi8_gemm_test(
         float bias_scale = scale_a * scale_b[ch];
         bias_i32[ch] = quantize_bias_i32(bias_fp32[ch], bias_scale);
     }
-
-    // Fuse zero_point_a into bias: bias_fused[n] = bias[n] - zp_a * sum(B_i8[n, 0..K-1])
-    fuse_zp_to_bias(bias_fused.data(), bias_i32.data(), B_i8.data(), zp_a, n, k);
 
     // Compute fp32 reference: D_ref = A[M,K] * B[N,K]^T + bias[1,N]
     std::vector<float> D_ref_fp32(m * n);
@@ -287,7 +283,7 @@ inline void run_1xnbias_reqi32toi8_gemm_test(
 
             const void *a_ptr = reinterpret_cast<const char *>(A_i8.data()) + a_offset;
             const void *b_ptr = reinterpret_cast<const char *>(B_i8.data()) + b_offset;
-            const void *bias_ptr = reinterpret_cast<const char *>(bias_fused.data()) + bias_offset;
+            const void *bias_ptr = reinterpret_cast<const char *>(bias_i32.data()) + bias_offset;
             void *d_ptr = reinterpret_cast<char *>(D_i8.data()) + d_offset;
 
             // Note: ldb = k because B is [N,K] transposed format
@@ -350,7 +346,6 @@ inline void run_mx1bias_reqi32toi8_gemm_test(
     std::vector<int8_t> A_i8(m * k);
     std::vector<int8_t> B_i8(k * n);
     std::vector<int32_t> bias_i32(m);
-    std::vector<int32_t> bias_fused(m);
 
     // Quantize B (global asymmetric)
     quantize_matrix_i8(B_fp32.data(), B_i8.data(), k * n, scale_b, zp_b);
@@ -365,9 +360,6 @@ inline void run_mx1bias_reqi32toi8_gemm_test(
         float bias_scale = scale_a[ch] * scale_b;
         bias_i32[ch] = quantize_bias_i32(bias_fp32[ch], bias_scale);
     }
-
-    // Fuse zero_point_b into bias: bias_fused[m] = bias[m] - zp_b * sum(A_i8[m, 0..K-1])
-    fuse_zp_to_bias(bias_fused.data(), bias_i32.data(), A_i8.data(), zp_b, m, k);
 
     // Compute fp32 reference: D_ref = A[M,K] * B[K,N] + bias[M,1]
     std::vector<float> D_ref_fp32(m * n);
@@ -409,7 +401,7 @@ inline void run_mx1bias_reqi32toi8_gemm_test(
 
             const void *a_ptr = reinterpret_cast<const char *>(A_i8.data()) + a_offset;
             const void *b_ptr = reinterpret_cast<const char *>(B_i8.data()) + b_offset;
-            const void *bias_ptr = reinterpret_cast<const char *>(bias_fused.data()) + bias_offset;
+            const void *bias_ptr = reinterpret_cast<const char *>(bias_i32.data()) + bias_offset;
             void *d_ptr = reinterpret_cast<char *>(D_i8.data()) + d_offset;
 
             // Note: ldb = n because B is [K,N] row major format
@@ -641,7 +633,6 @@ inline void run_packed_1xnbias_reqi32toi8_gemm_test(
     std::vector<int8_t> A_i8(m * k);
     std::vector<int8_t> B_i8(n * k);  // [N, K]
     std::vector<int32_t> bias_i32(n);
-    std::vector<int32_t> bias_fused(n);
 
     // Quantize A (global asymmetric)
     quantize_matrix_i8(A_fp32.data(), A_i8.data(), m * k, scale_a, zp_a);
@@ -656,9 +647,6 @@ inline void run_packed_1xnbias_reqi32toi8_gemm_test(
         float bias_scale = scale_a * scale_b[ch];
         bias_i32[ch] = quantize_bias_i32(bias_fp32[ch], bias_scale);
     }
-
-    // Fuse zero_point_a into bias: bias_fused[n] = bias[n] - zp_a * sum(B_i8[n, 0..K-1])
-    fuse_zp_to_bias(bias_fused.data(), bias_i32.data(), B_i8.data(), zp_a, n, k);
 
     // Compute fp32 reference: D_ref = A[M,K] * B[N,K]^T + bias[1,N]
     std::vector<float> D_ref_fp32(m * n);
@@ -711,7 +699,7 @@ inline void run_packed_1xnbias_reqi32toi8_gemm_test(
 
             const void *a_ptr = A_packed.data() + a_packed_offset;
             const void *b_ptr = B_packed.data() + b_packed_offset;
-            const void *bias_ptr = reinterpret_cast<const char *>(bias_fused.data()) + bias_offset;
+            const void *bias_ptr = reinterpret_cast<const char *>(bias_i32.data()) + bias_offset;
             void *d_ptr = reinterpret_cast<char *>(D_i8.data()) + d_offset;
 
             // Note: ldb = k because B is [N,K] transposed format
@@ -774,7 +762,6 @@ inline void run_packed_mx1bias_reqi32toi8_gemm_test(
     std::vector<int8_t> A_i8(m * k);
     std::vector<int8_t> B_i8(k * n);
     std::vector<int32_t> bias_i32(m);
-    std::vector<int32_t> bias_fused(m);
 
     // Quantize B (global asymmetric)
     quantize_matrix_i8(B_fp32.data(), B_i8.data(), k * n, scale_b, zp_b);
@@ -789,9 +776,6 @@ inline void run_packed_mx1bias_reqi32toi8_gemm_test(
         float bias_scale = scale_a[ch] * scale_b;
         bias_i32[ch] = quantize_bias_i32(bias_fp32[ch], bias_scale);
     }
-
-    // Fuse zero_point_b into bias: bias_fused[m] = bias[m] - zp_b * sum(A_i8[m, 0..K-1])
-    fuse_zp_to_bias(bias_fused.data(), bias_i32.data(), A_i8.data(), zp_b, m, k);
 
     // Compute fp32 reference: D_ref = A[M,K] * B[K,N] + bias[M,1]
     std::vector<float> D_ref_fp32(m * n);
@@ -844,7 +828,7 @@ inline void run_packed_mx1bias_reqi32toi8_gemm_test(
 
             const void *a_ptr = A_packed.data() + a_packed_offset;
             const void *b_ptr = B_packed.data() + b_packed_offset;
-            const void *bias_ptr = reinterpret_cast<const char *>(bias_fused.data()) + bias_offset;
+            const void *bias_ptr = reinterpret_cast<const char *>(bias_i32.data()) + bias_offset;
             void *d_ptr = reinterpret_cast<char *>(D_i8.data()) + d_offset;
 
             // Note: ldb = k for packed B format
@@ -948,7 +932,6 @@ inline void run_b_only_packed_1xnbias_reqi32toi8_gemm_test(
     std::vector<int8_t> A_i8(m * k);
     std::vector<int8_t> B_i8(n * k);  // [N, K]
     std::vector<int32_t> bias_i32(n);
-    std::vector<int32_t> bias_fused(n);
 
     // Quantize A (global asymmetric)
     quantize_matrix_i8(A_fp32.data(), A_i8.data(), m * k, scale_a, zp_a);
@@ -963,9 +946,6 @@ inline void run_b_only_packed_1xnbias_reqi32toi8_gemm_test(
         float bias_scale = scale_a * scale_b[ch];
         bias_i32[ch] = quantize_bias_i32(bias_fp32[ch], bias_scale);
     }
-
-    // Fuse zero_point_a into bias: bias_fused[n] = bias[n] - zp_a * sum(B_i8[n, 0..K-1])
-    fuse_zp_to_bias(bias_fused.data(), bias_i32.data(), B_i8.data(), zp_a, n, k);
 
     // Compute fp32 reference: D_ref = A[M,K] * B[N,K]^T + bias[1,N]
     std::vector<float> D_ref_fp32(m * n);
@@ -1014,7 +994,7 @@ inline void run_b_only_packed_1xnbias_reqi32toi8_gemm_test(
 
             const void *a_ptr = reinterpret_cast<const char *>(A_i8.data()) + a_offset;
             const void *b_ptr = B_packed.data() + b_packed_offset;
-            const void *bias_ptr = reinterpret_cast<const char *>(bias_fused.data()) + bias_offset;
+            const void *bias_ptr = reinterpret_cast<const char *>(bias_i32.data()) + bias_offset;
             void *d_ptr = reinterpret_cast<char *>(D_i8.data()) + d_offset;
 
             funcs.run_gemm(actual_m, actual_n, k, a_ptr, k, 0, b_ptr, k, 0, nullptr, n, d_ptr, n,
@@ -1747,7 +1727,34 @@ struct PackedClampFpGemmFuncs
 //   D: T_D output
 // ============================================================================
 
-template <typename T_D>
+// Check the quantized matrix equation separately from the original-F32 reference.
+// Its tight tolerance catches incorrect metadata windows hidden by quantization noise.
+template <typename T_D, typename BiasT>
+inline void check_clamp_fp_i8_quantized_output(size_t m, size_t n, size_t k, const int8_t *a,
+                                               const int8_t *bt, const BiasT *bias,
+                                               const tqt_qai8dxp_qsi8cxp_params &params,
+                                               const T_D *output)
+{
+    for (size_t row = 0; row < m; ++row) {
+        for (size_t col = 0; col < n; ++col) {
+            int64_t dot = 0;
+            for (size_t q = 0; q < k; ++q)
+                dot += (int64_t(a[row * k + q]) - params.zero_point_a[row]) * bt[col * k + q];
+            double product = double(dot) * params.scale_a[row] * params.scale_b[col];
+            // Existing narrow-bias variants narrow the product before adding bias.
+            if constexpr (!std::is_same<BiasT, float>::value)
+                product = to_float<T_D>(to_target_type<T_D>(product));
+            const double real = product + double(to_float<BiasT>(bias[col]));
+            const float expected = to_float<T_D>(to_target_type<T_D>(real));
+            const float relative_tolerance = std::is_same<T_D, float>::value ? 1e-5f : 1e-3f;
+            EXPECT_NEAR(to_float<T_D>(output[row * n + col]), expected,
+                        std::max(1e-5f, std::abs(expected) * relative_tolerance))
+                << "row=" << row << " col=" << col;
+        }
+    }
+}
+
+template <typename T_D, typename BiasT = float>
 inline void run_1xnbias_clamp_fp_qai8dxp_qsi8cxp_gemm_test(
     const GemmTestParams &params, const NonPackedClampFpGemmFuncs<T_D> &funcs)
 {
@@ -1764,6 +1771,11 @@ inline void run_1xnbias_clamp_fp_qai8dxp_qsi8cxp_gemm_test(
     UniformRandomGenerator<float> bias_gen(-10.0f, 10.0f, 123);
     std::vector<float> bias_fp32(n);
     bias_gen.fill_matrix(bias_fp32.data(), 1, n);
+    std::vector<BiasT> bias_data(n);
+    for (size_t j = 0; j < n; ++j) {
+        bias_data[j] = static_cast<BiasT>(bias_fp32[j]);
+        bias_fp32[j] = static_cast<float>(bias_data[j]);
+    }
 
     // Per-row asymmetric int8 quantization for A
     std::vector<float> scale_a_vec(m);
@@ -1793,12 +1805,6 @@ inline void run_1xnbias_clamp_fp_qai8dxp_qsi8cxp_gemm_test(
                                  nullptr, n, D_ref_fp32.data(), n, bias_fp32.data(), BiasMode::k1xN,
                                  -FLT_MAX, FLT_MAX);
 
-    // Convert bias to target type T_D
-    std::vector<T_D> bias_TD(n);
-    for (size_t j = 0; j < n; ++j) {
-        bias_TD[j] = to_target_type<T_D>(bias_fp32[j]);
-    }
-
     tqt_qai8dxp_qsi8cxp_params qparams;
     qparams.scale_a = scale_a_vec.data();
     qparams.zero_point_a = zp_a_vec.data();
@@ -1824,13 +1830,20 @@ inline void run_1xnbias_clamp_fp_qai8dxp_qsi8cxp_gemm_test(
 
             const void *a_ptr = reinterpret_cast<const char *>(A_i8.data()) + a_offset;
             const void *b_ptr = reinterpret_cast<const char *>(B_i8.data()) + b_offset;
-            const void *bias_ptr = reinterpret_cast<const char *>(bias_TD.data()) + bias_offset;
+            const BiasT *bias_ptr = bias_data.data() + bias_offset / sizeof(BiasT);
             void *d_ptr = reinterpret_cast<char *>(D_act.data()) + d_offset;
 
+            auto tile_params = qparams;
+            tile_params.scale_a += m_idx;
+            tile_params.zero_point_a += m_idx;
+            tile_params.scale_b += n_idx;
             funcs.run_gemm(actual_m, actual_n, k, a_ptr, k, 0, b_ptr, k, 0, nullptr, n, d_ptr, n,
-                           bias_ptr, clamp_min, clamp_max, &qparams);
+                           bias_ptr, clamp_min, clamp_max, &tile_params);
         }
     }
+
+    check_clamp_fp_i8_quantized_output(m, n, k, A_i8.data(), B_i8.data(), bias_data.data(), qparams,
+                                       D_act.data());
 
     // Convert kernel output to fp32 for comparison
     std::vector<float> D_act_fp32(m * n);
@@ -1854,7 +1867,7 @@ inline void run_1xnbias_clamp_fp_qai8dxp_qsi8cxp_gemm_test(
 // Test runner: gemm_1xnbias_clamp_<T_D>_qai8dxp_qsi8cxp (Packed ap_bp)
 // ============================================================================
 
-template <typename T_D>
+template <typename T_D, typename BiasT = float>
 inline void run_packed_1xnbias_clamp_fp_qai8dxp_qsi8cxp_gemm_test(
     const GemmTestParams &params, const PackedClampFpGemmFuncs<T_D> &funcs)
 {
@@ -1871,6 +1884,11 @@ inline void run_packed_1xnbias_clamp_fp_qai8dxp_qsi8cxp_gemm_test(
     UniformRandomGenerator<float> bias_gen(-10.0f, 10.0f, 123);
     std::vector<float> bias_fp32(n);
     bias_gen.fill_matrix(bias_fp32.data(), 1, n);
+    std::vector<BiasT> bias_data(n);
+    for (size_t j = 0; j < n; ++j) {
+        bias_data[j] = static_cast<BiasT>(bias_fp32[j]);
+        bias_fp32[j] = static_cast<float>(bias_data[j]);
+    }
 
     std::vector<float> scale_a_vec(m);
     std::vector<int32_t> zp_a_vec(m);
@@ -1904,11 +1922,6 @@ inline void run_packed_1xnbias_clamp_fp_qai8dxp_qsi8cxp_gemm_test(
                                  nullptr, n, D_ref_fp32.data(), n, bias_fp32.data(), BiasMode::k1xN,
                                  -FLT_MAX, FLT_MAX);
 
-    std::vector<T_D> bias_TD(n);
-    for (size_t j = 0; j < n; ++j) {
-        bias_TD[j] = to_target_type<T_D>(bias_fp32[j]);
-    }
-
     tqt_qai8dxp_qsi8cxp_params qparams;
     qparams.scale_a = scale_a_vec.data();
     qparams.zero_point_a = zp_a_vec.data();
@@ -1934,13 +1947,20 @@ inline void run_packed_1xnbias_clamp_fp_qai8dxp_qsi8cxp_gemm_test(
 
             const void *a_ptr = reinterpret_cast<const char *>(A_packed.data()) + a_offset;
             const void *b_ptr = reinterpret_cast<const char *>(B_packed.data()) + b_offset;
-            const void *bias_ptr = reinterpret_cast<const char *>(bias_TD.data()) + bias_offset;
+            const BiasT *bias_ptr = bias_data.data() + bias_offset / sizeof(BiasT);
             void *d_ptr = reinterpret_cast<char *>(D_act.data()) + d_offset;
 
+            auto tile_params = qparams;
+            tile_params.scale_a += m_idx;
+            tile_params.zero_point_a += m_idx;
+            tile_params.scale_b += n_idx;
             funcs.run_gemm(actual_m, actual_n, k, a_ptr, k, 0, b_ptr, k, 0, nullptr, n, d_ptr, n,
-                           bias_ptr, clamp_min, clamp_max, &qparams);
+                           bias_ptr, clamp_min, clamp_max, &tile_params);
         }
     }
+
+    check_clamp_fp_i8_quantized_output(m, n, k, A_i8.data(), B_i8.data(), bias_data.data(), qparams,
+                                       D_act.data());
 
     std::vector<float> D_act_fp32(m * n);
     for (size_t i = 0; i < m * n; ++i) {
@@ -2140,11 +2160,11 @@ inline void quantize_b_qsi4c2(const float *B_fp32, size_t n, size_t k, size_t bl
 }
 
 /// Per-block ASYMMETRIC int4 for transposed B [n, k] (qai4c2t).
-/// scale_b is [n, k/bl] fp32 (ldsb), zp_b is [n, k/bl] fp32 (ldzpb).
-/// Nibbles stored ZP=0 unsigned [0, 15]; dequant: (q - zp_b[n, blk]) * scale_b[n, blk].
+/// scale_b is [n, k/bl] fp32 (ldsb), offset_b is [n, k/bl] fp32 (ldob).
+/// Nibbles stored ZP=0 unsigned [0, 15]; dequant: q * scale_b[n, blk] + offset_b[n, blk].
 /// Caller must zero-initialize B_packed (the routine writes nibbles in-place).
 inline void quantize_b_qai4c2(const float *B_fp32, size_t n, size_t k, size_t bl, uint8_t *B_packed,
-                              float *scale_b, float *zp_b, size_t ldsb, size_t ldzpb)
+                              float *scale_b, float *offset_b, size_t ldsb, size_t ldob)
 {
     const size_t num_blocks = k / bl;
     for (size_t row = 0; row < n; ++row) {
@@ -2161,8 +2181,8 @@ inline void quantize_b_qai4c2(const float *B_fp32, size_t n, size_t k, size_t bl
             // qmax = 15, qmin = 0. Asym: s = (fmax - fmin) / (qmax - qmin); zp = -fmin / s.
             float s = (fmax - fmin) / 15.0f;
             if (s == 0.0f) {
-                scale_b[row * ldsb + blk] = 1.0f;
-                zp_b[row * ldzpb + blk] = 0.0f;
+                scale_b[row * ldsb + blk] = 0.0f;
+                offset_b[row * ldob + blk] = fmin;
                 for (size_t i = 0; i < bl; ++i) {
                     const size_t kidx = blk * bl + i;
                     const size_t byte_idx = row * (k / 2) + kidx / 2;
@@ -2181,7 +2201,7 @@ inline void quantize_b_qai4c2(const float *B_fp32, size_t n, size_t k, size_t bl
             if (zp_f > 15.0f)
                 zp_f = 15.0f;
             scale_b[row * ldsb + blk] = s;
-            zp_b[row * ldzpb + blk] = zp_f;
+            offset_b[row * ldob + blk] = -zp_f * s;
             for (size_t i = 0; i < bl; ++i) {
                 float q = std::nearbyintf(blk_ptr[i] / s + zp_f);
                 if (q > 15.0f)
@@ -2249,7 +2269,7 @@ inline void ref_qai8dx_qsi4c2(size_t m, size_t n, size_t k, size_t bl, const int
 }
 
 /// Class 2: qsi8d2 × qsi4c2t (per-block on both sides).
-/// acc = sum_blk(scale_a[m, blk] * scale_b[n, blk]
+/// acc = sum_blk(scale_a[m, blk]
 ///         * sum_{k in blk}(qa[m, k] * qb_signed[n, k]))
 inline void ref_qsi8d2_qsi4c2(size_t m, size_t n, size_t k, size_t bl, const int8_t *A_i8,
                               const uint8_t *B_packed, const float *scale_a, size_t ldsa,
@@ -2286,12 +2306,12 @@ inline void ref_qsi8d2_qsi4c2(size_t m, size_t n, size_t k, size_t bl, const int
     }
 }
 
-/// Class 3: qsi8d2 × qai4c2t (per-block on both sides + ASYM B with fp zp).
-/// acc = sum_blk(scale_a[m, blk] * scale_b[n, blk]
-///         * sum_{k in blk}(qa[m, k] * (qb_unsigned[n, k] - zp_b[n, blk])))
+/// Class 3: qsi8d2 × qai4c2t (per-block on both sides + ASYM B with independent FP32 offset).
+/// acc = sum_blk(scale_a[m, blk]
+///         * sum_{k in blk}(qa[m, k] * (qb_unsigned[n, k] * scale_b[n, blk] + offset_b[n, blk])))
 inline void ref_qsi8d2_qai4c2(size_t m, size_t n, size_t k, size_t bl, const int8_t *A_i8,
                               const uint8_t *B_packed, const float *scale_a, size_t ldsa,
-                              const float *scale_b, size_t ldsb, const float *zp_b, size_t ldzpb,
+                              const float *scale_b, size_t ldsb, const float *offset_b, size_t ldob,
                               const float *C, const float *bias, float *D, float clamp_min,
                               float clamp_max)
 {
@@ -2300,16 +2320,16 @@ inline void ref_qsi8d2_qai4c2(size_t m, size_t n, size_t k, size_t bl, const int
         for (size_t ni = 0; ni < n; ++ni) {
             float acc = 0.0f;
             for (size_t blk = 0; blk < num_blocks; ++blk) {
-                float zpb = zp_b[ni * ldzpb + blk];
+                float ob = offset_b[ni * ldob + blk];
                 float blk_acc = 0.0f;
                 for (size_t kk = 0; kk < bl; ++kk) {
                     size_t kidx = blk * bl + kk;
                     uint8_t byte = B_packed[ni * (k / 2) + kidx / 2];
                     float qb = (kidx & 1) ? (float)(byte >> 4) : (float)(byte & 0xf);
                     float qa = (float)A_i8[mi * k + kidx];
-                    blk_acc += qa * (qb - zpb);
+                    blk_acc += qa * (qb * scale_b[ni * ldsb + blk] + ob);
                 }
-                acc += scale_a[mi * ldsa + blk] * scale_b[ni * ldsb + blk] * blk_acc;
+                acc += scale_a[mi * ldsa + blk] * blk_acc;
             }
             float result = acc;
             if (C)
@@ -2500,7 +2520,7 @@ inline void check_w4a8_nonzero_origin(const GemmTestParams &params,
     }
 }
 
-template <typename TD>
+template <typename TD, typename BiasT = float>
 inline void run_w4a8_gemm_test(const GemmTestParams &params, const W4A8GemmFuncs<TD> &funcs)
 {
     const size_t m = params.m;
@@ -2533,10 +2553,10 @@ inline void run_w4a8_gemm_test(const GemmTestParams &params, const W4A8GemmFuncs
         UniformRandomGenerator<TD> c_gen(-2.0f, 2.0f, 42);
         c_gen.fill_matrix(C_data.data(), m, n);
     }
-    std::vector<TD> bias_data;
+    std::vector<BiasT> bias_data;
     if (params.has_bias) {
         bias_data.resize(n);
-        UniformRandomGenerator<TD> bias_gen(-0.5f, 0.5f, 7);
+        UniformRandomGenerator<BiasT> bias_gen(-0.5f, 0.5f, 7);
         bias_gen.fill_matrix(bias_data.data(), 1, n);
     }
 
@@ -2592,7 +2612,7 @@ inline void run_w4a8_gemm_test(const GemmTestParams &params, const W4A8GemmFuncs
     check_w4a8_nonzero_origin(params, funcs, A_i8, B_packed, qparams);
 }
 
-template <typename TD>
+template <typename TD, typename BiasT = float>
 inline void run_w4a8_packed_gemm_test(const GemmTestParams &params,
                                       const W4A8PackedGemmFuncs<TD> &funcs)
 {
@@ -2625,10 +2645,10 @@ inline void run_w4a8_packed_gemm_test(const GemmTestParams &params,
         UniformRandomGenerator<TD> c_gen(-2.0f, 2.0f, 42);
         c_gen.fill_matrix(C_data.data(), m, n);
     }
-    std::vector<TD> bias_data;
+    std::vector<BiasT> bias_data;
     if (params.has_bias) {
         bias_data.resize(n);
-        UniformRandomGenerator<TD> bias_gen(-0.5f, 0.5f, 7);
+        UniformRandomGenerator<BiasT> bias_gen(-0.5f, 0.5f, 7);
         bias_gen.fill_matrix(bias_data.data(), 1, n);
     }
 
@@ -2861,7 +2881,9 @@ inline void run_w4a8_reqi8_gemm_test(const GemmTestParams &params, const W4A8Req
     int32_t zp_d;
     compute_asym_quant_params_i8(D_ref_fp32.data(), m * n, scale_d, zp_d);
 
-    struct tqt_qai8_qai8dx_qsi4cx_params qparams;
+    struct tqt_qai8_qai8dx_qsi4cx_params qparams
+    {
+    };
     qparams.scale_a = scale_a.data();
     qparams.zero_point_a = zp_a.data();
     qparams.scale_b = scale_b.data();
@@ -2940,7 +2962,9 @@ inline void run_w4a8_reqi8_packed_gemm_test(const GemmTestParams &params,
     int32_t zp_d;
     compute_asym_quant_params_i8(D_ref_fp32.data(), m * n, scale_d, zp_d);
 
-    struct tqt_qai8_qai8dx_qsi4cx_params qparams;
+    struct tqt_qai8_qai8dx_qsi4cx_params qparams
+    {
+    };
     qparams.scale_a = scale_a.data();
     qparams.zero_point_a = zp_a.data();
     qparams.scale_b = scale_b.data();
@@ -3133,7 +3157,7 @@ struct W4A8BQ_Qsi8d2_Qai4c2_PackedFuncs
 // round_through_td<TD>      : convert std::vector<float> to std::vector<TD>
 // ============================================================================
 
-template <typename TD>
+template <typename TD, typename BiasT = float>
 struct W4A8BQInputs
 {
     size_t m;
@@ -3145,7 +3169,7 @@ struct W4A8BQInputs
     std::vector<float> A_fp32;
     std::vector<float> B_fp32;
     std::vector<TD> C_data;
-    std::vector<TD> bias_data;
+    std::vector<BiasT> bias_data;
     std::vector<float> C_fp32;
     std::vector<float> bias_fp32;
     bool has_c;
@@ -3156,10 +3180,10 @@ struct W4A8BQInputs
     TD clamp_max_td;
 };
 
-template <typename TD>
-inline W4A8BQInputs<TD> make_w4a8_bq_inputs(const GemmTestParams &params)
+template <typename TD, typename BiasT = float>
+inline W4A8BQInputs<TD, BiasT> make_w4a8_bq_inputs(const GemmTestParams &params)
 {
-    W4A8BQInputs<TD> in;
+    W4A8BQInputs<TD, BiasT> in;
     in.m = params.m;
     in.n = params.n;
     in.k = params.k;
@@ -3190,7 +3214,7 @@ inline W4A8BQInputs<TD> make_w4a8_bq_inputs(const GemmTestParams &params)
     }
     if (in.has_bias) {
         in.bias_data.resize(in.n);
-        UniformRandomGenerator<TD> bias_gen(-0.5f, 0.5f, 7);
+        UniformRandomGenerator<BiasT> bias_gen(-0.5f, 0.5f, 7);
         bias_gen.fill_matrix(in.bias_data.data(), 1, in.n);
         in.bias_fp32.resize(in.n);
         for (size_t i = 0; i < in.n; ++i) {
@@ -3332,11 +3356,11 @@ inline void check_w4a8_bq_nonzero_packed_origin(
 // ============================================================================
 
 // ---------- Class 1 unpacked: qai8dx × qsi4c2t ----------
-template <typename TD>
+template <typename TD, typename BiasT = float>
 inline void run_w4a8_bq_qai8dx_qsi4c2t_test(const GemmTestParams &params,
                                             const W4A8BQ_Qai8dx_Qsi4c2_Funcs<TD> &funcs)
 {
-    auto in = make_w4a8_bq_inputs<TD>(params);
+    auto in = make_w4a8_bq_inputs<TD, BiasT>(params);
     const size_t lda = in.k;
     const size_t ldb = in.k;
     const size_t ldc = in.n;
@@ -3358,7 +3382,9 @@ inline void run_w4a8_bq_qai8dx_qsi4c2t_test(const GemmTestParams &params,
                       in.clamp_min_f, in.clamp_max_f);
     auto D_ref = round_through_td<TD>(D_ref_fp32);
 
-    struct tqt_qai8dx_qsi4c2_params qparams;
+    struct tqt_qai8dx_qsi4c2_params qparams
+    {
+    };
     qparams.scale_a = scale_a.data();
     qparams.zero_point_a = zp_a.data();
     qparams.scale_b = scale_b.data();
@@ -3377,11 +3403,11 @@ inline void run_w4a8_bq_qai8dx_qsi4c2t_test(const GemmTestParams &params,
 }
 
 // ---------- Class 1 packed: qai8dxp × qsi4c2p ----------
-template <typename TD>
+template <typename TD, typename BiasT = float>
 inline void run_w4a8_bq_qai8dxp_qsi4c2p_test(const GemmTestParams &params,
                                              const W4A8BQ_Qai8dx_Qsi4c2_PackedFuncs<TD> &funcs)
 {
-    auto in = make_w4a8_bq_inputs<TD>(params);
+    auto in = make_w4a8_bq_inputs<TD, BiasT>(params);
     const size_t lda = in.k;
     const size_t ldb = in.k;
     const size_t ldc = in.n;
@@ -3403,7 +3429,9 @@ inline void run_w4a8_bq_qai8dxp_qsi4c2p_test(const GemmTestParams &params,
                       in.clamp_min_f, in.clamp_max_f);
     auto D_ref = round_through_td<TD>(D_ref_fp32);
 
-    struct tqt_qai8dx_qsi4c2_params qparams;
+    struct tqt_qai8dx_qsi4c2_params qparams
+    {
+    };
     qparams.scale_a = scale_a.data();
     qparams.zero_point_a = zp_a.data();
     qparams.scale_b = scale_b.data();
@@ -3430,11 +3458,11 @@ inline void run_w4a8_bq_qai8dxp_qsi4c2p_test(const GemmTestParams &params,
 }
 
 // ---------- Class 2 unpacked: qsi8d2 × qsi4c2t ----------
-template <typename TD>
+template <typename TD, typename BiasT = float>
 inline void run_w4a8_bq_qsi8d2_qsi4c2t_test(const GemmTestParams &params,
                                             const W4A8BQ_Qsi8d2_Qsi4c2_Funcs<TD> &funcs)
 {
-    auto in = make_w4a8_bq_inputs<TD>(params);
+    auto in = make_w4a8_bq_inputs<TD, BiasT>(params);
     const size_t lda = in.k;
     const size_t ldb = in.k;
     const size_t ldc = in.n;
@@ -3455,7 +3483,9 @@ inline void run_w4a8_bq_qsi8d2_qsi4c2t_test(const GemmTestParams &params,
                       in.clamp_min_f, in.clamp_max_f);
     auto D_ref = round_through_td<TD>(D_ref_fp32);
 
-    struct tqt_qsi8d2_qsi4c2_params qparams;
+    struct tqt_qsi8d2_qsi4c2_params qparams
+    {
+    };
     qparams.scale_a = scale_a.data();
     qparams.ldsa = in.ldsa;
     qparams.scale_b = scale_b.data();
@@ -3475,11 +3505,11 @@ inline void run_w4a8_bq_qsi8d2_qsi4c2t_test(const GemmTestParams &params,
 }
 
 // ---------- Class 2 packed: qsi8d2p × qsi4c2p ----------
-template <typename TD>
+template <typename TD, typename BiasT = float>
 inline void run_w4a8_bq_qsi8d2p_qsi4c2p_test(const GemmTestParams &params,
                                              const W4A8BQ_Qsi8d2_Qsi4c2_PackedFuncs<TD> &funcs)
 {
-    auto in = make_w4a8_bq_inputs<TD>(params);
+    auto in = make_w4a8_bq_inputs<TD, BiasT>(params);
     const size_t lda = in.k;
     const size_t ldb = in.k;
     const size_t ldc = in.n;
@@ -3500,7 +3530,9 @@ inline void run_w4a8_bq_qsi8d2p_qsi4c2p_test(const GemmTestParams &params,
                       in.clamp_min_f, in.clamp_max_f);
     auto D_ref = round_through_td<TD>(D_ref_fp32);
 
-    struct tqt_qsi8d2_qsi4c2_params qparams;
+    struct tqt_qsi8d2_qsi4c2_params qparams
+    {
+    };
     qparams.scale_a = scale_a.data();
     qparams.ldsa = in.ldsa;
     qparams.scale_b = scale_b.data();
@@ -3528,16 +3560,16 @@ inline void run_w4a8_bq_qsi8d2p_qsi4c2p_test(const GemmTestParams &params,
 }
 
 // ---------- Class 3 unpacked: qsi8d2 × qai4c2t ----------
-template <typename TD>
+template <typename TD, typename BiasT = float>
 inline void run_w4a8_bq_qsi8d2_qai4c2t_test(const GemmTestParams &params,
                                             const W4A8BQ_Qsi8d2_Qai4c2_Funcs<TD> &funcs)
 {
-    auto in = make_w4a8_bq_inputs<TD>(params);
+    auto in = make_w4a8_bq_inputs<TD, BiasT>(params);
     const size_t lda = in.k;
     const size_t ldb = in.k;
     const size_t ldc = in.n;
     const size_t ldd = in.n;
-    const size_t ldzpb = in.ldsb;
+    const size_t ldob = in.ldsb;
 
     std::vector<int8_t> A_i8(in.m * in.k);
     std::vector<float> scale_a(in.m * in.ldsa);
@@ -3545,13 +3577,13 @@ inline void run_w4a8_bq_qsi8d2_qai4c2t_test(const GemmTestParams &params,
 
     std::vector<uint8_t> B_int4(in.n * (in.k / 2), 0);
     std::vector<float> scale_b(in.n * in.ldsb);
-    std::vector<float> zp_b(in.n * ldzpb);
+    std::vector<float> offset_b(in.n * ldob);
     quantize_b_qai4c2(in.B_fp32.data(), in.n, in.k, in.bl, B_int4.data(), scale_b.data(),
-                      zp_b.data(), in.ldsb, ldzpb);
+                      offset_b.data(), in.ldsb, ldob);
 
     std::vector<float> D_ref_fp32(in.m * in.n);
     ref_qsi8d2_qai4c2(in.m, in.n, in.k, in.bl, A_i8.data(), B_int4.data(), scale_a.data(), in.ldsa,
-                      scale_b.data(), in.ldsb, zp_b.data(), ldzpb,
+                      scale_b.data(), in.ldsb, offset_b.data(), ldob,
                       in.has_c ? in.C_fp32.data() : nullptr,
                       in.has_bias ? in.bias_fp32.data() : nullptr, D_ref_fp32.data(),
                       in.clamp_min_f, in.clamp_max_f);
@@ -3562,8 +3594,8 @@ inline void run_w4a8_bq_qsi8d2_qai4c2t_test(const GemmTestParams &params,
     qparams.ldsa = in.ldsa;
     qparams.scale_b = scale_b.data();
     qparams.ldsb = in.ldsb;
-    qparams.zp_b = zp_b.data();
-    qparams.ldzpb = ldzpb;
+    qparams.offset_b = offset_b.data();
+    qparams.ldob = ldob;
 
     std::vector<TD> D_act(in.m * in.n, to_target_type<TD>(0.0f));
     funcs.run_gemm(in.m, in.n, in.k, in.bl, A_i8.data(), lda, 0, B_int4.data(), ldb, 0,
@@ -3575,21 +3607,21 @@ inline void run_w4a8_bq_qsi8d2_qai4c2t_test(const GemmTestParams &params,
     auto window_params = qparams;
     window_params.scale_a += 1;
     window_params.scale_b += 1;
-    window_params.zp_b += 1;
+    window_params.offset_b += 1;
     check_w4a8_bq_nonzero_origin<TD>(params, funcs, A_i8, B_int4, window_params, qparams);
 }
 
 // ---------- Class 3 packed: qsi8d2p × qai4c2p ----------
-template <typename TD>
+template <typename TD, typename BiasT = float>
 inline void run_w4a8_bq_qsi8d2p_qai4c2p_test(const GemmTestParams &params,
                                              const W4A8BQ_Qsi8d2_Qai4c2_PackedFuncs<TD> &funcs)
 {
-    auto in = make_w4a8_bq_inputs<TD>(params);
+    auto in = make_w4a8_bq_inputs<TD, BiasT>(params);
     const size_t lda = in.k;
     const size_t ldb = in.k;
     const size_t ldc = in.n;
     const size_t ldd = in.n;
-    const size_t ldzpb = in.ldsb;
+    const size_t ldob = in.ldsb;
 
     std::vector<int8_t> A_i8(in.m * in.k);
     std::vector<float> scale_a(in.m * in.ldsa);
@@ -3597,13 +3629,13 @@ inline void run_w4a8_bq_qsi8d2p_qai4c2p_test(const GemmTestParams &params,
 
     std::vector<uint8_t> B_int4(in.n * (in.k / 2), 0);
     std::vector<float> scale_b(in.n * in.ldsb);
-    std::vector<float> zp_b(in.n * ldzpb);
+    std::vector<float> offset_b(in.n * ldob);
     quantize_b_qai4c2(in.B_fp32.data(), in.n, in.k, in.bl, B_int4.data(), scale_b.data(),
-                      zp_b.data(), in.ldsb, ldzpb);
+                      offset_b.data(), in.ldsb, ldob);
 
     std::vector<float> D_ref_fp32(in.m * in.n);
     ref_qsi8d2_qai4c2(in.m, in.n, in.k, in.bl, A_i8.data(), B_int4.data(), scale_a.data(), in.ldsa,
-                      scale_b.data(), in.ldsb, zp_b.data(), ldzpb,
+                      scale_b.data(), in.ldsb, offset_b.data(), ldob,
                       in.has_c ? in.C_fp32.data() : nullptr,
                       in.has_bias ? in.bias_fp32.data() : nullptr, D_ref_fp32.data(),
                       in.clamp_min_f, in.clamp_max_f);
@@ -3614,8 +3646,8 @@ inline void run_w4a8_bq_qsi8d2p_qai4c2p_test(const GemmTestParams &params,
     qparams.ldsa = in.ldsa;
     qparams.scale_b = scale_b.data();
     qparams.ldsb = in.ldsb;
-    qparams.zp_b = zp_b.data();
-    qparams.ldzpb = ldzpb;
+    qparams.offset_b = offset_b.data();
+    qparams.ldob = ldob;
 
     const size_t a_packed_size = funcs.get_a_packed_size(in.m, in.k);
     const size_t b_packed_size = funcs.get_b_packed_size(in.n, in.k);
@@ -3634,7 +3666,7 @@ inline void run_w4a8_bq_qsi8d2p_qai4c2p_test(const GemmTestParams &params,
     auto window_params = qparams;
     window_params.scale_a += 1;
     window_params.scale_b += 1;
-    window_params.zp_b += 1;
+    window_params.offset_b += 1;
     check_w4a8_bq_nonzero_packed_origin<TD>(params, funcs, A_i8, B_int4, A_packed, B_packed,
                                             window_params, qparams);
 }
@@ -3650,6 +3682,12 @@ enum class Qsi8BlockWeightEncoding
     Qau8,
     Qsi6,
     Qsi8,
+};
+
+enum class Qsi8BlockPackedLayout
+{
+    NInterleaved,
+    ZttSquare,
 };
 
 struct Qsi8BlockQuantizedGemmTestData
@@ -3920,7 +3958,79 @@ struct PackedQsi8BlockQuantizedGemmTestFuncs
     RunPackFunc run_bt_pack;
     MakeParamsFunc make_params;
     RunGemmFunc run_gemm;
+    Qsi8BlockPackedLayout packed_layout = Qsi8BlockPackedLayout::NInterleaved;
+    bool test_clamp = false;
 };
+
+// Ztt keeps full, zero-padded NLEN squares and recenters normalized U4 to I4.
+template <typename QParams>
+void check_qsi8_block_ztt_pack(const Qsi8BlockQuantizedGemmTestData &data,
+                               const std::vector<uint8_t> &a, const std::vector<uint8_t> &b,
+                               const PackedQsi8BlockQuantizedGemmTestFuncs<QParams> &funcs)
+{
+    const size_t s = funcs.get_n_step();
+    const size_t pm = (data.m + s - 1) / s * s;
+    const size_t pn = (data.n + s - 1) / s * s;
+    const size_t pk = a.size() / pm;
+    const bool compact = funcs.weight_encoding == Qsi8BlockWeightEncoding::Qau4;
+    ASSERT_GE(pk, data.k);
+    ASSERT_EQ(b.size(), pn * pk / (compact ? 2 : 1));
+    for (bool weight : {false, true}) {
+        const size_t rows = weight ? pn : pm;
+        const auto &packed = weight ? b : a;
+        size_t index = 0;
+        for (size_t tile = 0; tile < rows; tile += s) {
+            for (size_t depth = 0; depth < pk; depth += s) {
+                for (size_t row = 0; row < s; ++row) {
+                    for (size_t lane = 0; lane < s; ++lane, ++index) {
+                        int expected = 0;
+                        if (tile + row < (weight ? data.n : data.m) && depth + lane < data.k) {
+                            expected =
+                                (weight ? data.b : data.a)[(tile + row) * data.k + depth + lane];
+                            if (weight && compact)
+                                expected -= 8;
+                        }
+                        const int actual =
+                            weight && compact ? (int)((packed[index / 2] >> (4 * (index % 2))) & 15)
+                                              : (int)packed[index];
+                        EXPECT_EQ(actual, expected & (weight && compact ? 15 : 255))
+                            << "weight=" << weight << " element=" << index;
+                    }
+                }
+            }
+        }
+    }
+}
+
+template <typename QParams>
+void check_qsi8_block_two_pass_pack(size_t m, size_t n, size_t k,
+                                    const Qsi8BlockQuantizedGemmTestData &data,
+                                    const std::vector<uint8_t> &b_source,
+                                    const std::vector<uint8_t> &a_packed,
+                                    const std::vector<uint8_t> &b_packed,
+                                    const PackedQsi8BlockQuantizedGemmTestFuncs<QParams> &funcs)
+{
+    const size_t split = funcs.activation_block_size;
+    const size_t a_offset = funcs.get_a_packed_offset(0, split, k, m);
+    const size_t b_offset = funcs.get_b_packed_offset(0, split, k, n);
+    const size_t b_source_offset = get_qsi8_block_weight_row_bytes(funcs.weight_encoding, split);
+    std::vector<uint8_t> a_two_pass(a_packed.size(), 0xa5);
+    std::vector<uint8_t> b_two_pass(b_packed.size(), 0xa5);
+
+    funcs.run_a_pack(m, split, k, k, 0, data.a.data(), a_two_pass.data());
+    funcs.run_a_pack(m, k - split, k, k, split, data.a.data() + split,
+                     a_two_pass.data() + a_offset);
+    funcs.run_bt_pack(n, split, k, k, 0, b_source.data(), b_two_pass.data());
+    funcs.run_bt_pack(n, k - split, k, k, split, b_source.data() + b_source_offset,
+                      b_two_pass.data() + b_offset);
+
+    ASSERT_EQ(a_two_pass.size(), a_packed.size());
+    for (size_t byte = 0; byte < a_packed.size(); ++byte)
+        EXPECT_EQ(a_two_pass[byte], a_packed[byte]) << "A byte=" << byte;
+    ASSERT_EQ(b_two_pass.size(), b_packed.size());
+    for (size_t byte = 0; byte < b_packed.size(); ++byte)
+        EXPECT_EQ(b_two_pass[byte], b_packed[byte]) << "B byte=" << byte;
+}
 
 template <typename QParams, typename ExpandedQParams>
 void run_packed_qsi8_block_quantized_gemm_test(
@@ -3940,11 +4050,21 @@ void run_packed_qsi8_block_quantized_gemm_test(
     std::vector<uint8_t> b_packed(funcs.get_b_packed_size(n, k));
     std::vector<float> output(m * n);
 
-    ASSERT_EQ(b_packed.size(), b_source.size());
+    if (funcs.packed_layout != Qsi8BlockPackedLayout::ZttSquare)
+        ASSERT_EQ(b_packed.size(), b_source.size());
     funcs.run_a_pack(m, k, k, k, 0, data.a.data(), a_packed.data());
     funcs.run_bt_pack(n, k, k, k, 0, b_source.data(), b_packed.data());
     const size_t n_step = funcs.get_n_step();
-    check_qsi8_block_weight_n_interleaved_pack(b_source, b_packed, n, b_source.size() / n, n_step);
+    const size_t row_bytes = b_source.size() / n;
+    if (funcs.packed_layout == Qsi8BlockPackedLayout::ZttSquare) {
+        check_qsi8_block_ztt_pack(data, a_packed, b_packed, funcs);
+    } else {
+        check_qsi8_block_weight_n_interleaved_pack(b_source, b_packed, n, row_bytes, n_step);
+    }
+    if (funcs.packed_layout == Qsi8BlockPackedLayout::ZttSquare &&
+        k >= 2 * funcs.activation_block_size) {
+        check_qsi8_block_two_pass_pack(m, n, k, data, b_source, a_packed, b_packed, funcs);
+    }
 
     const QParams params = funcs.make_params(data.scale_a.data(), k / funcs.activation_block_size,
                                              data.bsums_a.data(), k / 16, data.scale_b.data(),
@@ -3953,6 +4073,17 @@ void run_packed_qsi8_block_quantized_gemm_test(
                    output.data(), n, data.bias.data(), -std::numeric_limits<float>::infinity(),
                    std::numeric_limits<float>::infinity(), &params);
     check_qsi8_block_quantized_gemm_result(output, data.reference);
+
+    if (funcs.test_clamp) {
+        constexpr float clamp_min = -0.04f;
+        constexpr float clamp_max = 0.05f;
+        funcs.run_gemm(m, n, k, a_packed.data(), k, 0, b_packed.data(), k, 0, data.c.data(), n,
+                       output.data(), n, data.bias.data(), clamp_min, clamp_max, &params);
+        std::vector<float> clamped_reference = data.reference;
+        for (float &value : clamped_reference)
+            value = std::min(std::max(value, clamp_min), clamp_max);
+        check_qsi8_block_quantized_gemm_result(output, clamped_reference);
+    }
 
     if (test_split_k && k >= 2 * funcs.activation_block_size) {
         SCOPED_TRACE("split-K continuation");
@@ -3963,8 +4094,10 @@ void run_packed_qsi8_block_quantized_gemm_test(
                        std::numeric_limits<float>::infinity(), &params);
         const size_t a_offset = funcs.get_a_packed_offset(0, split, k, m);
         const size_t b_offset = funcs.get_b_packed_offset(0, split, k, n);
-        EXPECT_EQ(b_offset, std::min(n, n_step) *
-                                get_qsi8_block_weight_row_bytes(funcs.weight_encoding, split));
+        const size_t packed_lanes =
+            funcs.packed_layout == Qsi8BlockPackedLayout::ZttSquare ? n_step : std::min(n, n_step);
+        EXPECT_EQ(b_offset,
+                  packed_lanes * get_qsi8_block_weight_row_bytes(funcs.weight_encoding, split));
         funcs.run_gemm(m, n, k - split, a_packed.data() + a_offset, k, split,
                        b_packed.data() + b_offset, k, split, partial.data(), n, output.data(), n,
                        data.bias.data(), -std::numeric_limits<float>::infinity(),
@@ -3999,6 +4132,214 @@ void run_packed_qsi8_block_quantized_gemm_test(
     bool test_split_k = true)
 {
     run_packed_qsi8_block_quantized_gemm_test(m, n, k, false, funcs, funcs, test_split_k);
+}
+
+// Exercise caller contracts with independent source, packed, metadata and output
+// strides. The reference consumes unpacked codes and computes each integer group
+// independently; it never uses the implementation's packing or mask helpers.
+template <typename QParams>
+void run_qsi8_block_ztt_contract_test(const PackedQsi8BlockQuantizedGemmTestFuncs<QParams> &funcs)
+{
+    const size_t s = funcs.get_n_step(), m = 2 * s + 1, n = 2 * s + 3, k = 768;
+    const size_t group = funcs.weight_block_size;
+    const bool compact = funcs.weight_encoding == Qsi8BlockWeightEncoding::Qau4;
+    const size_t lda = k + 32, ldb = k + 64, packed_lda = k, packed_ldb = k + 256;
+    const size_t ldsa = k / 256 + 2, ldsums = k / 16 + 3, ldsb = k / group + 4;
+    std::vector<int8_t> a(m * lda);
+    std::vector<uint8_t> b(n * ldb / (compact ? 2 : 1));
+    std::vector<float> sa(m * ldsa, 0), sb(n * ldsb, 0), zb(n * ldsb, 0);
+    std::vector<int16_t> sums(m * ldsums, 0);
+    for (size_t i = 0; i < m; ++i) {
+        for (size_t q = 0; q < k; ++q) {
+            const int8_t value = q / 256 == 2 ? 0 : ((q + i) % 3 == 0 ? -128 : 127);
+            a[i * lda + q] = value;
+            sums[i * ldsums + q / 16] += value;
+        }
+        for (size_t q = 0; q < k / 256; ++q)
+            sa[i * ldsa + q] = (q + i) % 2 ? -0.125f : 0.0625f;
+    }
+    const auto weight = [compact](size_t j, size_t q) {
+        return compact ? ((j + q) % 3 == 0 ? 0 : 15) : ((j + q) % 3 == 0 ? -32 : 31);
+    };
+    for (size_t j = 0; j < n; ++j) {
+        for (size_t q = 0; q < k; ++q) {
+            const int value = weight(j, q);
+            if (compact)
+                b[(j * ldb + q) / 2] |= (value & 15) << (4 * (q % 2));
+            else
+                b[j * ldb + q] = static_cast<uint8_t>(value);
+        }
+        for (size_t q = 0; q < k / group; ++q) {
+            sb[j * ldsb + q] = (q + j) % 3 == 0 ? -0.25f : 0.125f;
+            zb[j * ldsb + q] = (q + j) % 2 ? -0.5f : 0.75f;
+        }
+    }
+    constexpr size_t guard = 32;
+    const size_t asize = funcs.get_a_packed_size(m, packed_lda);
+    const size_t bsize = funcs.get_b_packed_size(n, packed_ldb);
+    std::vector<uint8_t> ap(asize + 2 * guard, 0xa5), bp(bsize + 2 * guard, 0xa5);
+    funcs.run_a_pack(m, k, lda, packed_lda, 0, a.data(), ap.data() + guard);
+    funcs.run_bt_pack(n, k, ldb, packed_ldb, 0, b.data(), bp.data() + guard);
+    for (size_t r = 0; r < guard; ++r) {
+        ASSERT_EQ(ap[r], 0xa5);
+        ASSERT_EQ(ap[guard + asize + r], 0xa5);
+        ASSERT_EQ(bp[r], 0xa5);
+        ASSERT_EQ(bp[guard + bsize + r], 0xa5);
+    }
+    const size_t ldc = n + 3, ldd = n + 7;
+    std::vector<float> c(m * ldc, 0.25f), bias(n, -0.125f);
+    const float inf = std::numeric_limits<float>::infinity();
+    for (bool window : {false, true}) {
+        const size_t mi = window ? s : 0, ni = window ? s : 0, ki = window ? 256 : 0;
+        const size_t km = window ? 256 : k;
+        QParams params =
+            funcs.make_params(sa.data() + mi * ldsa, ldsa, sums.data() + mi * ldsums, ldsums,
+                              sb.data() + ni * ldsb, zb.data() + ni * ldsb, ldsb);
+        for (bool with_c : {false, true}) {
+            for (bool with_bias : {false, true}) {
+                for (bool inplace : {false, true}) {
+                    SCOPED_TRACE(::testing::Message()
+                                 << "window=" << window << " C=" << with_c << " bias=" << with_bias
+                                 << " inplace=" << inplace);
+                    std::vector<float> d(2 * guard + m * ldd, 123456.0f);
+                    if (inplace && with_c)
+                        for (size_t i = mi; i < m; ++i)
+                            for (size_t j = ni; j < n; ++j)
+                                d[guard + i * ldd + j] = 0.25f;
+                    float *dest = d.data() + guard + mi * ldd + ni;
+                    funcs.run_gemm(
+                        m - mi, n - ni, km,
+                        ap.data() + guard + funcs.get_a_packed_offset(mi, ki, packed_lda, m - mi),
+                        packed_lda, ki,
+                        bp.data() + guard + funcs.get_b_packed_offset(ni, ki, packed_ldb, n - ni),
+                        packed_ldb, ki,
+                        with_c ? (inplace ? dest : c.data() + mi * ldc + ni) : nullptr,
+                        inplace ? ldd : ldc, dest, ldd, with_bias ? bias.data() + ni : nullptr,
+                        -inf, inf, &params);
+                    for (size_t i = 0; i < m; ++i) {
+                        for (size_t j = 0; j < ldd; ++j) {
+                            if (i < mi || j < ni || j >= n) {
+                                EXPECT_EQ(d[guard + i * ldd + j], 123456.0f);
+                                continue;
+                            }
+                            double expected = (with_c ? 0.25 : 0.0) + (with_bias ? -0.125 : 0.0);
+                            for (size_t g = ki; g < ki + km; g += group) {
+                                int32_t dot = 0, sum = 0;
+                                for (size_t q = g; q < g + group; ++q) {
+                                    dot += a[i * lda + q] * weight(j, q);
+                                    sum += a[i * lda + q];
+                                }
+                                expected +=
+                                    (double)sa[i * ldsa + g / 256] *
+                                    ((double)sb[j * ldsb + g / group] * dot -
+                                     (compact ? (double)zb[j * ldsb + g / group] * sum : 0.0));
+                            }
+                            EXPECT_NEAR(d[guard + i * ldd + j], expected,
+                                        2.0e-4 * std::max(1.0, std::abs(expected)));
+                        }
+                    }
+                    for (size_t r = 0; r < guard; ++r) {
+                        EXPECT_EQ(d[r], 123456.0f);
+                        EXPECT_EQ(d[guard + m * ldd + r], 123456.0f);
+                    }
+                }
+            }
+        }
+    }
+    // Empty dimensions are no-ops; K=0 needs neither code nor metadata buffers.
+    funcs.run_gemm(0, n, k, nullptr, 0, 0, nullptr, 0, 0, nullptr, 0, nullptr, 0, nullptr, -inf,
+                   inf, nullptr);
+    funcs.run_gemm(m, 0, k, nullptr, 0, 0, nullptr, 0, 0, nullptr, 0, nullptr, 0, nullptr, -inf,
+                   inf, nullptr);
+    std::vector<float> d(m * ldd, 0.25f);
+    funcs.run_gemm(m, n, 0, nullptr, 0, 0, nullptr, 0, 0, d.data(), ldd, d.data(), ldd, bias.data(),
+                   -0.1f, 0.1f, nullptr);
+    for (size_t i = 0; i < m; ++i)
+        for (size_t j = 0; j < n; ++j)
+            EXPECT_FLOAT_EQ(d[i * ldd + j], 0.1f);
+}
+
+template <typename QParams>
+void run_qsi8_block_ztt_integer_test(const PackedQsi8BlockQuantizedGemmTestFuncs<QParams> &funcs)
+{
+    constexpr size_t k = 512;
+    const size_t group = funcs.weight_block_size;
+    const float inf = std::numeric_limits<float>::infinity();
+    auto data = make_qsi8_block_quantized_gemm_test_data(1, k, 256, group, funcs.asymmetric,
+                                                         funcs.max_weight, 1);
+    for (int pattern : {0, 1, 2}) {
+        for (size_t q = 0; q < k; ++q) {
+            data.a[q] = pattern == 0 ? -128 : (q % 2 ? -128 : 127);
+            data.b[q] = funcs.asymmetric
+                            ? (pattern == 1 ? 0 : 15)
+                            : (pattern == 2 ? (q % 2 ? -128 : 127) : (q % 2 ? -32 : 31));
+        }
+        for (size_t q = 0; q < k / 16; ++q) {
+            int32_t sum = 0;
+            for (size_t l = 0; l < 16; ++l)
+                sum += data.a[q * 16 + l];
+            data.bsums_a[q] = static_cast<int16_t>(sum);
+        }
+        std::fill(data.scale_a.begin(), data.scale_a.end(), 1.0f);
+        std::fill(data.real_zero_b.begin(), data.real_zero_b.end(), 0.0f);
+        auto bsource = make_qsi8_block_weight_source(data, funcs.weight_encoding);
+        std::vector<uint8_t> ap(funcs.get_a_packed_size(1, k)), bp(funcs.get_b_packed_size(1, k));
+        funcs.run_a_pack(1, k, k, k, 0, data.a.data(), ap.data());
+        funcs.run_bt_pack(1, k, k, k, 0, bsource.data(), bp.data());
+        for (size_t selected :
+             {size_t(0), size_t(1), 256 / group - 1, 256 / group, k / group - 1}) {
+            std::fill(data.scale_b.begin(), data.scale_b.end(), 0.0f);
+            data.scale_b[selected] = 1.0f;
+            const auto params =
+                funcs.make_params(data.scale_a.data(), 2, data.bsums_a.data(), k / 16,
+                                  data.scale_b.data(), data.real_zero_b.data(), k / group);
+            float output;
+            funcs.run_gemm(1, 1, k, ap.data(), k, 0, bp.data(), k, 0, nullptr, 1, &output, 1,
+                           nullptr, -inf, inf, &params);
+            int32_t dot = 0;
+            for (size_t q = selected * group; q < (selected + 1) * group; ++q)
+                dot += (int32_t)data.a[q] * data.b[q];
+            EXPECT_EQ(output, static_cast<float>(dot))
+                << "pattern=" << pattern << " group=" << selected;
+        }
+    }
+}
+
+// Pack the complete model-shaped B, then calculate only its first and last
+// fragments. This is packing/slice evidence, not a full layer or model run.
+template <typename QParams>
+void run_qsi8_block_ztt_model_slices(const PackedQsi8BlockQuantizedGemmTestFuncs<QParams> &funcs)
+{
+    const size_t s = funcs.get_n_step();
+    const float inf = std::numeric_limits<float>::infinity();
+    for (const auto shape : {std::pair<size_t, size_t>{1024, 1024},
+                             {1024, 2048},
+                             {1024, 3072},
+                             {2048, 1024},
+                             {3072, 1024},
+                             {151936, 1024}}) {
+        const size_t n = shape.first, k = shape.second, group = funcs.weight_block_size;
+        const bool compact = funcs.weight_encoding == Qsi8BlockWeightEncoding::Qau4;
+        std::vector<int8_t> a(k, 1);
+        std::vector<uint8_t> b(n * k / (compact ? 2 : 1), compact ? 0x11 : 1);
+        std::vector<float> sa(k / 256, 1.0f), sb(n * k / group, 1.0f), zb(n * k / group, 0.0f);
+        std::vector<int16_t> sums(k / 16, 16);
+        std::vector<uint8_t> ap(funcs.get_a_packed_size(1, k)), bp(funcs.get_b_packed_size(n, k));
+        funcs.run_a_pack(1, k, k, k, 0, a.data(), ap.data());
+        funcs.run_bt_pack(n, k, k, k, 0, b.data(), bp.data());
+        for (size_t ni : {size_t(0), (n - 1) / s * s}) {
+            const size_t nr = std::min(s, n - ni);
+            std::vector<float> output(nr);
+            auto params = funcs.make_params(sa.data(), k / 256, sums.data(), k / 16,
+                                            sb.data() + ni * (k / group),
+                                            zb.data() + ni * (k / group), k / group);
+            funcs.run_gemm(1, nr, k, ap.data(), k, 0,
+                           bp.data() + funcs.get_b_packed_offset(ni, 0, k, nr), k, 0, nullptr, nr,
+                           output.data(), nr, nullptr, -inf, inf, &params);
+            for (float x : output)
+                EXPECT_EQ(x, static_cast<float>(k));
+        }
+    }
 }
 
 // ============================================================================
@@ -4835,6 +5176,305 @@ void run_packed_qsi8_block_extreme_test(const PackedQsi8BlockQuantizedGemmTestFu
     }
 }
 
+template <bool PerRow, typename Run>
+void check_requantized_i8_rounding_modes(size_t m_step, size_t n_step, Run run)
+{
+    const size_t m = m_step + 1, n = n_step + 3, ldd = n + 5;
+    const int32_t values[] = {1077952705, 1077952706, -1077952705, -1077952706};
+    const int8_t expected[] = {0, 1, 0, -1};
+    const float scale_a = 16777214.0f * 0x1p-24f;
+    const float scale_b = 16711679.0f * 0x1p-55f;
+    const float scale_d = 16777215.0f * 0x1p-24f;
+    std::vector<float> channel_scale(PerRow ? m : n, PerRow ? scale_a : scale_b);
+    std::vector<int32_t> bias(channel_scale.size());
+    for (size_t i = 0; i < bias.size(); ++i)
+        bias[i] = values[i % 4];
+
+    for (size_t k : {size_t(0), size_t(3)}) {
+        const size_t lda = k + 3, ldb = (PerRow ? n : k) + 5;
+        std::vector<int8_t> a(m * lda, 0), b((PerRow ? k + 1 : n) * ldb, 0);
+        for (bool per_channel : {false, true}) {
+            for (unsigned long mode = 0; mode < 5; ++mode) {
+                const unsigned long vector_mode = mode % 4;
+                std::vector<int8_t> d(m * ldd + 8, 93);
+                unsigned long saved, saved_vector, after, after_vector;
+                auto invoke = [&](const auto &params) {
+                    asm volatile("csrrw %0, frm, %2\n\tcsrrw %1, vxrm, %3"
+                                 : "=&r"(saved), "=&r"(saved_vector)
+                                 : "r"(mode), "r"(vector_mode)
+                                 : "memory");
+                    run(m, n, k, a.data(), lda, b.data(), ldb, nullptr, n, bias.data(), d.data(),
+                        ldd, -128, 127, &params);
+                    asm volatile(
+                        "csrr %0, frm\n\tcsrr %1, vxrm\n\t"
+                        "csrw frm, %2\n\tcsrw vxrm, %3"
+                        : "=&r"(after), "=&r"(after_vector)
+                        : "r"(saved), "r"(saved_vector)
+                        : "memory");
+                };
+                if constexpr (PerRow) {
+                    tqt_qai8_qsi8dx_qai8_params params{};
+                    params.scale_a = channel_scale.data();
+                    params.quant_channel_a = per_channel ? m : 1;
+                    params.scale_b = scale_b;
+                    params.scale_d = scale_d;
+                    invoke(params);
+                } else {
+                    tqt_qai8_qai8_qsi8cx_params params{};
+                    params.scale_a = scale_a;
+                    params.scale_b = channel_scale.data();
+                    params.quant_channel_b = per_channel ? n : 1;
+                    params.scale_d = scale_d;
+                    invoke(params);
+                }
+                ASSERT_EQ(after, mode);
+                ASSERT_EQ(after_vector, vector_mode);
+                for (size_t row = 0; row < m; ++row) {
+                    for (size_t col = 0; col < n; ++col)
+                        ASSERT_EQ(d[row * ldd + col], expected[(PerRow ? row : col) % 4])
+                            << "frm=" << mode << " k=" << k << " row=" << row << " col=" << col
+                            << " per_channel=" << per_channel;
+                    for (size_t col = n; col < ldd; ++col)
+                        ASSERT_EQ(d[row * ldd + col], 93);
+                }
+                for (size_t i = m * ldd; i < d.size(); ++i)
+                    ASSERT_EQ(d[i], 93);
+            }
+        }
+    }
+}
+
+template <bool PerRow, typename Run>
+void check_requantized_i8_contract(size_t m_step, size_t n_step, Run run)
+{
+    check_requantized_i8_rounding_modes<PerRow>(m_step, n_step, run);
+    const float scales[] = {0.5f, 1.0f, 2.0f, 0x1p-33f, 0x1p16f};
+    for (size_t k : {size_t(0), size_t(1), size_t(35)}) {
+        for (int32_t input_zp : {-128, 37, 127}) {
+            for (size_t tail : {size_t(0), size_t(1)}) {
+                const size_t m = 2 * m_step + tail;
+                const size_t n = 2 * n_step + tail;
+                const size_t lda = k + 3;
+                const size_t ldb = (PerRow ? n : k) + 5;
+                const size_t ldc = n + 2;
+                const size_t ldd = n + 7;
+                std::vector<int8_t> a(m * lda), b((PerRow ? k : n) * ldb);
+                std::vector<int32_t> c(m * ldc), bias(PerRow ? m : n);
+                std::vector<float> channel_scale(bias.size());
+                for (size_t i = 0; i < a.size(); ++i)
+                    a[i] = (int8_t)((i * 71 + 13) % 256 - 128);
+                for (size_t i = 0; i < b.size(); ++i)
+                    b[i] = (int8_t)((i * 43 + 9) % 256 - 128);
+                for (size_t i = 0; i < bias.size(); ++i) {
+                    bias[i] = (int32_t)(i % 11) - 5;
+                    channel_scale[i] = scales[i % 5];
+                }
+                // Cancellation leaves small, signed accumulators, including exact
+                // halfway values. This also detects raw versus pre-corrected bias.
+                for (size_t row = 0; row < m; ++row) {
+                    for (size_t col = 0; col < n; ++col) {
+                        int64_t dot = 0;
+                        for (size_t i = 0; i < k; ++i) {
+                            const int32_t av = a[row * lda + i] - (PerRow ? 0 : input_zp);
+                            const int32_t bv =
+                                b[PerRow ? i * ldb + col : col * ldb + i] - (PerRow ? input_zp : 0);
+                            dot += (int64_t)av * bv;
+                        }
+                        c[row * ldc + col] = (int32_t)(-dot + (int)(row + col) % 17 - 8);
+                    }
+                }
+                for (bool with_addends : {false, true}) {
+                    const int8_t lo = with_addends ? -53 : -128;
+                    const int8_t hi = with_addends ? 79 : 127;
+                    const int32_t output_zp = -7;
+                    std::vector<int8_t> d(m * ldd + 16, 93);
+                    if constexpr (PerRow) {
+                        tqt_qai8_qsi8dx_qai8_params params{};
+                        params.scale_a = channel_scale.data();
+                        params.quant_channel_a = m;
+                        params.scale_b = 1.0f;
+                        params.zero_point_b = input_zp;
+                        params.scale_d = 1.0f;
+                        params.zero_point_d = output_zp;
+                        run(m, n, k, a.data(), lda, b.data(), ldb,
+                            with_addends ? c.data() : nullptr, ldc,
+                            with_addends ? bias.data() : nullptr, d.data(), ldd, lo, hi, &params);
+                    } else {
+                        tqt_qai8_qai8_qsi8cx_params params{};
+                        params.scale_a = 1.0f;
+                        params.zero_point_a = input_zp;
+                        params.scale_b = channel_scale.data();
+                        params.quant_channel_b = n;
+                        params.scale_d = 1.0f;
+                        params.zero_point_d = output_zp;
+                        run(m, n, k, a.data(), lda, b.data(), ldb,
+                            with_addends ? c.data() : nullptr, ldc,
+                            with_addends ? bias.data() : nullptr, d.data(), ldd, lo, hi, &params);
+                    }
+                    for (size_t row = 0; row < m; ++row) {
+                        for (size_t col = 0; col < n; ++col) {
+                            int64_t dot =
+                                with_addends ? c[row * ldc + col] + bias[PerRow ? row : col] : 0;
+                            for (size_t i = 0; i < k; ++i) {
+                                const int32_t av = a[row * lda + i] - (PerRow ? 0 : input_zp);
+                                const int32_t bv = b[PerRow ? i * ldb + col : col * ldb + i] -
+                                                   (PerRow ? input_zp : 0);
+                                dot += (int64_t)av * bv;
+                            }
+                            ASSERT_GE(dot, INT32_MIN);
+                            ASSERT_LE(dot, INT32_MAX);
+                            ASSERT_EQ(
+                                d[row * ldd + col],
+                                reference_requantized_i8(dot, channel_scale[PerRow ? row : col],
+                                                         output_zp, lo, hi))
+                                << "m=" << m << " n=" << n << " k=" << k << " row=" << row
+                                << " col=" << col << " zp=" << input_zp;
+                        }
+                        for (size_t col = n; col < ldd; ++col)
+                            ASSERT_EQ(d[row * ldd + col], 93);
+                    }
+                    for (size_t i = m * ldd; i < d.size(); ++i)
+                        ASSERT_EQ(d[i], 93);
+                }
+            }
+        }
+    }
+}
+
+// Exercise scales whose reciprocal overflows, unity/amplifying/reducing scales,
+// and all five legal incoming FP rounding modes without leaking CSR state.
+template <typename Run>
+void check_lowbit_output_scales(size_t ns, Run run)
+{
+    const size_t m = 5, n = ns + 1, ldd = n + 3;
+    std::vector<int32_t> bias(n);
+    const int32_t values[] = {0, 1, -1, 3, -3, 7, -7, 127, -127, 1234567};
+    for (size_t j = 0; j < n; ++j)
+        bias[j] = values[j % 10];
+    for (float output_scale : {1e-40f, 0.5f, 1.0f, 2.0f, 3.0f, 3e38f}) {
+        const float input_scale = output_scale < 1e-30f ? output_scale : 1.0f;
+        std::vector<int8_t> expected(n);
+        for (size_t j = 0; j < n; ++j) {
+            volatile float real = float(bias[j]) * input_scale;
+            volatile float quotient = real / output_scale;
+            const double x = quotient, base = std::floor(x), fraction = x - base;
+            const double rounded =
+                base +
+                (fraction > 0.5 || (fraction == 0.5 && std::fmod(std::abs(base), 2.0) == 1.0));
+            expected[j] = (int8_t)std::max(-53.0, std::min(79.0, rounded + 7.0));
+        }
+        for (unsigned long mode = 0; mode < 5; ++mode) {
+            std::vector<int8_t> output(m * ldd + 8, 99);
+            unsigned long saved, after;
+            asm volatile("csrrw %0, frm, %1" : "=r"(saved) : "r"(mode) : "memory");
+            run(m, n, input_scale, output_scale, bias.data(), output.data(), ldd);
+            asm volatile("csrr %0, frm\n\tcsrw frm, %1" : "=&r"(after) : "r"(saved) : "memory");
+            EXPECT_EQ(after, mode);
+            for (size_t i = 0; i < m; ++i) {
+                for (size_t j = 0; j < n; ++j)
+                    EXPECT_EQ(output[i * ldd + j], expected[j])
+                        << "scale=" << output_scale << " mode=" << mode << " col=" << j;
+                for (size_t j = n; j < ldd; ++j)
+                    EXPECT_EQ(output[i * ldd + j], 99);
+            }
+            for (size_t i = m * ldd; i < output.size(); ++i)
+                EXPECT_EQ(output[i], 99);
+        }
+    }
+}
+
+// Scalar oracle uses decoded values and independent affine metadata. The runner
+// selects a nonzero M/N/K window from full buffers through each public getter.
+template <typename TA, typename TD, bool Affine, bool QuantA, bool RowA, typename Run>
+void check_w4_contract(size_t ms, size_t ns, float tolerance, Run run)
+{
+    const float16_t lut16[16] = {3,  -1, (float16_t)0.5f,  -4, 7,  2, -2, 0, 1,
+                                 -3, 4,  (float16_t)-0.5f, 6,  -6, 5, -5};
+    const int8_t lut8[16] = {-127, 0, 23, -17, 64, -2, 1, 7, -5, 113, 8, -3, 11, -32, 2, -1};
+    for (size_t bl : {size_t(2), size_t(32), size_t(64)}) {
+        for (size_t extra : {size_t(0), size_t(2)}) {
+            const size_t m = ms - 1 + extra, n = ns - 1 + extra;
+            const size_t fm = ms + m, fn = ns + n, fk = 3 * bl, ki = bl, k = 2 * bl;
+            const size_t ld = fk + 8, lds = 5, ldd = n + 5;
+            std::vector<TA> a(fm * ld, (TA)0);
+            std::vector<uint8_t> b(fn * ld / 2, 0);
+            std::vector<float> sa(fm * lds, 0), sb(fn * lds, 0), ob(fn * lds, 0);
+            std::vector<int32_t> za(fm, 0);
+            std::vector<float> bias(fn);
+            std::vector<TD> c(m * ldd), d(m * ldd + 8);
+            for (size_t i = 0; i < fm; ++i) {
+                za[i] = int(i % 3) - 1;
+                for (size_t q = 0; q < lds; ++q)
+                    sa[i * lds + q] = 0.25f * (1 + (i + q) % 2);
+                for (size_t q = 0; q < fk; ++q)
+                    a[i * ld + q] = (TA)(int((i * 3 + q) % 7) - 3);
+            }
+            for (size_t j = 0; j < fn; ++j) {
+                bias[j] = 0.25f * (int(j % 7) - 3);
+                for (size_t q = 0; q < lds; ++q) {
+                    // Includes scale=0 with nonzero offset; cannot be encoded as -zp*scale.
+                    sb[j * lds + q] = Affine && (j + q) % 3 == 0 ? 0.0f : 0.125f;
+                    ob[j * lds + q] = 0.25f * (int((j + q) % 5) - 2);
+                }
+                for (size_t q = 0; q < fk; ++q) {
+                    const uint8_t code = (j * 5 + q * 3) % 16;
+                    b[j * ld / 2 + q / 2] |= code << (4 * (q & 1));
+                }
+            }
+            for (size_t i = 0; i < c.size(); ++i)
+                c[i] = to_target_type<TD>(0.5f * (int(i % 3) - 1));
+            for (int custom = 0; custom < (Affine ? 1 : 2); ++custom) {
+                for (int mask = 0; mask < 8; ++mask) {
+                    SCOPED_TRACE(::testing::Message()
+                                 << "bl=" << bl << " m=" << m << " n=" << n << " custom=" << custom
+                                 << " options=" << mask);
+                    std::fill(d.begin(), d.end(), to_target_type<TD>(123));
+                    const float lo = mask & 4 ? -7.0f : -INFINITY;
+                    const float hi = mask & 4 ? 9.0f : INFINITY;
+                    run(m, n, k, bl, fm, fn, fk, ms, ns, ki, ld, lds, a, b, sa, za, sb, ob,
+                        mask & 1 ? bias.data() : nullptr, mask & 2 ? c.data() : nullptr, d.data(),
+                        ldd, lo, hi, custom ? lut16 : nullptr, custom ? lut8 : nullptr);
+                    for (size_t i = 0; i < m; ++i) {
+                        for (size_t j = 0; j < n; ++j) {
+                            double ref = mask & 2 ? to_float(c[i * ldd + j]) : 0.0;
+                            for (size_t q = ki; q < ki + k; ++q) {
+                                const size_t bi = q / bl;
+                                const uint8_t raw = b[(ns + j) * ld / 2 + q / 2];
+                                const unsigned code = (raw >> (4 * (q & 1))) & 15;
+                                double av = (double)a[(ms + i) * ld + q];
+                                if constexpr (QuantA) {
+                                    if constexpr (RowA)
+                                        av = (av - za[ms + i]) * sa[(ms + i) * lds];
+                                    else
+                                        av *= sa[(ms + i) * lds + bi];
+                                }
+                                double bv = Affine ? double(code)
+                                                   : (custom ? (QuantA ? double(lut8[code])
+                                                                       : double(lut16[code]))
+                                                             : double(int(code) - 8));
+                                bv *= sb[(ns + j) * lds + bi];
+                                if constexpr (Affine)
+                                    bv += ob[(ns + j) * lds + bi];
+                                ref += av * bv;
+                            }
+                            if (mask & 1)
+                                ref += bias[ns + j];
+                            ref = std::min(std::max(ref, double(lo)), double(hi));
+                            const float expected = to_float(to_target_type<TD>((float)ref));
+                            EXPECT_NEAR(to_float(d[i * ldd + j]), expected, tolerance)
+                                << "row=" << i << " col=" << j;
+                        }
+                        for (size_t j = n; j < ldd; ++j)
+                            EXPECT_EQ(to_float(d[i * ldd + j]), 123);
+                    }
+                    for (size_t i = m * ldd; i < d.size(); ++i)
+                        EXPECT_EQ(to_float(d[i]), 123);
+                }
+            }
+        }
+    }
+}
+
 }  // namespace test
 }  // namespace torq_tile
 
@@ -4853,14 +5493,14 @@ void run_packed_qsi8_block_extreme_test(const PackedQsi8BlockQuantizedGemmTestFu
 // ============================================================================
 
 // Unpacked test: kernel base + TD + runner + funcs typename.
-#define W4A8_BQ_DEFINE_UNPACKED_TEST(KBASE, TD, RUNNER, FUNCS_TYPE)                           \
+#define W4A8_BQ_DEFINE_UNPACKED_TEST(KBASE, TD, RUNNER, FUNCS_TYPE, BIAS_T)                   \
     static FUNCS_TYPE<TD> make_gemm_##KBASE##_funcs()                                         \
     {                                                                                         \
         FUNCS_TYPE<TD> funcs;                                                                 \
         funcs.get_m_step = tqt_get_m_step_gemm_##KBASE##_4x1vl_rvv;                           \
         funcs.get_n_step = tqt_get_n_step_gemm_##KBASE##_4x1vl_rvv;                           \
         funcs.run_gemm = clamp_test_run<tqt_run_gemm_##KBASE##_4x1vl_rvv, TD, 14, 12, 13, 15, \
-                                        ClampSource::kColumnBias, false, 6>();                \
+                                        ClampSource::kColumnBias, false, 6, true, BIAS_T>();  \
         return funcs;                                                                         \
     }                                                                                         \
     class Test_gemm_##KBASE##_4x1vl_rvv : public testing::TestWithParam<GemmTestParams>       \
@@ -4869,13 +5509,13 @@ void run_packed_qsi8_block_extreme_test(const PackedQsi8BlockQuantizedGemmTestFu
     TEST_P(Test_gemm_##KBASE##_4x1vl_rvv, Correctness)                                        \
     {                                                                                         \
         auto funcs = make_gemm_##KBASE##_funcs();                                             \
-        RUNNER<TD>(GetParam(), funcs);                                                        \
+        RUNNER<TD, BIAS_T>(GetParam(), funcs);                                                \
     }                                                                                         \
     TEST_P(Test_gemm_##KBASE##_4x1vl_rvv, ClampSpecialValues)                                 \
     {                                                                                         \
         ScopedGemmClampProbe probe;                                                           \
         auto funcs = make_gemm_##KBASE##_funcs();                                             \
-        RUNNER<TD>(GetParam(), funcs);                                                        \
+        RUNNER<TD, BIAS_T>(GetParam(), funcs);                                                \
     }                                                                                         \
     INSTANTIATE_TEST_SUITE_P(                                                                 \
         GemmTests, Test_gemm_##KBASE##_4x1vl_rvv,                                             \
@@ -4885,7 +5525,7 @@ void run_packed_qsi8_block_extreme_test(const PackedQsi8BlockQuantizedGemmTestFu
         GemmTestParamNameGenerator())
 
 // Packed test: kernel base + TD + runner + funcs typename.
-#define W4A8_BQ_DEFINE_PACKED_TEST(KBASE, TD, RUNNER, FUNCS_TYPE)                             \
+#define W4A8_BQ_DEFINE_PACKED_TEST(KBASE, TD, RUNNER, FUNCS_TYPE, BIAS_T)                     \
     static FUNCS_TYPE<TD> make_gemm_##KBASE##_funcs()                                         \
     {                                                                                         \
         FUNCS_TYPE<TD> funcs;                                                                 \
@@ -4898,7 +5538,7 @@ void run_packed_qsi8_block_extreme_test(const PackedQsi8BlockQuantizedGemmTestFu
         funcs.run_a_pack = tqt_run_a_pack_gemm_##KBASE##_4x1vl_rvv;                           \
         funcs.run_bt_pack = tqt_run_bt_pack_gemm_##KBASE##_4x1vl_rvv;                         \
         funcs.run_gemm = clamp_test_run<tqt_run_gemm_##KBASE##_4x1vl_rvv, TD, 14, 12, 13, 15, \
-                                        ClampSource::kColumnBias, false, 6>();                \
+                                        ClampSource::kColumnBias, false, 6, true, BIAS_T>();  \
         return funcs;                                                                         \
     }                                                                                         \
     class Test_gemm_##KBASE##_4x1vl_rvv : public testing::TestWithParam<GemmTestParams>       \
@@ -4907,13 +5547,13 @@ void run_packed_qsi8_block_extreme_test(const PackedQsi8BlockQuantizedGemmTestFu
     TEST_P(Test_gemm_##KBASE##_4x1vl_rvv, Correctness)                                        \
     {                                                                                         \
         auto funcs = make_gemm_##KBASE##_funcs();                                             \
-        RUNNER<TD>(GetParam(), funcs);                                                        \
+        RUNNER<TD, BIAS_T>(GetParam(), funcs);                                                \
     }                                                                                         \
     TEST_P(Test_gemm_##KBASE##_4x1vl_rvv, ClampSpecialValues)                                 \
     {                                                                                         \
         ScopedGemmClampProbe probe;                                                           \
         auto funcs = make_gemm_##KBASE##_funcs();                                             \
-        RUNNER<TD>(GetParam(), funcs);                                                        \
+        RUNNER<TD, BIAS_T>(GetParam(), funcs);                                                \
     }                                                                                         \
     INSTANTIATE_TEST_SUITE_P(                                                                 \
         GemmTests, Test_gemm_##KBASE##_4x1vl_rvv,                                             \

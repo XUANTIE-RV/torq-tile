@@ -196,10 +196,6 @@ inline void run_nonpacked_igemmcf_reqi32toi8_test(
         bias_i32[ch] = quantize_bias_i32(bias_fp32[ch], bias_scale);
     }
 
-    // Fuse zero_point_b into bias: bias_fused[m] = bias[m] - zp_b * sum(weight_i8[m, 0..K-1])
-    std::vector<int32_t> bias_fused(M);
-    fuse_zp_to_bias(bias_fused.data(), bias_i32.data(), weight_i8.data(), zp_b, M, K);
-
     // Compute D quantization parameters from reference result
     float scale_d;
     int32_t zp_d;
@@ -220,7 +216,7 @@ inline void run_nonpacked_igemmcf_reqi32toi8_test(
     std::vector<int8_t> D_i8(M * N, 0);
 
     funcs.run_igemm(M, N, K, activation_i8.data(), 0, 0, 0, weight_i8.data(), K, 0, nullptr, N,
-                    D_i8.data(), N, bias_fused.data(), clamp_min, clamp_max, &params, &qparams);
+                    D_i8.data(), N, bias_i32.data(), clamp_min, clamp_max, &params, &qparams);
 
     // Dequantize kernel output and compare with fp32 reference
     std::vector<float> D_act_fp32(M * N);
@@ -307,9 +303,6 @@ inline void run_packed_igemmcf_reqi32toi8_test(
         bias_i32[ch] = quantize_bias_i32(bias_fp32[ch], bias_scale);
     }
 
-    std::vector<int32_t> bias_fused(M);
-    fuse_zp_to_bias(bias_fused.data(), bias_i32.data(), weight_i8.data(), zp_b, M, K);
-
     float scale_d;
     int32_t zp_d;
     compute_asym_quant_params_i8(D_ref_fp32.data(), M * N, scale_d, zp_d);
@@ -333,7 +326,7 @@ inline void run_packed_igemmcf_reqi32toi8_test(
     std::vector<int8_t> D_i8(M * N, 0);
 
     funcs.run_igemm(M, N, K, activation_i8.data(), 0, 0, 0, A_packed.data(), K, 0, nullptr, N,
-                    D_i8.data(), N, bias_fused.data(), clamp_min, clamp_max, &params, &qparams);
+                    D_i8.data(), N, bias_i32.data(), clamp_min, clamp_max, &params, &qparams);
 
     // Dequantize and verify
     std::vector<float> D_act_fp32(M * N);
@@ -426,10 +419,6 @@ inline void run_nonpacked_igemmcl_reqi32toi8_test(
         bias_i32[ch] = quantize_bias_i32(bias_fp32[ch], bias_scale);
     }
 
-    // Fuse zero_point_a into bias: bias_fused[n] = bias[n] - zp_a * sum(weight_i8[n, 0..K-1])
-    std::vector<int32_t> bias_fused(N);
-    fuse_zp_to_bias(bias_fused.data(), bias_i32.data(), weight_i8.data(), zp_a, N, K);
-
     // Compute D quantization parameters from reference result
     float scale_d;
     int32_t zp_d;
@@ -450,7 +439,7 @@ inline void run_nonpacked_igemmcl_reqi32toi8_test(
     std::vector<int8_t> D_i8(M * N, 0);
 
     funcs.run_igemm(M, N, K, activation_i8.data(), 0, 0, 0, weight_i8.data(), K, 0, nullptr, N,
-                    D_i8.data(), N, bias_fused.data(), clamp_min, clamp_max, &params, &qparams);
+                    D_i8.data(), N, bias_i32.data(), clamp_min, clamp_max, &params, &qparams);
 
     // Dequantize kernel output and compare with fp32 reference
     std::vector<float> D_act_fp32(M * N);
@@ -537,9 +526,6 @@ inline void run_packed_igemmcl_reqi32toi8_test(
         bias_i32[ch] = quantize_bias_i32(bias_fp32[ch], bias_scale);
     }
 
-    std::vector<int32_t> bias_fused(N);
-    fuse_zp_to_bias(bias_fused.data(), bias_i32.data(), weight_i8.data(), zp_a, N, K);
-
     float scale_d;
     int32_t zp_d;
     compute_asym_quant_params_i8(D_ref_fp32.data(), M * N, scale_d, zp_d);
@@ -563,7 +549,7 @@ inline void run_packed_igemmcl_reqi32toi8_test(
     std::vector<int8_t> D_i8(M * N, 0);
 
     funcs.run_igemm(M, N, K, activation_i8.data(), 0, 0, 0, B_packed.data(), K, 0, nullptr, N,
-                    D_i8.data(), N, bias_fused.data(), clamp_min, clamp_max, &params, &qparams);
+                    D_i8.data(), N, bias_i32.data(), clamp_min, clamp_max, &params, &qparams);
 
     // Dequantize and verify
     std::vector<float> D_act_fp32(M * N);

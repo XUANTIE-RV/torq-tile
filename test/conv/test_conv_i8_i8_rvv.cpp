@@ -162,3 +162,65 @@ TEST_P(Test_convcl_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi8cxp_4x1vl_rvv, Correc
 INSTANTIATE_TEST_SUITE_P(ConvTests,
                          Test_convcl_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi8cxp_4x1vl_rvv,
                          i8_common_conv_test_values(), ConvTestParamNameGenerator());
+
+TEST(QuantizedPaddingContract, convcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dx_qai8_4x1vl_rvv)
+{
+    check_quantized_padding_contract<true>([](size_t m, size_t n, size_t k, const int8_t *input,
+                                              const int8_t *weight, const int32_t *bias, int8_t *d,
+                                              size_t ldd, const tqt_conv_params *conv,
+                                              const auto *params, int8_t padding) {
+        std::vector<int8_t> col((m > n ? m : n) * k + 16);
+        tqt_run_im2col_convcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dx_qai8_4x1vl_rvv(
+            1, input, col.data(), conv, padding);
+        tqt_run_conv_convcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dx_qai8_4x1vl_rvv(
+            m, n, k, weight, k, 0, col.data(), n, 0, nullptr, n, d, ldd, bias, -23, 19, params);
+    });
+}
+
+TEST(QuantizedPaddingContract, convcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8p_4x1vl_rvv)
+{
+    check_quantized_padding_contract<true>([](size_t m, size_t n, size_t k, const int8_t *input,
+                                              const int8_t *weight, const int32_t *bias, int8_t *d,
+                                              size_t ldd, const tqt_conv_params *conv,
+                                              const auto *params, int8_t padding) {
+        std::vector<int8_t> wp(m * k + 16);
+        tqt_run_a_pack_convcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8p_4x1vl_rvv(
+            m, k, k, k, 0, weight, wp.data());
+        std::vector<int8_t> col((m > n ? m : n) * k + 16);
+        tqt_run_b_im2colpack_convcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8p_4x1vl_rvv(
+            1, input, k, 0, col.data(), conv, padding);
+        tqt_run_conv_convcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8p_4x1vl_rvv(
+            m, n, k, wp.data(), k, 0, col.data(), k, 0, nullptr, n, d, ldd, bias, -23, 19, params);
+    });
+}
+
+TEST(QuantizedPaddingContract, convcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt_4x1vl_rvv)
+{
+    check_quantized_padding_contract<false>([](size_t m, size_t n, size_t k, const int8_t *input,
+                                               const int8_t *weight, const int32_t *bias, int8_t *d,
+                                               size_t ldd, const tqt_conv_params *conv,
+                                               const auto *params, int8_t padding) {
+        std::vector<int8_t> col((m > n ? m : n) * k + 16);
+        tqt_run_im2col_convcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt_4x1vl_rvv(
+            1, input, col.data(), conv, padding);
+        tqt_run_conv_convcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt_4x1vl_rvv(
+            m, n, k, col.data(), k, 0, weight, k, 0, nullptr, n, d, ldd, bias, -23, 19, params);
+    });
+}
+
+TEST(QuantizedPaddingContract, convcl_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi8cxp_4x1vl_rvv)
+{
+    check_quantized_padding_contract<false>([](size_t m, size_t n, size_t k, const int8_t *input,
+                                               const int8_t *weight, const int32_t *bias, int8_t *d,
+                                               size_t ldd, const tqt_conv_params *conv,
+                                               const auto *params, int8_t padding) {
+        std::vector<int8_t> wp(n * k + 16);
+        tqt_run_bt_pack_convcl_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi8cxp_4x1vl_rvv(
+            n, k, k, k, 0, weight, wp.data());
+        std::vector<int8_t> col((m > n ? m : n) * k + 16);
+        tqt_run_a_im2colpack_convcl_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi8cxp_4x1vl_rvv(
+            1, input, k, 0, col.data(), conv, padding);
+        tqt_run_conv_convcl_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi8cxp_4x1vl_rvv(
+            m, n, k, col.data(), k, 0, wp.data(), k, 0, nullptr, n, d, ldd, bias, -23, 19, params);
+    });
+}

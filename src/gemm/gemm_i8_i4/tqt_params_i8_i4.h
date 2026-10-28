@@ -74,6 +74,7 @@ struct tqt_qai8_qai8dx_qsi4cx_params
     const float *scale_b;
     float scale_d;
     int32_t zero_point_d;
+    const int32_t *bias_i32;  // Optional [N] raw bias, added before dequantization.
 };
 
 /// Quantization parameters for qai8dx (A) x qsi4c2 (B, block-quantized) -> f16/f32/bf16 (D)
@@ -85,13 +86,15 @@ struct tqt_qai8_qai8dx_qsi4cx_params
 ///   - scale_b       [n, k/bl]      fp32 row-major per-block scale
 ///   - ldsb          leading dim of scale_b in fp32 elements (typically k/bl)
 /// Nibbles in B are stored unsigned in [0, 15] with ZP=8 offset; dequant
-/// recovers signed value via (nibble - 8) * scale_b[n, blk].
+/// recovers (nibble - 8) * scale_b[n, blk], or lut[nibble] * scale_b[n, blk].
+/// Value-initialize the structure so the optional LUT pointer defaults to null.
 struct tqt_qai8dx_qsi4c2_params
 {
     const float *scale_a;
     const int32_t *zero_point_a;
     const float *scale_b;
     size_t ldsb;
+    const int8_t *lut;  // Optional 16-entry decode table; null selects nibble - 8.
 };
 
 /// Quantization parameters for qsi8d2 (A, block sym) x qsi4c2 (B, block sym) -> f16/f32/bf16 (D)
@@ -109,6 +112,7 @@ struct tqt_qsi8d2_qsi4c2_params
     size_t ldsa;
     const float *scale_b;
     size_t ldsb;
+    const int8_t *lut;  // Optional 16-entry decode table; null selects nibble - 8.
 };
 
 /// Quantization parameters for qsi8d2 (A, block sym) x qai4c2 (B, block ASYM)
@@ -117,18 +121,20 @@ struct tqt_qsi8d2_qsi4c2_params
 /// A is per-row block-quantized symmetric int8 along K (no zero point):
 ///   - scale_a       [m, k/bl]      fp32 row-major (ldsa)
 /// B is per-block ASYMMETRIC int4 along K. Nibbles are stored unsigned in
-/// [0, 15] (ZP=0 encoding); zero point is carried in zp_b as fp32.
-/// Dequant: (nibble - zp_b[n, blk]) * scale_b[n, blk].
+/// [0, 15] (ZP=0 encoding); an independent fp32 additive term is carried in offset_b.
+/// Dequant: nibble * scale_b[n, blk] + offset_b[n, blk].
 ///   - scale_b       [n, k/bl]      fp32 row-major (ldsb)
-///   - zp_b          [n, k/bl]      fp32 row-major (ldzpb)
+///   - offset_b      [n, k/bl]      fp32 row-major (ldob)
+/// An offset may be nonzero when scale_b is zero. Migrate old zero points with
+/// offset_b = -zp_b * scale_b. Metadata pointers retain the full K-block origin.
 struct tqt_qsi8d2_qai4c2_params
 {
     const float *scale_a;
     size_t ldsa;
     const float *scale_b;
     size_t ldsb;
-    const float *zp_b;
-    size_t ldzpb;
+    const float *offset_b;
+    size_t ldob;
 };
 
 #ifdef __cplusplus

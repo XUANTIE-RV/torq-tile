@@ -20,7 +20,7 @@ extern "C" {
 ///
 /// A is qsi8d2 (per-row block-symmetric int8), scale_a [m, k/bl] fp32.
 /// B is qai4c2t (per-block ASYMMETRIC int4, ZP=0 encoding). scale_b [n, k/bl] fp32,
-/// zp_b [n, k/bl] fp32.
+/// offset_b [n, k/bl] fp32.
 /// bias is bf16[n], C is bf16[m, n], D is bf16[m, n].
 ///
 /// k must be a multiple of bl. bl must be >= 2 and a multiple of 2.
@@ -43,9 +43,9 @@ size_t tqt_get_scale_b_offset_gemm_1xnbias_clamp_bf16_qsi8d2_qai4c2t_4x1vl_rvv(s
                                                                                size_t b_idx,
                                                                                size_t ldsb);
 
-size_t tqt_get_zp_b_offset_gemm_1xnbias_clamp_bf16_qsi8d2_qai4c2t_4x1vl_rvv(size_t n_idx,
-                                                                            size_t b_idx,
-                                                                            size_t ldzpb);
+size_t tqt_get_offset_b_offset_gemm_1xnbias_clamp_bf16_qsi8d2_qai4c2t_4x1vl_rvv(size_t n_idx,
+                                                                                size_t b_idx,
+                                                                                size_t ldob);
 
 size_t tqt_get_c_offset_gemm_1xnbias_clamp_bf16_qsi8d2_qai4c2t_4x1vl_rvv(size_t m_idx, size_t n_idx,
                                                                          size_t ldc);

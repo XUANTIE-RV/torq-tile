@@ -119,7 +119,8 @@ static void igemmcf_packed_kernel(size_t ic_start, size_t ic_end, int8_t *D, con
                                   const int *oh_arr, const int *ow_arr, size_t ID, size_t IH,
                                   size_t IW, size_t KD, size_t KH, size_t KW, size_t SD, size_t SH,
                                   size_t SW, size_t DD, size_t DH, size_t DW, size_t PD, size_t PH,
-                                  size_t PW, const int32_t *mult, const int32_t *shift, int32_t zp)
+                                  size_t PW, const int32_t *mult, const int32_t *shift, int32_t zp,
+                                  int32_t input_zp)
 {
     static_assert(NR >= 1 && NR <= 4, "NR must be in range [1, 4]");
 
@@ -149,7 +150,7 @@ static void igemmcf_packed_kernel(size_t ic_start, size_t ic_end, int8_t *D, con
                     auto load_input = [&](size_t i) {
                         int iw = (int)(ow_arr[i] * SW + kw * DW) - (int)PW;
                         if (!flag_h[i] && iw >= 0 && iw < (int)IW) {
-                            return (int32_t)b_base[id[i] * IH * IW + ih[i] * IW + iw];
+                            return (int32_t)b_base[id[i] * IH * IW + ih[i] * IW + iw] - input_zp;
                         }
                         return int32_t{0};
                     };
@@ -187,15 +188,13 @@ static void igemmcf_packed_kernel(size_t ic_start, size_t ic_end, int8_t *D, con
 }
 
 // Function pointer type for kernel dispatch
-using igemmcf_packed_kernel_fn_t = void (*)(size_t ic_start, size_t ic_end, int8_t *D,
-                                            const int8_t *W, const int8_t *input_group,
-                                            const int32_t *bias, size_t ldd, int8_t clamp_min,
-                                            int8_t clamp_max, size_t vl, const int *od_arr,
-                                            const int *oh_arr, const int *ow_arr, size_t ID,
-                                            size_t IH, size_t IW, size_t KD, size_t KH, size_t KW,
-                                            size_t SD, size_t SH, size_t SW, size_t DD, size_t DH,
-                                            size_t DW, size_t PD, size_t PH, size_t PW,
-                                            const int32_t *mult, const int32_t *shift, int32_t zp);
+using igemmcf_packed_kernel_fn_t =
+    void (*)(size_t ic_start, size_t ic_end, int8_t *D, const int8_t *W, const int8_t *input_group,
+             const int32_t *bias, size_t ldd, int8_t clamp_min, int8_t clamp_max, size_t vl,
+             const int *od_arr, const int *oh_arr, const int *ow_arr, size_t ID, size_t IH,
+             size_t IW, size_t KD, size_t KH, size_t KW, size_t SD, size_t SH, size_t SW, size_t DD,
+             size_t DH, size_t DW, size_t PD, size_t PH, size_t PW, const int32_t *mult,
+             const int32_t *shift, int32_t zp, int32_t input_zp);
 
 // Kernel dispatch table: [NR] = [4] (MR is always 1 for i8 CF)
 static constexpr igemmcf_packed_kernel_fn_t kernel_table[4] = {
@@ -213,7 +212,7 @@ static void igemmcf_packed_dispatch(size_t N, size_t ic_start, size_t ic_end, in
                                     size_t KW, size_t SD, size_t SH, size_t SW, size_t DD,
                                     size_t DH, size_t DW, size_t PD, size_t PH, size_t PW,
                                     const int32_t *mult, const int32_t *shift, int32_t zp,
-                                    size_t VLENB)
+                                    int32_t input_zp, size_t VLENB)
 {
     const size_t vlmax = VLENB;
 
@@ -224,7 +223,7 @@ static void igemmcf_packed_dispatch(size_t N, size_t ic_start, size_t ic_end, in
 
     kernel_table[nr_idx](ic_start, ic_end, D, W, input_group, bias, ldd, clamp_min, clamp_max, vl,
                          od_arr, oh_arr, ow_arr, ID, IH, IW, KD, KH, KW, SD, SH, SW, DD, DH, DW, PD,
-                         PH, PW, mult, shift, zp);
+                         PH, PW, mult, shift, zp, input_zp);
 }
 
 // ============================================================================
@@ -246,7 +245,7 @@ void tqt_run_igemm_igemmcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8_1vlx4_rvv(
     TQT_UNUSED(ldc);
     TQT_UNUSED(k);
 
-    if (!conv_params || !quant_params) {
+    if (!conv_params || !quant_params || m == 0 || n == 0) {
         return;
     }
 
@@ -278,19 +277,16 @@ void tqt_run_igemm_igemmcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8_1vlx4_rvv(
     // CF: scale_a is per-channel weight array (per-OC), scale_b is scalar (activation)
     int32_t mult_arr[m];
     int32_t shift_arr[m];
-    double real_scale = (double)quant_params->scale_a[0] * (double)quant_params->scale_b /
-                        (double)quant_params->scale_d;
-    tqt_quantize_multiplier(real_scale, &mult_arr[0], &shift_arr[0]);
-    shift_arr[0] = -shift_arr[0] - 1;
+    tqt_quantize_multiplier_from_scales(quant_params->scale_a[0], quant_params->scale_b,
+                                        quant_params->scale_d, &mult_arr[0], &shift_arr[0]);
+
     for (size_t i = 1; i < m; i++) {
         if (quant_params->quant_channel_a == 1) {
             mult_arr[i] = mult_arr[0];
             shift_arr[i] = shift_arr[0];
         } else {
-            real_scale = (double)quant_params->scale_a[i] * (double)quant_params->scale_b /
-                         (double)quant_params->scale_d;
-            tqt_quantize_multiplier(real_scale, &mult_arr[i], &shift_arr[i]);
-            shift_arr[i] = -shift_arr[i] - 1;
+            tqt_quantize_multiplier_from_scales(quant_params->scale_a[i], quant_params->scale_b,
+                                                quant_params->scale_d, &mult_arr[i], &shift_arr[i]);
         }
     }
     int32_t zp = quant_params->zero_point_d;
@@ -327,7 +323,7 @@ void tqt_run_igemm_igemmcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8_1vlx4_rvv(
             igemmcf_packed_dispatch(actual_n, 0, IC_per_group, d_ptr, w_ptr, input_group, bias_ptr,
                                     ldd, clamp_min, clamp_max, actual_m, od_arr, oh_arr, ow_arr, ID,
                                     IH, IW, KD, KH, KW, SD, SH, SW, DD, DH, DW, PD, PH, PW,
-                                    mult_ptr, shift_ptr, zp, VLENB);
+                                    mult_ptr, shift_ptr, zp, quant_params->zero_point_b, VLENB);
         }
     }
 }

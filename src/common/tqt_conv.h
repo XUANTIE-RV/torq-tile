@@ -53,7 +53,7 @@ typedef struct tqt_conv_params
 
 template <typename T>
 static inline void tqt_im2col_cf(size_t group_idx, const void *activation, void *im2col_buf,
-                                 const tqt_conv_params *params)
+                                 const tqt_conv_params *params, T padding_value = T(0))
 {
     const T *input = (const T *)activation;
     T *col = (T *)im2col_buf;
@@ -107,7 +107,7 @@ static inline void tqt_im2col_cf(size_t group_idx, const void *activation, void 
                                         input_group[ic * ID * IH * IW + (size_t)id_in * IH * IW +
                                                     (size_t)ih_in * IW + (size_t)iw_in];
                                 } else {
-                                    col[col_row * N_out + col_col] = T(0);
+                                    col[col_row * N_out + col_col] = padding_value;
                                 }
                                 col_col++;
                             }
@@ -133,7 +133,7 @@ static inline void tqt_im2col_cf(size_t group_idx, const void *activation, void 
 
 template <typename T>
 static inline void tqt_im2col_cl(size_t group_idx, const void *activation, void *im2col_buf,
-                                 const tqt_conv_params *params)
+                                 const tqt_conv_params *params, T padding_value = T(0))
 {
     const T *input = (const T *)activation;
     T *col = (T *)im2col_buf;
@@ -191,8 +191,8 @@ static inline void tqt_im2col_cl(size_t group_idx, const void *activation, void 
                                 TQT_MEMCPY(&col[col_row * K_col + col_col], src,
                                            IC_per_group * sizeof(T));
                             } else {
-                                TQT_MEMSET(&col[col_row * K_col + col_col], 0,
-                                           IC_per_group * sizeof(T));
+                                for (size_t ic = 0; ic < IC_per_group; ++ic)
+                                    col[col_row * K_col + col_col + ic] = padding_value;
                             }
                             col_col += IC_per_group;
                         }

@@ -142,5 +142,9 @@ extern template void reference_gemm_quantized_weight_mixed<float16_t, float>(
     const float16_t *, size_t, const float *, size_t, float *, size_t, const float *, BiasMode,
     float, float);
 
+/// Requantize an exact I64 accumulator with one independent ties-to-even rounding.
+int8_t reference_requantized_i8(int64_t dot, float scale, int32_t zero_point, int8_t clamp_min,
+                                int8_t clamp_max);
+
 }  // namespace test
 }  // namespace torq_tile

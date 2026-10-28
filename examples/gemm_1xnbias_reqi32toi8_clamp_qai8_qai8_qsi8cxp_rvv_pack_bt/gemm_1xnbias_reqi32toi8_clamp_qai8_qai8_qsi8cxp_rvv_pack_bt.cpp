@@ -126,20 +126,6 @@ void dequantize_i8_to_fp32(const int8_t *src, float *dst, size_t size, float sca
     }
 }
 
-// Fuse zero_point of asymmetric-quantized A into bias.
-// weight_i8 is [num_channels, channel_size] (transposed storage, each row is a channel).
-void fuse_zp_to_bias(int32_t *bias_fused, const int32_t *bias, const int8_t *weight_i8,
-                     int32_t zero_point, size_t num_channels, size_t channel_size)
-{
-    for (size_t ch = 0; ch < num_channels; ++ch) {
-        int32_t weight_sum = 0;
-        for (size_t ki = 0; ki < channel_size; ++ki) {
-            weight_sum += (int32_t)weight_i8[ch * channel_size + ki];
-        }
-        bias_fused[ch] = bias[ch] - zero_point * weight_sum;
-    }
-}
-
 void fill_matrix_random(size_t rows, size_t cols, float *matrix, float min, float max)
 {
     for (size_t i = 0; i < rows * cols; ++i) {
@@ -200,7 +186,7 @@ int main()
     int8_t *A_i8 = (int8_t *)malloc(M * K);
     int8_t *BT_i8 = (int8_t *)malloc(N * K);  // B in [N, K] layout
     int32_t *bias_i32 = (int32_t *)malloc(N * sizeof(int32_t));
-    int32_t *bias_fused = (int32_t *)malloc(N * sizeof(int32_t));
+
     int8_t *D_i8 = (int8_t *)malloc(M * N);
     float *D_deq = (float *)malloc(M * N * sizeof(float));
 
@@ -214,9 +200,6 @@ int main()
     for (size_t ch = 0; ch < N; ++ch) {
         quantize_fp32_to_i32(&bias_fp32[ch], &bias_i32[ch], 1, scale_a * scale_b[ch], 0);
     }
-
-    // Fuse zero_point_a into bias: bias_fused[n] = bias[n] - zp_a * sum(BT_i8[n, 0..K-1])
-    fuse_zp_to_bias(bias_fused, bias_i32, BT_i8, zp_a, N, K);
 
     struct tqt_qai8_qai8_qsi8cx_params params;
     params.scale_a = scale_a;
@@ -252,7 +235,7 @@ int main()
             // B: packed layout
             const uint8_t *b_ptr =
                 (const uint8_t *)B_packed + ukernel.get_b_packed_offset(n_idx, 0, K, actual_n);
-            const uint8_t *bias_ptr = (const uint8_t *)bias_fused + ukernel.get_bias_offset(n_idx);
+            const uint8_t *bias_ptr = (const uint8_t *)bias_i32 + ukernel.get_bias_offset(n_idx);
             uint8_t *d_ptr = (uint8_t *)D_i8 + ukernel.get_d_offset(m_idx, n_idx, N);
 
             ukernel.run_gemm(actual_m, actual_n, K, a_ptr, K, 0, b_ptr, K, 0, nullptr, N, d_ptr, N,
@@ -294,7 +277,7 @@ int main()
     free(A_i8);
     free(BT_i8);
     free(bias_i32);
-    free(bias_fused);
+
     free(D_i8);
     free(scale_b);
     free(B_packed);

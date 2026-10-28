@@ -82,6 +82,8 @@ void tqt_run_bt_pack_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp_4x1vl_rv
 /// @param[in]  clamp_max Maximum clamp value (int8).
 /// @param[in]  conv_params Convolution parameters (shapes, strides, padding, etc.).
 /// @param[in]  quant_params Quantization parameters.
+/// Bias is raw I32 in the accumulator domain; the kernel corrects input zero points.
+/// Requantization uses one nearest-even rounding of the full Q31 product.
 void tqt_run_igemm_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp_4x1vl_rvv(
     size_t m, size_t n, size_t k, const void *input, size_t group_idx, size_t m_idx, size_t k_idx_a,
     const void *B_packed, size_t ldb, size_t k_idx_b, const void *C, size_t ldc, void *D,

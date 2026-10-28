@@ -100,8 +100,8 @@ template <size_t MR>
 static void gemm_kernel(size_t K, int8_t *D, const int8_t *A, const uint8_t *B, const float *C,
                         const float *bias, size_t ldd, size_t lda, size_t ldb, size_t ldc,
                         int32_t clamp_min, int32_t clamp_max, size_t vl, const float *scale_a,
-                        const int32_t *zp_a, const float *scale_b, float inv_scale_d,
-                        int32_t zero_point_d)
+                        const int32_t *zp_a, const float *scale_b, float scale_d,
+                        int32_t zero_point_d, const int32_t *bias_i32)
 {
     static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
 
@@ -142,6 +142,8 @@ static void gemm_kernel(size_t K, int8_t *D, const int8_t *A, const uint8_t *B, 
     }
 
     tqt_apply_zp_correction_kernel_gemm_i8_i4_4x1vl_rvv<MR>(vl, zp_a);
+    if (bias_i32)
+        tqt_add_1xnbias_i32_kernel_gemm_i8_i4_4x1vl_rvv<MR>(vl, bias_i32);
     tqt_dequant_acc_to_f32_kernel_gemm_i8_i4_4x1vl_rvv<MR>(vl, scale_a, scale_b);
 
     if (C) {
@@ -152,15 +154,16 @@ static void gemm_kernel(size_t K, int8_t *D, const int8_t *A, const uint8_t *B, 
         tqt_add_1xnbias_f32_kernel_gemm_i8_i4_4x1vl_rvv<MR>(vl, bias);
     }
 
-    tqt_requantize_f32_to_i8_kernel_gemm_i8_i4_4x1vl_rvv<MR>(vl, inv_scale_d, zero_point_d,
-                                                             clamp_min, clamp_max, D, d_stride_row);
+    tqt_requantize_f32_to_i8_kernel_gemm_i8_i4_4x1vl_rvv<MR>(vl, scale_d, zero_point_d, clamp_min,
+                                                             clamp_max, D, d_stride_row);
 }
 
 using gemm_kernel_fn_t = void (*)(size_t K, int8_t *D, const int8_t *A, const uint8_t *B,
                                   const float *C, const float *bias, size_t ldd, size_t lda,
                                   size_t ldb, size_t ldc, int32_t clamp_min, int32_t clamp_max,
                                   size_t vl, const float *scale_a, const int32_t *zp_a,
-                                  const float *scale_b, float inv_scale_d, int32_t zero_point_d);
+                                  const float *scale_b, float scale_d, int32_t zero_point_d,
+                                  const int32_t *bias_i32);
 
 static constexpr gemm_kernel_fn_t kernel_table[4] = {
     gemm_kernel<1>,
@@ -195,7 +198,8 @@ void tqt_run_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dx_qsi4cxt_4x1vl_rvv(
     int8_t *D_ptr = (int8_t *)D;
 
     const size_t b_byte_stride = ldb / 2;
-    const float inv_scale_d = 1.0f / params->scale_d;
+    const tqt_scoped_rne_kernel_gemm_i8_i4_4x1vl_rvv rounding;
+    const float scale_d = params->scale_d;
     const int32_t zero_point_d = params->zero_point_d;
     const int32_t clamp_min_i32 = (int32_t)clamp_min;
     const int32_t clamp_max_i32 = (int32_t)clamp_max;
@@ -218,7 +222,8 @@ void tqt_run_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dx_qsi4cxt_4x1vl_rvv(
             const size_t mr_idx = actual_m - 1;
             kernel_table[mr_idx](k, d_tile, a_tile, b_tile, c_tile, bias_tile, ldd, lda, ldb, ldc,
                                  clamp_min_i32, clamp_max_i32, actual_n, scale_a_tile, zp_a_tile,
-                                 scale_b_tile, inv_scale_d, zero_point_d);
+                                 scale_b_tile, scale_d, zero_point_d,
+                                 params->bias_i32 ? params->bias_i32 + n_idx : nullptr);
         }
     }
 }

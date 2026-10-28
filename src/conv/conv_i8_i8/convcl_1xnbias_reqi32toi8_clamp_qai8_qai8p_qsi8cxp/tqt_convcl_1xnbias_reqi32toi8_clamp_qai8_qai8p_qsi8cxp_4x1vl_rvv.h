@@ -136,9 +136,10 @@ void tqt_run_bt_pack_convcl_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi8cxp_4x1vl_rv
 /// @param[in]  k_idx Starting k index for packing.
 /// @param[out] A_packed Packed matrix A buffer (im2col transformed).
 /// @param[in]  params Convolution parameters (padding, stride, dilation, etc.).
+/// padding_value is the activation zero point.
 void tqt_run_a_im2colpack_convcl_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi8cxp_4x1vl_rvv(
     size_t group_idx, const void *activation, size_t lda_packed, size_t k_idx, void *A_packed,
-    const tqt_conv_params *params);
+    const tqt_conv_params *params, int8_t padding_value);
 
 /// Runs the convolution microkernel with packed matrices, bias addition, requantization and clamp.
 ///
@@ -166,6 +167,8 @@ void tqt_run_a_im2colpack_convcl_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi8cxp_4x1
 /// weight.
 /// @note The bias vector has shape [1, n] and is added to each row of the result.
 /// @note k_idx_a and k_idx_b are used when A and B are sub-buffers with different sizes.
+/// Bias is raw I32 in the accumulator domain; the kernel corrects input zero points.
+/// Requantization uses one nearest-even rounding of the full Q31 product.
 void tqt_run_conv_convcl_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi8cxp_4x1vl_rvv(
     size_t m, size_t n, size_t k, const void *A_packed, size_t lda, size_t k_idx_a,
     const void *B_packed, size_t ldb, size_t k_idx_b, const void *C, size_t ldc, void *D,

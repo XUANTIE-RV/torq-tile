@@ -14,6 +14,7 @@
 #include <stdint.h>
 
 #include "src/common/tqt_common.h"
+#include "src/gemm/gemm_i8_i8/tqt_utils_i8_i8.h"
 
 /// Register allocation for 4x1vl GEMM kernel:
 ///   a0-a3:   A[0-3]
@@ -118,40 +119,34 @@ static inline void tqt_load_bt_kernel_gemm_i8_i8_4x1vl_rvv(size_t vl, const int8
 /// Loads A scalars from provided pointers into a0-a3
 /// Assumes B vector is already loaded in v0
 template <size_t MR>
-static inline void tqt_vmacc_kernel_gemm_i8_i8_4x1vl_rvv(size_t vl, const int8_t *const a_ptrs[MR])
+static inline void tqt_vmacc_kernel_gemm_i8_i8_4x1vl_rvv(size_t vl, const int8_t *const a_ptrs[MR],
+                                                         int32_t zero_point_a = 0,
+                                                         int32_t zero_point_b = 0)
 {
     static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
-
-    // Load all A scalars into a0-a3
-    // Widening multiply: int8 * int8 -> int16
-    asm volatile("vsetvli zero, %0, e8, m1, ta, ma\n\t" : : "r"(vl) :);
+    asm volatile(
+        "vsetvli zero, %[vl], e16, m2, ta, ma\n\t"
+        "vsext.vf2 v8, v0\n\t"
+        "vsub.vx v8, v8, %[zp]\n\t"
+        :
+        : [vl] "r"(vl), [zp] "r"(zero_point_b)
+        : "v8", "v9");
     if constexpr (MR >= 1) {
-        asm volatile("lb a0, 0(%0)" : : "r"(a_ptrs[0]) : "a0", "memory");
-        asm volatile("vwmul.vx v8, v0, a0" : : : "v8", "v9");
+        const int32_t a = (int32_t)*a_ptrs[0] - zero_point_a;
+        asm volatile("vwmacc.vx v16, %0, v8" : : "r"(a) : "v16", "v17", "v18", "v19");
     }
     if constexpr (MR >= 2) {
-        asm volatile("lb a1, 0(%0)" : : "r"(a_ptrs[1]) : "a1", "memory");
-        asm volatile("vwmul.vx v10, v0, a1" : : : "v10", "v11");
+        const int32_t a = (int32_t)*a_ptrs[1] - zero_point_a;
+        asm volatile("vwmacc.vx v20, %0, v8" : : "r"(a) : "v20", "v21", "v22", "v23");
     }
     if constexpr (MR >= 3) {
-        asm volatile("lb a2, 0(%0)" : : "r"(a_ptrs[2]) : "a2", "memory");
-        asm volatile("vwmul.vx v12, v0, a2" : : : "v12", "v13");
+        const int32_t a = (int32_t)*a_ptrs[2] - zero_point_a;
+        asm volatile("vwmacc.vx v24, %0, v8" : : "r"(a) : "v24", "v25", "v26", "v27");
     }
     if constexpr (MR >= 4) {
-        asm volatile("lb a3, 0(%0)" : : "r"(a_ptrs[3]) : "a3", "memory");
-        asm volatile("vwmul.vx v14, v0, a3" : : : "v14", "v15");
+        const int32_t a = (int32_t)*a_ptrs[3] - zero_point_a;
+        asm volatile("vwmacc.vx v28, %0, v8" : : "r"(a) : "v28", "v29", "v30", "v31");
     }
-
-    // Widening add int16 -> int32 accumulator
-    asm volatile("vsetvli zero, %0, e16, m2, ta, ma\n\t" : : "r"(vl) :);
-    if constexpr (MR >= 1)
-        asm volatile("vwadd.wv v16, v16, v8" : : : "v16", "v17", "v18", "v19");
-    if constexpr (MR >= 2)
-        asm volatile("vwadd.wv v20, v20, v10" : : : "v20", "v21", "v22", "v23");
-    if constexpr (MR >= 3)
-        asm volatile("vwadd.wv v24, v24, v12" : : : "v24", "v25", "v26", "v27");
-    if constexpr (MR >= 4)
-        asm volatile("vwadd.wv v28, v28, v14" : : : "v28", "v29", "v30", "v31");
 }
 
 /// Add 1xN bias to accumulator registers
@@ -262,153 +257,74 @@ static inline void tqt_clamp_i8_kernel_gemm_i8_i8_4x1vl_rvv(size_t vl, int8_t mi
     }
 }
 
-/// Requantize int32 to int8 with per-row (Mx1) quantization parameters
-/// After this function, results are narrowed to int8 in v4-v7 (m1)
+/// Requantize the complete Q31 product with one nearest-even rounding.
+/// A tile-sized scratch buffer preserves accumulators across scalar arithmetic.
 template <size_t MR>
-static inline void tqt_requantize_mx1_kernel_gemm_i8_i8_4x1vl_rvv(size_t vl, const int32_t *mult,
-                                                                  const int32_t *shift, int32_t zp)
+static inline __attribute__((always_inline)) void tqt_requantize_mx1_kernel_gemm_i8_i8_4x1vl_rvv(
+    size_t vl, const int32_t *mult, const int32_t *shift, int32_t zp)
 {
     static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
-
+    int32_t accum[MR * vl];
+    int8_t output[MR * vl];
     asm volatile("vsetvli zero, %0, e32, m4, ta, ma\n\t" : : "r"(vl) :);
-
-    // Row 0: requantize + narrow int32 -> int16 -> int8
-    if constexpr (MR >= 1) {
-        asm volatile(
-            "vmulh.vx v16, v16, %[m]\n\t"
-            "vsra.vx v16, v16, %[s]\n\t"
-            "vadd.vx v16, v16, %[z]\n\t"
-            "vsetvli zero, %[vl], e16, m2, ta, ma\n\t"
-            "vnclip.wx v8, v16, zero\n\t"
-            "vsetvli zero, %[vl], e8, m1, ta, ma\n\t"
-            "vnclip.wx v4, v8, zero\n\t"
-            :
-            : [m] "r"(mult[0]), [s] "r"(shift[0]), [z] "r"(zp), [vl] "r"(vl)
-            : "v4", "v8", "v9", "v16", "v17", "v18", "v19");
+    if constexpr (MR >= 1)
+        asm volatile("vse32.v v16, (%0)" : : "r"(accum + 0 * vl) : "memory");
+    if constexpr (MR >= 2)
+        asm volatile("vse32.v v20, (%0)" : : "r"(accum + 1 * vl) : "memory");
+    if constexpr (MR >= 3)
+        asm volatile("vse32.v v24, (%0)" : : "r"(accum + 2 * vl) : "memory");
+    if constexpr (MR >= 4)
+        asm volatile("vse32.v v28, (%0)" : : "r"(accum + 3 * vl) : "memory");
+    for (size_t row = 0; row < MR; ++row) {
+        for (size_t col = 0; col < vl; ++col) {
+            output[row * vl + col] =
+                tqt_requantize_i32_i8(accum[row * vl + col], mult[row], shift[row], zp);
+        }
     }
-    // Row 1
-    if constexpr (MR >= 2) {
-        asm volatile(
-            "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"
-            "vmulh.vx v20, v20, %[m]\n\t"
-            "vsra.vx v20, v20, %[s]\n\t"
-            "vadd.vx v20, v20, %[z]\n\t"
-            "vsetvli zero, %[vl], e16, m2, ta, ma\n\t"
-            "vnclip.wx v10, v20, zero\n\t"
-            "vsetvli zero, %[vl], e8, m1, ta, ma\n\t"
-            "vnclip.wx v5, v10, zero\n\t"
-            :
-            : [m] "r"(mult[1]), [s] "r"(shift[1]), [z] "r"(zp), [vl] "r"(vl)
-            : "v5", "v10", "v11", "v20", "v21", "v22", "v23");
-    }
-    // Row 2
-    if constexpr (MR >= 3) {
-        asm volatile(
-            "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"
-            "vmulh.vx v24, v24, %[m]\n\t"
-            "vsra.vx v24, v24, %[s]\n\t"
-            "vadd.vx v24, v24, %[z]\n\t"
-            "vsetvli zero, %[vl], e16, m2, ta, ma\n\t"
-            "vnclip.wx v12, v24, zero\n\t"
-            "vsetvli zero, %[vl], e8, m1, ta, ma\n\t"
-            "vnclip.wx v6, v12, zero\n\t"
-            :
-            : [m] "r"(mult[2]), [s] "r"(shift[2]), [z] "r"(zp), [vl] "r"(vl)
-            : "v6", "v12", "v13", "v24", "v25", "v26", "v27");
-    }
-    // Row 3
-    if constexpr (MR >= 4) {
-        asm volatile(
-            "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"
-            "vmulh.vx v28, v28, %[m]\n\t"
-            "vsra.vx v28, v28, %[s]\n\t"
-            "vadd.vx v28, v28, %[z]\n\t"
-            "vsetvli zero, %[vl], e16, m2, ta, ma\n\t"
-            "vnclip.wx v14, v28, zero\n\t"
-            "vsetvli zero, %[vl], e8, m1, ta, ma\n\t"
-            "vnclip.wx v7, v14, zero\n\t"
-            :
-            : [m] "r"(mult[3]), [s] "r"(shift[3]), [z] "r"(zp), [vl] "r"(vl)
-            : "v7", "v14", "v15", "v28", "v29", "v30", "v31");
-    }
+    asm volatile("vsetvli zero, %0, e8, m1, ta, ma\n\t" : : "r"(vl) :);
+    if constexpr (MR >= 1)
+        asm volatile("vle8.v v4, (%0)" : : "r"(output + 0 * vl) : "v4", "memory");
+    if constexpr (MR >= 2)
+        asm volatile("vle8.v v5, (%0)" : : "r"(output + 1 * vl) : "v5", "memory");
+    if constexpr (MR >= 3)
+        asm volatile("vle8.v v6, (%0)" : : "r"(output + 2 * vl) : "v6", "memory");
+    if constexpr (MR >= 4)
+        asm volatile("vle8.v v7, (%0)" : : "r"(output + 3 * vl) : "v7", "memory");
 }
 
-/// Requantize int32 to int8 with per-column (1xN) quantization parameters
-/// After this function, results are narrowed to int8 in v4-v7 (m1)
+/// Requantize the complete Q31 product with one nearest-even rounding.
+/// A tile-sized scratch buffer preserves accumulators across scalar arithmetic.
 template <size_t MR>
-static inline void tqt_requantize_1xn_kernel_gemm_i8_i8_4x1vl_rvv(size_t vl, const int32_t *mult,
-                                                                  const int32_t *shift, int32_t zp)
+static inline __attribute__((always_inline)) void tqt_requantize_1xn_kernel_gemm_i8_i8_4x1vl_rvv(
+    size_t vl, const int32_t *mult, const int32_t *shift, int32_t zp)
 {
     static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
-
-    // Load mult and shift vectors into v0-v3 (m4) and v8-v11 (m4)
-    asm volatile(
-        "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"
-        "vle32.v v0, (%[mult])\n\t"
-        "vle32.v v8, (%[shift])\n\t"
-        :
-        : [vl] "r"(vl), [mult] "r"(mult), [shift] "r"(shift)
-        : "v0", "v1", "v2", "v3", "v8", "v9", "v10", "v11", "memory");
-
-    // Row 0: requantize + narrow int32 -> int16 -> int8
-    if constexpr (MR >= 1) {
-        asm volatile(
-            "vmulh.vv v16, v16, v0\n\t"
-            "vsra.vv v16, v16, v8\n\t"
-            "vadd.vx v16, v16, %[z]\n\t"
-            "vsetvli zero, %[vl], e16, m2, ta, ma\n\t"
-            "vnclip.wx v12, v16, zero\n\t"
-            "vsetvli zero, %[vl], e8, m1, ta, ma\n\t"
-            "vnclip.wx v4, v12, zero\n\t"
-            :
-            : [z] "r"(zp), [vl] "r"(vl)
-            : "v4", "v12", "v13", "v16", "v17", "v18", "v19");
+    int32_t accum[MR * vl];
+    int8_t output[MR * vl];
+    asm volatile("vsetvli zero, %0, e32, m4, ta, ma\n\t" : : "r"(vl) :);
+    if constexpr (MR >= 1)
+        asm volatile("vse32.v v16, (%0)" : : "r"(accum + 0 * vl) : "memory");
+    if constexpr (MR >= 2)
+        asm volatile("vse32.v v20, (%0)" : : "r"(accum + 1 * vl) : "memory");
+    if constexpr (MR >= 3)
+        asm volatile("vse32.v v24, (%0)" : : "r"(accum + 2 * vl) : "memory");
+    if constexpr (MR >= 4)
+        asm volatile("vse32.v v28, (%0)" : : "r"(accum + 3 * vl) : "memory");
+    for (size_t row = 0; row < MR; ++row) {
+        for (size_t col = 0; col < vl; ++col) {
+            output[row * vl + col] =
+                tqt_requantize_i32_i8(accum[row * vl + col], mult[col], shift[col], zp);
+        }
     }
-    // Row 1
-    if constexpr (MR >= 2) {
-        asm volatile(
-            "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"
-            "vmulh.vv v20, v20, v0\n\t"
-            "vsra.vv v20, v20, v8\n\t"
-            "vadd.vx v20, v20, %[z]\n\t"
-            "vsetvli zero, %[vl], e16, m2, ta, ma\n\t"
-            "vnclip.wx v12, v20, zero\n\t"
-            "vsetvli zero, %[vl], e8, m1, ta, ma\n\t"
-            "vnclip.wx v5, v12, zero\n\t"
-            :
-            : [z] "r"(zp), [vl] "r"(vl)
-            : "v5", "v12", "v13", "v20", "v21", "v22", "v23");
-    }
-    // Row 2
-    if constexpr (MR >= 3) {
-        asm volatile(
-            "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"
-            "vmulh.vv v24, v24, v0\n\t"
-            "vsra.vv v24, v24, v8\n\t"
-            "vadd.vx v24, v24, %[z]\n\t"
-            "vsetvli zero, %[vl], e16, m2, ta, ma\n\t"
-            "vnclip.wx v12, v24, zero\n\t"
-            "vsetvli zero, %[vl], e8, m1, ta, ma\n\t"
-            "vnclip.wx v6, v12, zero\n\t"
-            :
-            : [z] "r"(zp), [vl] "r"(vl)
-            : "v6", "v12", "v13", "v24", "v25", "v26", "v27");
-    }
-    // Row 3
-    if constexpr (MR >= 4) {
-        asm volatile(
-            "vsetvli zero, %[vl], e32, m4, ta, ma\n\t"
-            "vmulh.vv v28, v28, v0\n\t"
-            "vsra.vv v28, v28, v8\n\t"
-            "vadd.vx v28, v28, %[z]\n\t"
-            "vsetvli zero, %[vl], e16, m2, ta, ma\n\t"
-            "vnclip.wx v14, v28, zero\n\t"
-            "vsetvli zero, %[vl], e8, m1, ta, ma\n\t"
-            "vnclip.wx v7, v14, zero\n\t"
-            :
-            : [z] "r"(zp), [vl] "r"(vl)
-            : "v7", "v14", "v15", "v28", "v29", "v30", "v31");
-    }
+    asm volatile("vsetvli zero, %0, e8, m1, ta, ma\n\t" : : "r"(vl) :);
+    if constexpr (MR >= 1)
+        asm volatile("vle8.v v4, (%0)" : : "r"(output + 0 * vl) : "v4", "memory");
+    if constexpr (MR >= 2)
+        asm volatile("vle8.v v5, (%0)" : : "r"(output + 1 * vl) : "v5", "memory");
+    if constexpr (MR >= 3)
+        asm volatile("vle8.v v6, (%0)" : : "r"(output + 2 * vl) : "v6", "memory");
+    if constexpr (MR >= 4)
+        asm volatile("vle8.v v7, (%0)" : : "r"(output + 3 * vl) : "v7", "memory");
 }
 
 /// Store int32 accumulator registers to D matrix

@@ -28,7 +28,7 @@ extern "C" {
 ///     in [m/m_step, k, m_step] interleaved layout.
 ///   - B is qai4c2p: per-block asymmetric int4 along K, packed into
 ///     [n/n_step, k/2, n_step] uint8 layout (two nibbles per byte using ZP=0
-///     unsigned encoding; zero point is carried in zp_b as fp32).
+///     unsigned encoding; an independent fp32 additive term is carried in offset_b).
 ///   - bias is f32[n], C is f32[m, n], D is f32[m, n].
 ///
 /// Algorithm matches the unpacked variant; only the data layouts differ.
@@ -56,9 +56,9 @@ size_t tqt_get_scale_b_offset_gemm_1xnbias_clamp_f32_qsi8d2p_qai4c2p_4x1vl_rvv(s
                                                                                size_t b_idx,
                                                                                size_t ldsb);
 
-size_t tqt_get_zp_b_offset_gemm_1xnbias_clamp_f32_qsi8d2p_qai4c2p_4x1vl_rvv(size_t n_idx,
-                                                                            size_t b_idx,
-                                                                            size_t ldzpb);
+size_t tqt_get_offset_b_offset_gemm_1xnbias_clamp_f32_qsi8d2p_qai4c2p_4x1vl_rvv(size_t n_idx,
+                                                                                size_t b_idx,
+                                                                                size_t ldob);
 
 size_t tqt_get_c_offset_gemm_1xnbias_clamp_f32_qsi8d2p_qai4c2p_4x1vl_rvv(size_t m_idx, size_t n_idx,
                                                                          size_t ldc);
@@ -87,6 +87,7 @@ void tqt_run_bt_pack_gemm_1xnbias_clamp_f32_qsi8d2p_qai4c2p_4x1vl_rvv(size_t n, 
 /// @note If clamp_min is negative infinity and clamp_max is positive infinity,
 ///       clamping is skipped. All other bounds retain the existing clamp behavior.
 ///       This does not guarantee preservation of NaN payloads or exception flags.
+/// F32 bias is added before the final output conversion; bias offsets count bytes.
 void tqt_run_gemm_1xnbias_clamp_f32_qsi8d2p_qai4c2p_4x1vl_rvv(
     size_t m, size_t n, size_t k, size_t bl, const void *A_packed, size_t lda, size_t k_idx_a,
     const void *B_packed, size_t ldb, size_t k_idx_b, const void *C, size_t ldc, void *D,

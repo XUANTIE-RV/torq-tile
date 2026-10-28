@@ -20,7 +20,7 @@ extern "C" {
 /// (D = f16 output).
 ///
 /// A is qsi8d2p (packed), B is qai4c2p (packed ASYMMETRIC int4, ZP=0 encoding;
-/// zero point carried separately in zp_b fp32).
+/// an independent additive offset carried separately in offset_b fp32).
 ///
 /// k must be a multiple of bl. bl must be >= 2 and a multiple of 2.
 
@@ -46,9 +46,9 @@ size_t tqt_get_scale_b_offset_gemm_1xnbias_clamp_f16_qsi8d2p_qai4c2p_4x1vl_rvv(s
                                                                                size_t b_idx,
                                                                                size_t ldsb);
 
-size_t tqt_get_zp_b_offset_gemm_1xnbias_clamp_f16_qsi8d2p_qai4c2p_4x1vl_rvv(size_t n_idx,
-                                                                            size_t b_idx,
-                                                                            size_t ldzpb);
+size_t tqt_get_offset_b_offset_gemm_1xnbias_clamp_f16_qsi8d2p_qai4c2p_4x1vl_rvv(size_t n_idx,
+                                                                                size_t b_idx,
+                                                                                size_t ldob);
 
 size_t tqt_get_c_offset_gemm_1xnbias_clamp_f16_qsi8d2p_qai4c2p_4x1vl_rvv(size_t m_idx, size_t n_idx,
                                                                          size_t ldc);

@@ -200,5 +200,19 @@ template void reference_gemm_quantized_weight_mixed<float16_t, float>(
     const float16_t *, size_t, const float *, size_t, float *, size_t, const float *, BiasMode,
     float, float);
 
+// This oracle uses an exact I64 dot and a binary floating-point scale. It does
+// not call the implementation's multiplier conversion or requantization code.
+int8_t reference_requantized_i8(int64_t dot, float scale, int32_t zero_point, int8_t clamp_min,
+                                int8_t clamp_max)
+{
+    const long double value = (long double)dot * scale;
+    const long double lower = std::floor(value);
+    const long double fraction = value - lower;
+    const long double rounded =
+        lower + (fraction > 0.5L || (fraction == 0.5L && std::fmod(std::abs(lower), 2.0L) == 1.0L));
+    return (int8_t)std::max((long double)clamp_min,
+                            std::min((long double)clamp_max, rounded + zero_point));
+}
+
 }  // namespace test
 }  // namespace torq_tile

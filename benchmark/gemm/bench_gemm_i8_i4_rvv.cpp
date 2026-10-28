@@ -299,7 +299,9 @@ inline void run_w4a8_reqi8_gemm_benchmark(::benchmark::State &state,
 
     std::vector<int8_t> D(m * n, 0);
 
-    struct tqt_qai8_qai8dx_qsi4cx_params params;
+    struct tqt_qai8_qai8dx_qsi4cx_params params
+    {
+    };
     params.scale_a = scale_a.data();
     params.zero_point_a = zp_a.data();
     params.scale_b = scale_b.data();
@@ -352,7 +354,9 @@ inline void run_w4a8_reqi8_packed_gemm_benchmark(::benchmark::State &state,
 
     std::vector<int8_t> D(m * n, 0);
 
-    struct tqt_qai8_qai8dx_qsi4cx_params params;
+    struct tqt_qai8_qai8dx_qsi4cx_params params
+    {
+    };
     params.scale_a = scale_a.data();
     params.zero_point_a = zp_a.data();
     params.scale_b = scale_b.data();
@@ -402,7 +406,8 @@ inline void register_w4a8_reqi8_packed_gemm(const char *name,
 // ============================================================================
 
 #if TORQ_TILE_HAS_RVV_F16
-static W4A8GemmBenchFuncs<float16_t> make_funcs_f16_qai8dx_qsi4cxt()
+
+static W4A8GemmBenchFuncs<float16_t> make_funcs_f16_qai8dx_qsi4cxt_legacy()
 {
     W4A8GemmBenchFuncs<float16_t> f;
     f.get_m_step = tqt_get_m_step_gemm_1xnbias_clamp_f16_qai8dx_qsi4cxt_4x1vl_rvv;
@@ -411,7 +416,7 @@ static W4A8GemmBenchFuncs<float16_t> make_funcs_f16_qai8dx_qsi4cxt()
     return f;
 }
 
-static W4A8PackedGemmBenchFuncs<float16_t> make_funcs_f16_qai8dxp_qsi4cxp()
+static W4A8PackedGemmBenchFuncs<float16_t> make_funcs_f16_qai8dxp_qsi4cxp_legacy()
 {
     W4A8PackedGemmBenchFuncs<float16_t> f;
     f.get_m_step = tqt_get_m_step_gemm_1xnbias_clamp_f16_qai8dxp_qsi4cxp_4x1vl_rvv;
@@ -472,7 +477,8 @@ static W4A8ReqI8PackedGemmBenchFuncs make_funcs_reqi8_qai8dxp_qsi4cxp()
 }
 
 #if TORQ_TILE_HAS_RVV_BF16
-static W4A8GemmBenchFuncs<bfloat16_t> make_funcs_bf16_qai8dx_qsi4cxt()
+
+static W4A8GemmBenchFuncs<bfloat16_t> make_funcs_bf16_qai8dx_qsi4cxt_legacy()
 {
     W4A8GemmBenchFuncs<bfloat16_t> f;
     f.get_m_step = tqt_get_m_step_gemm_1xnbias_clamp_bf16_qai8dx_qsi4cxt_4x1vl_rvv;
@@ -481,7 +487,7 @@ static W4A8GemmBenchFuncs<bfloat16_t> make_funcs_bf16_qai8dx_qsi4cxt()
     return f;
 }
 
-static W4A8PackedGemmBenchFuncs<bfloat16_t> make_funcs_bf16_qai8dxp_qsi4cxp()
+static W4A8PackedGemmBenchFuncs<bfloat16_t> make_funcs_bf16_qai8dxp_qsi4cxp_legacy()
 {
     W4A8PackedGemmBenchFuncs<bfloat16_t> f;
     f.get_m_step = tqt_get_m_step_gemm_1xnbias_clamp_bf16_qai8dxp_qsi4cxp_4x1vl_rvv;
@@ -513,16 +519,20 @@ void register_gemm_i8_i4_rvv_benchmarks()
     register_w4a8_reqi8_packed_gemm("gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp_4x1vl_rvv",
                                     make_funcs_reqi8_qai8dxp_qsi4cxp());
 #if TORQ_TILE_HAS_RVV_F16
+
     register_w4a8_gemm<float16_t>("gemm_1xnbias_clamp_f16_qai8dx_qsi4cxt_4x1vl_rvv",
-                                  make_funcs_f16_qai8dx_qsi4cxt());
+                                  make_funcs_f16_qai8dx_qsi4cxt_legacy());
+
     register_w4a8_packed_gemm<float16_t>("gemm_1xnbias_clamp_f16_qai8dxp_qsi4cxp_4x1vl_rvv",
-                                         make_funcs_f16_qai8dxp_qsi4cxp());
+                                         make_funcs_f16_qai8dxp_qsi4cxp_legacy());
 #endif  // TORQ_TILE_HAS_RVV_F16
 #if TORQ_TILE_HAS_RVV_BF16
+
     register_w4a8_gemm<bfloat16_t>("gemm_1xnbias_clamp_bf16_qai8dx_qsi4cxt_4x1vl_rvv",
-                                   make_funcs_bf16_qai8dx_qsi4cxt());
+                                   make_funcs_bf16_qai8dx_qsi4cxt_legacy());
+
     register_w4a8_packed_gemm<bfloat16_t>("gemm_1xnbias_clamp_bf16_qai8dxp_qsi4cxp_4x1vl_rvv",
-                                          make_funcs_bf16_qai8dxp_qsi4cxp());
+                                          make_funcs_bf16_qai8dxp_qsi4cxp_legacy());
 #endif  // TORQ_TILE_HAS_RVV_BF16
 
     // W4A8 block-quantized benchmarks are registered separately below.
@@ -693,14 +703,14 @@ struct W4A8BQ_Inputs
     size_t bl;
     size_t ldsa;
     size_t ldsb;
-    size_t ldzpb;
+    size_t ldob;
     std::vector<int8_t> A;
     std::vector<uint8_t> B;
-    std::vector<float> scale_a_per_row;    // length m   (class 1)
-    std::vector<int32_t> zp_a_per_row;     // length m   (class 1)
-    std::vector<float> scale_a_per_block;  // [m, k/bl]  (class 2/3)
-    std::vector<float> scale_b_per_block;  // [n, k/bl]  (all classes)
-    std::vector<float> zp_b_per_block;     // [n, k/bl]  (class 3)
+    std::vector<float> scale_a_per_row;     // length m   (class 1)
+    std::vector<int32_t> zp_a_per_row;      // length m   (class 1)
+    std::vector<float> scale_a_per_block;   // [m, k/bl]  (class 2/3)
+    std::vector<float> scale_b_per_block;   // [n, k/bl]  (all classes)
+    std::vector<float> offset_b_per_block;  // [n, k/bl]  (class 3)
 };
 
 inline W4A8BQ_Inputs make_w4a8_bq_inputs(::benchmark::State &state)
@@ -712,7 +722,7 @@ inline W4A8BQ_Inputs make_w4a8_bq_inputs(::benchmark::State &state)
     in.bl = static_cast<size_t>(state.range(3));
     in.ldsa = in.k / in.bl;
     in.ldsb = in.k / in.bl;
-    in.ldzpb = in.k / in.bl;
+    in.ldob = in.k / in.bl;
 
     in.A.resize(in.m * in.k);
     in.B.resize(in.n * (in.k / 2));
@@ -726,7 +736,7 @@ inline W4A8BQ_Inputs make_w4a8_bq_inputs(::benchmark::State &state)
     in.zp_a_per_row.assign(in.m, 0);
     in.scale_a_per_block.assign(in.m * in.ldsa, 0.01f);
     in.scale_b_per_block.assign(in.n * in.ldsb, 0.01f);
-    in.zp_b_per_block.assign(in.n * in.ldzpb, 8.0f);
+    in.offset_b_per_block.assign(in.n * in.ldob, -0.08f);
     return in;
 }
 
@@ -743,7 +753,9 @@ void run_w4a8bq_qai8dx_qsi4c2_benchmark(::benchmark::State &state,
 
     std::vector<TD> D(in.m * in.n, static_cast<TD>(0));
 
-    struct tqt_qai8dx_qsi4c2_params params;
+    struct tqt_qai8dx_qsi4c2_params params
+    {
+    };
     params.scale_a = in.scale_a_per_row.data();
     params.zero_point_a = in.zp_a_per_row.data();
     params.scale_b = in.scale_b_per_block.data();
@@ -779,7 +791,9 @@ void run_w4a8bq_qai8dx_qsi4c2_packed_benchmark(
 
     std::vector<TD> D(in.m * in.n, static_cast<TD>(0));
 
-    struct tqt_qai8dx_qsi4c2_params params;
+    struct tqt_qai8dx_qsi4c2_params params
+    {
+    };
     params.scale_a = in.scale_a_per_row.data();
     params.zero_point_a = in.zp_a_per_row.data();
     params.scale_b = in.scale_b_per_block.data();
@@ -812,7 +826,9 @@ void run_w4a8bq_qsi8d2_qsi4c2_benchmark(::benchmark::State &state,
 
     std::vector<TD> D(in.m * in.n, static_cast<TD>(0));
 
-    struct tqt_qsi8d2_qsi4c2_params params;
+    struct tqt_qsi8d2_qsi4c2_params params
+    {
+    };
     params.scale_a = in.scale_a_per_block.data();
     params.ldsa = in.ldsa;
     params.scale_b = in.scale_b_per_block.data();
@@ -848,7 +864,9 @@ void run_w4a8bq_qsi8d2_qsi4c2_packed_benchmark(
 
     std::vector<TD> D(in.m * in.n, static_cast<TD>(0));
 
-    struct tqt_qsi8d2_qsi4c2_params params;
+    struct tqt_qsi8d2_qsi4c2_params params
+    {
+    };
     params.scale_a = in.scale_a_per_block.data();
     params.ldsa = in.ldsa;
     params.scale_b = in.scale_b_per_block.data();
@@ -886,8 +904,8 @@ void run_w4a8bq_qsi8d2_qai4c2_benchmark(::benchmark::State &state,
     params.ldsa = in.ldsa;
     params.scale_b = in.scale_b_per_block.data();
     params.ldsb = in.ldsb;
-    params.zp_b = in.zp_b_per_block.data();
-    params.ldzpb = in.ldzpb;
+    params.offset_b = in.offset_b_per_block.data();
+    params.ldob = in.ldob;
 
     const TD clamp_min = static_cast<TD>(-FLT_MAX);
     const TD clamp_max = static_cast<TD>(FLT_MAX);
@@ -924,8 +942,8 @@ void run_w4a8bq_qsi8d2_qai4c2_packed_benchmark(
     params.ldsa = in.ldsa;
     params.scale_b = in.scale_b_per_block.data();
     params.ldsb = in.ldsb;
-    params.zp_b = in.zp_b_per_block.data();
-    params.ldzpb = in.ldzpb;
+    params.offset_b = in.offset_b_per_block.data();
+    params.ldob = in.ldob;
 
     const TD clamp_min = static_cast<TD>(-FLT_MAX);
     const TD clamp_max = static_cast<TD>(FLT_MAX);
@@ -1059,14 +1077,18 @@ MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbias_clamp_f32_qai8dx_qsi4c2t, float, W4A8BQ_Qai8d
 MAKE_W4A8BQ_PACKED_FUNCS(1xnbias_clamp_f32_qai8dxp_qsi4c2p, float,
                          W4A8BQ_Qai8dx_Qsi4c2_PackedBenchFuncs)
 #if TORQ_TILE_HAS_RVV_F16
+
 MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbias_clamp_f16_qai8dx_qsi4c2t, float16_t,
                            W4A8BQ_Qai8dx_Qsi4c2_BenchFuncs)
+
 MAKE_W4A8BQ_PACKED_FUNCS(1xnbias_clamp_f16_qai8dxp_qsi4c2p, float16_t,
                          W4A8BQ_Qai8dx_Qsi4c2_PackedBenchFuncs)
 #endif  // TORQ_TILE_HAS_RVV_F16
 #if TORQ_TILE_HAS_RVV_BF16
+
 MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbias_clamp_bf16_qai8dx_qsi4c2t, bfloat16_t,
                            W4A8BQ_Qai8dx_Qsi4c2_BenchFuncs)
+
 MAKE_W4A8BQ_PACKED_FUNCS(1xnbias_clamp_bf16_qai8dxp_qsi4c2p, bfloat16_t,
                          W4A8BQ_Qai8dx_Qsi4c2_PackedBenchFuncs)
 #endif  // TORQ_TILE_HAS_RVV_BF16
@@ -1076,14 +1098,18 @@ MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbias_clamp_f32_qsi8d2_qsi4c2t, float, W4A8BQ_Qsi8d
 MAKE_W4A8BQ_PACKED_FUNCS(1xnbias_clamp_f32_qsi8d2p_qsi4c2p, float,
                          W4A8BQ_Qsi8d2_Qsi4c2_PackedBenchFuncs)
 #if TORQ_TILE_HAS_RVV_F16
+
 MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbias_clamp_f16_qsi8d2_qsi4c2t, float16_t,
                            W4A8BQ_Qsi8d2_Qsi4c2_BenchFuncs)
+
 MAKE_W4A8BQ_PACKED_FUNCS(1xnbias_clamp_f16_qsi8d2p_qsi4c2p, float16_t,
                          W4A8BQ_Qsi8d2_Qsi4c2_PackedBenchFuncs)
 #endif  // TORQ_TILE_HAS_RVV_F16
 #if TORQ_TILE_HAS_RVV_BF16
+
 MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbias_clamp_bf16_qsi8d2_qsi4c2t, bfloat16_t,
                            W4A8BQ_Qsi8d2_Qsi4c2_BenchFuncs)
+
 MAKE_W4A8BQ_PACKED_FUNCS(1xnbias_clamp_bf16_qsi8d2p_qsi4c2p, bfloat16_t,
                          W4A8BQ_Qsi8d2_Qsi4c2_PackedBenchFuncs)
 #endif  // TORQ_TILE_HAS_RVV_BF16
@@ -1093,14 +1119,18 @@ MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbias_clamp_f32_qsi8d2_qai4c2t, float, W4A8BQ_Qsi8d
 MAKE_W4A8BQ_PACKED_FUNCS(1xnbias_clamp_f32_qsi8d2p_qai4c2p, float,
                          W4A8BQ_Qsi8d2_Qai4c2_PackedBenchFuncs)
 #if TORQ_TILE_HAS_RVV_F16
+
 MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbias_clamp_f16_qsi8d2_qai4c2t, float16_t,
                            W4A8BQ_Qsi8d2_Qai4c2_BenchFuncs)
+
 MAKE_W4A8BQ_PACKED_FUNCS(1xnbias_clamp_f16_qsi8d2p_qai4c2p, float16_t,
                          W4A8BQ_Qsi8d2_Qai4c2_PackedBenchFuncs)
 #endif  // TORQ_TILE_HAS_RVV_F16
 #if TORQ_TILE_HAS_RVV_BF16
+
 MAKE_W4A8BQ_UNPACKED_FUNCS(1xnbias_clamp_bf16_qsi8d2_qai4c2t, bfloat16_t,
                            W4A8BQ_Qsi8d2_Qai4c2_BenchFuncs)
+
 MAKE_W4A8BQ_PACKED_FUNCS(1xnbias_clamp_bf16_qsi8d2p_qai4c2p, bfloat16_t,
                          W4A8BQ_Qsi8d2_Qai4c2_PackedBenchFuncs)
 #endif  // TORQ_TILE_HAS_RVV_BF16
@@ -1133,15 +1163,19 @@ void register_gemm_i8_i4_blockquant_rvv_benchmarks()
     register_w4a8bq_qai8dx_qsi4c2_packed<float>("gemm_1xnbias_clamp_f32_qai8dxp_qsi4c2p_4x1vl_rvv",
                                                 make_funcs_1xnbias_clamp_f32_qai8dxp_qsi4c2p());
 #if TORQ_TILE_HAS_RVV_F16
+
     register_w4a8bq_qai8dx_qsi4c2<float16_t>("gemm_1xnbias_clamp_f16_qai8dx_qsi4c2t_4x1vl_rvv",
                                              make_funcs_1xnbias_clamp_f16_qai8dx_qsi4c2t());
+
     register_w4a8bq_qai8dx_qsi4c2_packed<float16_t>(
         "gemm_1xnbias_clamp_f16_qai8dxp_qsi4c2p_4x1vl_rvv",
         make_funcs_1xnbias_clamp_f16_qai8dxp_qsi4c2p());
 #endif  // TORQ_TILE_HAS_RVV_F16
 #if TORQ_TILE_HAS_RVV_BF16
+
     register_w4a8bq_qai8dx_qsi4c2<bfloat16_t>("gemm_1xnbias_clamp_bf16_qai8dx_qsi4c2t_4x1vl_rvv",
                                               make_funcs_1xnbias_clamp_bf16_qai8dx_qsi4c2t());
+
     register_w4a8bq_qai8dx_qsi4c2_packed<bfloat16_t>(
         "gemm_1xnbias_clamp_bf16_qai8dxp_qsi4c2p_4x1vl_rvv",
         make_funcs_1xnbias_clamp_bf16_qai8dxp_qsi4c2p());
@@ -1153,15 +1187,19 @@ void register_gemm_i8_i4_blockquant_rvv_benchmarks()
     register_w4a8bq_qsi8d2_qsi4c2_packed<float>("gemm_1xnbias_clamp_f32_qsi8d2p_qsi4c2p_4x1vl_rvv",
                                                 make_funcs_1xnbias_clamp_f32_qsi8d2p_qsi4c2p());
 #if TORQ_TILE_HAS_RVV_F16
+
     register_w4a8bq_qsi8d2_qsi4c2<float16_t>("gemm_1xnbias_clamp_f16_qsi8d2_qsi4c2t_4x1vl_rvv",
                                              make_funcs_1xnbias_clamp_f16_qsi8d2_qsi4c2t());
+
     register_w4a8bq_qsi8d2_qsi4c2_packed<float16_t>(
         "gemm_1xnbias_clamp_f16_qsi8d2p_qsi4c2p_4x1vl_rvv",
         make_funcs_1xnbias_clamp_f16_qsi8d2p_qsi4c2p());
 #endif  // TORQ_TILE_HAS_RVV_F16
 #if TORQ_TILE_HAS_RVV_BF16
+
     register_w4a8bq_qsi8d2_qsi4c2<bfloat16_t>("gemm_1xnbias_clamp_bf16_qsi8d2_qsi4c2t_4x1vl_rvv",
                                               make_funcs_1xnbias_clamp_bf16_qsi8d2_qsi4c2t());
+
     register_w4a8bq_qsi8d2_qsi4c2_packed<bfloat16_t>(
         "gemm_1xnbias_clamp_bf16_qsi8d2p_qsi4c2p_4x1vl_rvv",
         make_funcs_1xnbias_clamp_bf16_qsi8d2p_qsi4c2p());
@@ -1173,15 +1211,19 @@ void register_gemm_i8_i4_blockquant_rvv_benchmarks()
     register_w4a8bq_qsi8d2_qai4c2_packed<float>("gemm_1xnbias_clamp_f32_qsi8d2p_qai4c2p_4x1vl_rvv",
                                                 make_funcs_1xnbias_clamp_f32_qsi8d2p_qai4c2p());
 #if TORQ_TILE_HAS_RVV_F16
+
     register_w4a8bq_qsi8d2_qai4c2<float16_t>("gemm_1xnbias_clamp_f16_qsi8d2_qai4c2t_4x1vl_rvv",
                                              make_funcs_1xnbias_clamp_f16_qsi8d2_qai4c2t());
+
     register_w4a8bq_qsi8d2_qai4c2_packed<float16_t>(
         "gemm_1xnbias_clamp_f16_qsi8d2p_qai4c2p_4x1vl_rvv",
         make_funcs_1xnbias_clamp_f16_qsi8d2p_qai4c2p());
 #endif  // TORQ_TILE_HAS_RVV_F16
 #if TORQ_TILE_HAS_RVV_BF16
+
     register_w4a8bq_qsi8d2_qai4c2<bfloat16_t>("gemm_1xnbias_clamp_bf16_qsi8d2_qai4c2t_4x1vl_rvv",
                                               make_funcs_1xnbias_clamp_bf16_qsi8d2_qai4c2t());
+
     register_w4a8bq_qsi8d2_qai4c2_packed<bfloat16_t>(
         "gemm_1xnbias_clamp_bf16_qsi8d2p_qai4c2p_4x1vl_rvv",
         make_funcs_1xnbias_clamp_bf16_qsi8d2p_qai4c2p());

@@ -177,14 +177,14 @@ inline auto with_clamp_dimensions(
 
 template <auto Run, typename TD, size_t SourceIndex, size_t DIndex, size_t LddIndex,
           size_t ClampIndex, ClampSource Source, bool NarrowClamp, size_t KIndex, bool HasFloatingC,
-          typename Signature>
+          typename SourceScalar, typename Signature>
 struct GemmClampProbe;
 
 template <auto Run, typename TD, size_t SourceIndex, size_t DIndex, size_t LddIndex,
           size_t ClampIndex, ClampSource Source, bool NarrowClamp, size_t KIndex, bool HasFloatingC,
-          typename... Args>
+          typename SourceScalar, typename... Args>
 struct GemmClampProbe<Run, TD, SourceIndex, DIndex, LddIndex, ClampIndex, Source, NarrowClamp,
-                      KIndex, HasFloatingC, void (*)(Args...)>
+                      KIndex, HasFloatingC, SourceScalar, void (*)(Args...)>
 {
     static void run(Args... args)
     {
@@ -209,7 +209,13 @@ struct GemmClampProbe<Run, TD, SourceIndex, DIndex, LddIndex, ClampIndex, Source
         const size_t source_size = Source == ClampSource::kMatrixC   ? m * stride
                                    : Source == ClampSource::kRowBias ? m
                                                                      : n;
-        std::vector<TD> injected(source_size, static_cast<TD>(0.0f));
+        using SourcePointer = std::tuple_element_t<SourceIndex, decltype(call)>;
+        using SourceElement = std::remove_cv_t<std::remove_pointer_t<SourcePointer>>;
+        using SourceT =
+            std::conditional_t<std::is_void_v<SourceScalar>,
+                               std::conditional_t<std::is_void_v<SourceElement>, TD, SourceElement>,
+                               SourceScalar>;
+        std::vector<SourceT> injected(source_size, static_cast<SourceT>(0.0f));
         std::get<SourceIndex>(call) = injected.data();
         if constexpr (Source == ClampSource::kMatrixC) {
             std::get<SourceIndex + 1>(call) = stride;
@@ -225,7 +231,7 @@ struct GemmClampProbe<Run, TD, SourceIndex, DIndex, LddIndex, ClampIndex, Source
                 const size_t source_idx = Source == ClampSource::kMatrixC   ? i * stride + j
                                           : Source == ClampSource::kRowBias ? i
                                                                             : j;
-                injected[source_idx] = static_cast<TD>(clamp_probe_input(source_idx));
+                injected[source_idx] = static_cast<SourceT>(clamp_probe_input(source_idx));
             }
         }
         const float max_finite = clamp_type_max<ClampT>();
@@ -357,11 +363,12 @@ struct GemmClampProbe<Run, TD, SourceIndex, DIndex, LddIndex, ClampIndex, Source
 
 template <auto Run, typename TD, size_t SourceIndex, size_t DIndex, size_t LddIndex,
           size_t ClampIndex, ClampSource Source = ClampSource::kColumnBias,
-          bool NarrowClamp = false, size_t KIndex = 5, bool HasFloatingC = true>
+          bool NarrowClamp = false, size_t KIndex = 5, bool HasFloatingC = true,
+          typename SourceScalar = void>
 auto clamp_test_run()
 {
     using Probe = GemmClampProbe<Run, TD, SourceIndex, DIndex, LddIndex, ClampIndex, Source,
-                                 NarrowClamp, KIndex, HasFloatingC, decltype(Run)>;
+                                 NarrowClamp, KIndex, HasFloatingC, SourceScalar, decltype(Run)>;
     return gemm_clamp_probe_active ? Probe::run : Run;
 }
 

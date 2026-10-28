@@ -73,9 +73,10 @@ size_t tqt_get_b_im2col_offset_convcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dx_qai8_
 }
 
 void tqt_run_im2col_convcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dx_qai8_4x1vl_rvv(
-    size_t group_idx, const void *activation, void *im2col_buf, const tqt_conv_params *params)
+    size_t group_idx, const void *activation, void *im2col_buf, const tqt_conv_params *params,
+    int8_t padding_value)
 {
-    tqt_im2col_cf<int8_t>(group_idx, activation, im2col_buf, params);
+    tqt_im2col_cf<int8_t>(group_idx, activation, im2col_buf, params, padding_value);
 }
 
 // ============================================================================

@@ -173,21 +173,6 @@ void dequantize_i8_to_fp32(const int8_t *src, float *dst, size_t size, float sca
     }
 }
 
-// Fuse zero_point of asymmetric-quantized A (activation) into bias
-// For CL 1xnbias: A = activation [M,K] (global asym), B = weight [N,K] (per-channel sym,
-// transposed) bias_fused[n] = bias_q[n] - zp_a * sum(BT_i8[n, 0..K-1])
-void fuse_zp_to_bias(int32_t *bias_fused, const int32_t *bias, const int8_t *weight_i8,
-                     int32_t zero_point, size_t num_channels, size_t channel_size)
-{
-    for (size_t ch = 0; ch < num_channels; ++ch) {
-        int32_t weight_sum = 0;
-        for (size_t k = 0; k < channel_size; ++k) {
-            weight_sum += (int32_t)weight_i8[ch * channel_size + k];
-        }
-        bias_fused[ch] = bias[ch] - zero_point * weight_sum;
-    }
-}
-
 void fill_matrix_random(size_t rows, size_t cols, float *matrix, const float min, const float max)
 {
     for (size_t i = 0; i < rows * cols; ++i) {
@@ -306,11 +291,11 @@ int main()
     int8_t *activation_i8 = (int8_t *)malloc(ID * IH * IW * IC * sizeof(int8_t));
     int8_t *weight_i8 = (int8_t *)malloc(N * K * sizeof(int8_t));  // [N, K] layout
     int32_t *bias_i32 = (int32_t *)malloc(N * sizeof(int32_t));
-    int32_t *bias_fused = (int32_t *)malloc(N * sizeof(int32_t));
+
     int8_t *D_i8 = (int8_t *)malloc(M * N * sizeof(int8_t));
     float *D_deq = (float *)malloc(M * N * sizeof(float));
 
-    if (!scale_b || !activation_i8 || !weight_i8 || !bias_i32 || !bias_fused || !D_i8 || !D_deq) {
+    if (!scale_b || !activation_i8 || !weight_i8 || !bias_i32 || !D_i8 || !D_deq) {
         fprintf(stderr, "Memory allocation failed\n");
         return 1;
     }
@@ -329,9 +314,6 @@ int main()
         quantize_fp32_to_i32(&bias_fp32[ch], &bias_i32[ch], 1, bias_scale, 0);
     }
 
-    // Fuse zero_point_a into bias: bias_fused[n] = bias[n] - zp_a * sum(BT_i8[n, 0..K-1])
-    fuse_zp_to_bias(bias_fused, bias_i32, weight_i8, zp_a, N, K);
-
     // Set up quantization params
     struct tqt_qai8_qai8_qsi8cx_params qparams;
     qparams.scale_a = scale_a;
@@ -348,7 +330,7 @@ int main()
 
     // Run igemm micro-kernel (no im2col needed - input fetched on-the-fly)
     ukernel.run_igemm(M, N, K, activation_i8, 0, 0, 0, weight_i8, K, 0, nullptr, N, D_i8, N,
-                      bias_fused, clamp_min, clamp_max, &conv_params, &qparams);
+                      bias_i32, clamp_min, clamp_max, &conv_params, &qparams);
 
     // Dequantize kernel output and compare with fp32 reference
     dequantize_i8_to_fp32(D_i8, D_deq, M * N, scale_d, zp_d);
@@ -383,7 +365,7 @@ int main()
     free(activation_i8);
     free(weight_i8);
     free(bias_i32);
-    free(bias_fused);
+
     free(D_i8);
     free(scale_b);
 

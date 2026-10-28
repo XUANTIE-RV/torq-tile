@@ -10,6 +10,7 @@
 #include "src/conv/igemm_i8_i8/igemmcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8/tqt_igemmcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8_1vlx4_rvv.h"
 #include "src/conv/igemm_i8_i8/igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp/tqt_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp_4x1vl_rvv.h"
 #include "src/conv/igemm_i8_i8/igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt/tqt_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt_4x1vl_rvv.h"
+#include "test/common/quantized_conv_test_runner.h"
 #include "test/common/quantized_igemm_test_runner.h"
 
 using namespace torq_tile::test;
@@ -155,3 +156,59 @@ TEST_P(Test_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp_4x1vl_rvv, Correc
 INSTANTIATE_TEST_SUITE_P(ConvTests,
                          Test_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp_4x1vl_rvv,
                          i8_common_igemm_test_values(), ConvTestParamNameGenerator());
+
+TEST(QuantizedPaddingContract, igemmcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dx_qai8_1vlx4_rvv)
+{
+    check_quantized_padding_contract<true>([](size_t m, size_t n, size_t k, const int8_t *input,
+                                              const int8_t *weight, const int32_t *bias, int8_t *d,
+                                              size_t ldd, const tqt_conv_params *conv,
+                                              const auto *params, int8_t padding) {
+        (void)padding;
+        tqt_run_igemm_igemmcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dx_qai8_1vlx4_rvv(
+            m, n, k, input, 1, 0, 0, weight, k, 0, nullptr, n, d, ldd, bias, -23, 19, conv, params);
+    });
+}
+
+TEST(QuantizedPaddingContract, igemmcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8_1vlx4_rvv)
+{
+    check_quantized_padding_contract<true>([](size_t m, size_t n, size_t k, const int8_t *input,
+                                              const int8_t *weight, const int32_t *bias, int8_t *d,
+                                              size_t ldd, const tqt_conv_params *conv,
+                                              const auto *params, int8_t padding) {
+        std::vector<int8_t> wp(m * k + 16);
+        tqt_run_a_pack_igemmcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8_1vlx4_rvv(
+            m, k, k, k, 0, weight, wp.data());
+        (void)padding;
+        tqt_run_igemm_igemmcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8_1vlx4_rvv(
+            m, n, k, input, 1, 0, 0, wp.data(), k, 0, nullptr, n, d, ldd, bias, -23, 19, conv,
+            params);
+    });
+}
+
+TEST(QuantizedPaddingContract, igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp_4x1vl_rvv)
+{
+    check_quantized_padding_contract<false>([](size_t m, size_t n, size_t k, const int8_t *input,
+                                               const int8_t *weight, const int32_t *bias, int8_t *d,
+                                               size_t ldd, const tqt_conv_params *conv,
+                                               const auto *params, int8_t padding) {
+        std::vector<int8_t> wp(n * k + 16);
+        tqt_run_bt_pack_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp_4x1vl_rvv(
+            n, k, k, k, 0, weight, wp.data());
+        (void)padding;
+        tqt_run_igemm_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp_4x1vl_rvv(
+            m, n, k, input, 1, 0, 0, wp.data(), k, 0, nullptr, n, d, ldd, bias, -23, 19, conv,
+            params);
+    });
+}
+
+TEST(QuantizedPaddingContract, igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt_4x1vl_rvv)
+{
+    check_quantized_padding_contract<false>([](size_t m, size_t n, size_t k, const int8_t *input,
+                                               const int8_t *weight, const int32_t *bias, int8_t *d,
+                                               size_t ldd, const tqt_conv_params *conv,
+                                               const auto *params, int8_t padding) {
+        (void)padding;
+        tqt_run_igemm_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt_4x1vl_rvv(
+            m, n, k, input, 1, 0, 0, weight, k, 0, nullptr, n, d, ldd, bias, -23, 19, conv, params);
+    });
+}

@@ -26,40 +26,36 @@ static inline void tqt_vmacc_direct_kernel_igemm_i8_i8_4x1vl_rvv(size_t vl, int3
 {
     static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
 
-    asm volatile("vsetvli zero, %0, e8, m1, ta, ma\n\t" : : "r"(vl) :);
+    asm volatile(
+        "vsetvli zero, %0, e16, m2, ta, ma\n\t"
+        "vsext.vf2 v8, v0\n\t"
+        :
+        : "r"(vl)
+        : "v8", "v9");
     if constexpr (MR >= 1)
-        asm volatile("vwmul.vx v8, v0, %0" : : "r"(a0) : "v8", "v9");
+        asm volatile("vwmacc.vx v16, %0, v8" : : "r"(a0) : "v16", "v17", "v18", "v19");
     if constexpr (MR >= 2)
-        asm volatile("vwmul.vx v10, v0, %0" : : "r"(a1) : "v10", "v11");
+        asm volatile("vwmacc.vx v20, %0, v8" : : "r"(a1) : "v20", "v21", "v22", "v23");
     if constexpr (MR >= 3)
-        asm volatile("vwmul.vx v12, v0, %0" : : "r"(a2) : "v12", "v13");
+        asm volatile("vwmacc.vx v24, %0, v8" : : "r"(a2) : "v24", "v25", "v26", "v27");
     if constexpr (MR >= 4)
-        asm volatile("vwmul.vx v14, v0, %0" : : "r"(a3) : "v14", "v15");
-
-    asm volatile("vsetvli zero, %0, e16, m2, ta, ma\n\t" : : "r"(vl) :);
-    if constexpr (MR >= 1)
-        asm volatile("vwadd.wv v16, v16, v8" : : : "v16", "v17", "v18", "v19");
-    if constexpr (MR >= 2)
-        asm volatile("vwadd.wv v20, v20, v10" : : : "v20", "v21", "v22", "v23");
-    if constexpr (MR >= 3)
-        asm volatile("vwadd.wv v24, v24, v12" : : : "v24", "v25", "v26", "v27");
-    if constexpr (MR >= 4)
-        asm volatile("vwadd.wv v28, v28, v14" : : : "v28", "v29", "v30", "v31");
+        asm volatile("vwmacc.vx v28, %0, v8" : : "r"(a3) : "v28", "v29", "v30", "v31");
 }
 
 template <size_t MR, bool CheckBounds, typename LoadWeights>
 static inline void tqt_igemmcl_fma_loop_i8_i8_4x1vl_rvv(size_t IC,
                                                         const int8_t *const input_bases[4],
-                                                        size_t vl, LoadWeights load_weights)
+                                                        size_t vl, LoadWeights load_weights,
+                                                        int32_t input_zp)
 {
     static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
 
     for (size_t ic = 0; ic < IC; ic++) {
         auto load_input = [&](size_t i) {
             if constexpr (CheckBounds) {
-                return input_bases[i] ? (int32_t)input_bases[i][ic] : int32_t{0};
+                return input_bases[i] ? ((int32_t)input_bases[i][ic] - input_zp) : int32_t{0};
             } else {
-                return (int32_t)input_bases[i][ic];
+                return ((int32_t)input_bases[i][ic] - input_zp);
             }
         };
         int32_t a0 = 0;

@@ -42,7 +42,8 @@ typedef size_t (*tqt_convcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dx_qai8_get_b_im2c
 typedef size_t (*tqt_convcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dx_qai8_get_b_im2col_offset_func_t)(
     size_t n_idx, size_t k_idx, size_t ldb_im2col);
 typedef void (*tqt_convcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dx_qai8_run_im2col_func_t)(
-    size_t group_idx, const void *activation, void *im2col_buf, const tqt_conv_params *params);
+    size_t group_idx, const void *activation, void *im2col_buf, const tqt_conv_params *params,
+    int8_t padding_value);
 
 /// Core function
 typedef void (*tqt_convcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dx_qai8_run_conv_func_t)(

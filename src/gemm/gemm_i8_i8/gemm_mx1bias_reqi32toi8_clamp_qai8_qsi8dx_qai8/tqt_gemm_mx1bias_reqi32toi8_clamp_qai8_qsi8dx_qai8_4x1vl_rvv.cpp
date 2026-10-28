@@ -96,7 +96,7 @@ template <size_t MR>
 static void gemm_kernel(size_t K, int8_t *D, const int8_t *A, const int8_t *B, const int32_t *C,
                         const int32_t *BIAS, size_t ldd, size_t lda, size_t ldb, size_t ldc,
                         int8_t clamp_min, int8_t clamp_max, size_t vl, const int32_t *mult,
-                        const int32_t *shift, int32_t zp)
+                        const int32_t *shift, int32_t zp, int32_t input_zp)
 {
     static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
 
@@ -116,7 +116,7 @@ static void gemm_kernel(size_t K, int8_t *D, const int8_t *A, const int8_t *B, c
     for (size_t k_idx = 0; k_idx < K; k_idx++) {
         tqt_get_a_ptr_gemm_i8_i8_4x1vl_rvv<MR>(a_ptr, a_stride_row, a_ptrs);
         tqt_load_b_kernel_gemm_i8_i8_4x1vl_rvv(vl, b_ptr);
-        tqt_vmacc_kernel_gemm_i8_i8_4x1vl_rvv<MR>(vl, a_ptrs);
+        tqt_vmacc_kernel_gemm_i8_i8_4x1vl_rvv<MR>(vl, a_ptrs, 0, input_zp);
         a_ptr += 1;
         b_ptr += ldb;
     }
@@ -133,7 +133,8 @@ static void gemm_kernel(size_t K, int8_t *D, const int8_t *A, const int8_t *B, c
 using gemm_kernel_fn_t = void (*)(size_t K, int8_t *D, const int8_t *A, const int8_t *B,
                                   const int32_t *C, const int32_t *BIAS, size_t ldd, size_t lda,
                                   size_t ldb, size_t ldc, int8_t clamp_min, int8_t clamp_max,
-                                  size_t vl, const int32_t *mult, const int32_t *shift, int32_t zp);
+                                  size_t vl, const int32_t *mult, const int32_t *shift, int32_t zp,
+                                  int32_t input_zp);
 
 static constexpr gemm_kernel_fn_t kernel_table[4] = {
     gemm_kernel<1>,
@@ -157,7 +158,7 @@ void tqt_run_gemm_mx1bias_reqi32toi8_clamp_qai8_qsi8dx_qai8_4x1vl_rvv(
     TQT_UNUSED(k_idx_a);
     TQT_UNUSED(k_idx_b);
 
-    if (!params) {
+    if (!params || m == 0 || n == 0) {
         return;
     }
 
@@ -171,19 +172,16 @@ void tqt_run_gemm_mx1bias_reqi32toi8_clamp_qai8_qsi8dx_qai8_4x1vl_rvv(
     // real_scale = scale_a[i] * scale_b / scale_d
     int32_t mult[m];
     int32_t shift[m];
-    double real_scale =
-        (double)params->scale_a[0] * (double)params->scale_b / (double)params->scale_d;
-    tqt_quantize_multiplier(real_scale, &mult[0], &shift[0]);
-    shift[0] = -shift[0] - 1;
+    tqt_quantize_multiplier_from_scales(params->scale_a[0], params->scale_b, params->scale_d,
+                                        &mult[0], &shift[0]);
+
     for (size_t i = 1; i < m; i++) {
         if (params->quant_channel_a == 1) {
             mult[i] = mult[0];
             shift[i] = shift[0];
         } else {
-            real_scale =
-                (double)params->scale_a[i] * (double)params->scale_b / (double)params->scale_d;
-            tqt_quantize_multiplier(real_scale, &mult[i], &shift[i]);
-            shift[i] = -shift[i] - 1;
+            tqt_quantize_multiplier_from_scales(params->scale_a[i], params->scale_b,
+                                                params->scale_d, &mult[i], &shift[i]);
         }
     }
 
@@ -204,7 +202,7 @@ void tqt_run_gemm_mx1bias_reqi32toi8_clamp_qai8_qsi8dx_qai8_4x1vl_rvv(
             size_t mr_idx = actual_m - 1;
             kernel_table[mr_idx](k, d_ptr, a_ptr, b_ptr, c_ptr, bias_tile_ptr, ldd, lda, ldb, ldc,
                                  clamp_min, clamp_max, actual_n, mult_ptr, shift_ptr,
-                                 params->zero_point_d);
+                                 params->zero_point_d, params->zero_point_b);
         }
     }
 }

@@ -103,7 +103,8 @@ void tqt_run_bt_pack_convcl_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi8cxp_4x1vl_rv
 
 static void a_im2colpack_cl_fill(int8_t *dst, size_t actual_m, size_t row_start,
                                  const int8_t *input, size_t C_total, size_t c_offset,
-                                 size_t IC_per_group, const tqt_conv_params *params)
+                                 size_t IC_per_group, const tqt_conv_params *params,
+                                 int8_t padding_value)
 {
     const size_t ID = params->input_shape[0], IH = params->input_shape[1],
                  IW = params->input_shape[2];
@@ -152,12 +153,12 @@ static void a_im2colpack_cl_fill(int8_t *dst, size_t actual_m, size_t row_start,
                             rem -= vl;
                         }
                     } else {
-                        // strided store zeros
+                        // Strided store of the activation zero point
                         size_t rem = IC_per_group;
                         int8_t *d = dst + k_col * actual_m + r;
                         while (rem > 0) {
                             size_t vl = __riscv_vsetvl_e8m1(rem);
-                            vint8m1_t v = __riscv_vmv_v_x_i8m1(0, vl);
+                            vint8m1_t v = __riscv_vmv_v_x_i8m1(padding_value, vl);
                             __riscv_vsse8_v_i8m1(d, actual_m * sizeof(int8_t), v, vl);
                             d += vl * actual_m;
                             rem -= vl;
@@ -172,7 +173,7 @@ static void a_im2colpack_cl_fill(int8_t *dst, size_t actual_m, size_t row_start,
 
 void tqt_run_a_im2colpack_convcl_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi8cxp_4x1vl_rvv(
     size_t group_idx, const void *activation, size_t lda_packed, size_t k_idx, void *A_packed,
-    const tqt_conv_params *params)
+    const tqt_conv_params *params, int8_t padding_value)
 {
     const size_t IC_per_group = params->input_channel / params->groups;
     const size_t M = params->output_shape[0] * params->output_shape[1] * params->output_shape[2];
@@ -192,7 +193,7 @@ void tqt_run_a_im2colpack_convcl_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi8cxp_4x1
             panel_ptr = packed + m_idx * lda_packed - k_idx * (m_step - actual_m);
 
         a_im2colpack_cl_fill(panel_ptr, actual_m, m_idx, input, C_total, c_offset, IC_per_group,
-                             params);
+                             params, padding_value);
     }
 }
 

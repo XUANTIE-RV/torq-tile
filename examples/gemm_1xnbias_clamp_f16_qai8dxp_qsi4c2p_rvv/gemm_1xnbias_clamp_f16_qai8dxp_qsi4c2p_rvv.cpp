@@ -311,7 +311,9 @@ int main()
     ref_qai8dx_qsi4c2(M, N, K, BL, A.data(), B.data(), scale_a.data(), zp_a.data(), scale_b.data(),
                       ldsb, bias_fp32.data(), CLAMP_MIN, CLAMP_MAX, D_ref_fp32.data());
 
-    struct tqt_qai8dx_qsi4c2_params params;
+    struct tqt_qai8dx_qsi4c2_params params
+    {
+    };
     params.scale_a = scale_a.data();
     params.zero_point_a = zp_a.data();
     params.scale_b = scale_b.data();

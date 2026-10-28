@@ -35,9 +35,9 @@ typedef size_t (*tqt_gemm_1xnbias_clamp_f16_qsi8d2_qai4c2t_get_scale_a_offset_fu
 typedef size_t (*tqt_gemm_1xnbias_clamp_f16_qsi8d2_qai4c2t_get_scale_b_offset_func_t)(size_t n_idx,
                                                                                       size_t b_idx,
                                                                                       size_t ldsb);
-typedef size_t (*tqt_gemm_1xnbias_clamp_f16_qsi8d2_qai4c2t_get_zp_b_offset_func_t)(size_t n_idx,
-                                                                                   size_t b_idx,
-                                                                                   size_t ldzpb);
+typedef size_t (*tqt_gemm_1xnbias_clamp_f16_qsi8d2_qai4c2t_get_offset_b_offset_func_t)(size_t n_idx,
+                                                                                       size_t b_idx,
+                                                                                       size_t ldob);
 typedef size_t (*tqt_gemm_1xnbias_clamp_f16_qsi8d2_qai4c2t_get_c_offset_func_t)(size_t m_idx,
                                                                                 size_t n_idx,
                                                                                 size_t ldc);
@@ -61,7 +61,7 @@ struct tqt_gemm_1xnbias_clamp_f16_qsi8d2_qai4c2t_ukernel
     tqt_gemm_1xnbias_clamp_f16_qsi8d2_qai4c2t_get_b_offset_func_t get_b_offset;
     tqt_gemm_1xnbias_clamp_f16_qsi8d2_qai4c2t_get_scale_a_offset_func_t get_scale_a_offset;
     tqt_gemm_1xnbias_clamp_f16_qsi8d2_qai4c2t_get_scale_b_offset_func_t get_scale_b_offset;
-    tqt_gemm_1xnbias_clamp_f16_qsi8d2_qai4c2t_get_zp_b_offset_func_t get_zp_b_offset;
+    tqt_gemm_1xnbias_clamp_f16_qsi8d2_qai4c2t_get_offset_b_offset_func_t get_offset_b_offset;
     tqt_gemm_1xnbias_clamp_f16_qsi8d2_qai4c2t_get_c_offset_func_t get_c_offset;
     tqt_gemm_1xnbias_clamp_f16_qsi8d2_qai4c2t_get_bias_offset_func_t get_bias_offset;
     tqt_gemm_1xnbias_clamp_f16_qsi8d2_qai4c2t_get_d_offset_func_t get_d_offset;

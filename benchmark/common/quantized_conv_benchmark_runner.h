@@ -37,7 +37,7 @@ struct NonPackedRequantizedConvCfBenchFuncs
 {
     size_t (*get_b_im2col_size)(size_t k, size_t n);
     void (*run_im2col)(size_t group_idx, const void *activation, void *im2col_buf,
-                       const tqt_conv_params *params);
+                       const tqt_conv_params *params, int8_t padding_value);
     void (*run_conv)(size_t m, size_t n, size_t k, const void *A, size_t lda, size_t k_idx_a,
                      const void *B, size_t ldb, size_t k_idx_b, const void *C, size_t ldc, void *D,
                      size_t ldd, const void *bias, int8_t clamp_min, int8_t clamp_max,
@@ -55,7 +55,7 @@ struct NonPackedRequantizedConvClBenchFuncs
 {
     size_t (*get_a_im2col_size)(size_t m, size_t k);
     void (*run_im2col)(size_t group_idx, const void *activation, void *im2col_buf,
-                       const tqt_conv_params *params);
+                       const tqt_conv_params *params, int8_t padding_value);
     void (*run_conv)(size_t m, size_t n, size_t k, const void *A, size_t lda, size_t k_idx_a,
                      const void *B, size_t ldb, size_t k_idx_b, const void *C, size_t ldc, void *D,
                      size_t ldd, const void *bias, int8_t clamp_min, int8_t clamp_max,
@@ -76,7 +76,8 @@ struct PackedRequantizedConvCfBenchFuncs
     void (*run_a_pack)(size_t m, size_t k, size_t lda, size_t lda_packed, size_t k_idx,
                        const void *A, void *A_packed);
     void (*run_b_im2colpack)(size_t group_idx, const void *activation, size_t ldb_packed,
-                             size_t k_idx, void *B_packed, const tqt_conv_params *params);
+                             size_t k_idx, void *B_packed, const tqt_conv_params *params,
+                             int8_t padding_value);
     void (*run_conv)(size_t m, size_t n, size_t k, const void *A_packed, size_t lda, size_t k_idx_a,
                      const void *B_packed, size_t ldb, size_t k_idx_b, const void *C, size_t ldc,
                      void *D, size_t ldd, const void *bias, int8_t clamp_min, int8_t clamp_max,
@@ -97,7 +98,8 @@ struct PackedRequantizedConvClBenchFuncs
     void (*run_bt_pack)(size_t n, size_t k, size_t ldb, size_t ldb_packed, size_t k_idx,
                         const void *B, void *B_packed);
     void (*run_a_im2colpack)(size_t group_idx, const void *activation, size_t lda_packed,
-                             size_t k_idx, void *A_packed, const tqt_conv_params *params);
+                             size_t k_idx, void *A_packed, const tqt_conv_params *params,
+                             int8_t padding_value);
     void (*run_conv)(size_t m, size_t n, size_t k, const void *A_packed, size_t lda, size_t k_idx_a,
                      const void *B_packed, size_t ldb, size_t k_idx_b, const void *C, size_t ldc,
                      void *D, size_t ldd, const void *bias, int8_t clamp_min, int8_t clamp_max,
@@ -184,7 +186,8 @@ inline void run_nonpacked_requantized_convcf_benchmark(
     auto qparams = make_cf_qparams(m, scale_a_buf);
 
     for (auto _ : state) {
-        funcs.run_im2col(0, activation.data(), im2col_buf.data(), &params);
+        funcs.run_im2col(0, activation.data(), im2col_buf.data(), &params,
+                         (int8_t)qparams.zero_point_b);
         funcs.run_conv(m, n, k, weight.data(), k, 0, im2col_buf.data(), n, 0, nullptr, n,
                        output.data(), n, bias.data(), clamp_min, clamp_max, &qparams);
         ::benchmark::DoNotOptimize(output.data());
@@ -235,7 +238,8 @@ inline void run_nonpacked_requantized_convcl_benchmark(
     auto qparams = make_cl_qparams(n, scale_b_buf);
 
     for (auto _ : state) {
-        funcs.run_im2col(0, activation.data(), im2col_buf.data(), &params);
+        funcs.run_im2col(0, activation.data(), im2col_buf.data(), &params,
+                         (int8_t)qparams.zero_point_a);
         funcs.run_conv(m, n, k, im2col_buf.data(), k, 0, weight.data(), k, 0, nullptr, n,
                        output.data(), n, bias.data(), clamp_min, clamp_max, &qparams);
         ::benchmark::DoNotOptimize(output.data());
@@ -291,7 +295,8 @@ inline void run_packed_requantized_convcf_benchmark(::benchmark::State &state,
     auto qparams = make_cf_qparams(m, scale_a_buf);
 
     for (auto _ : state) {
-        funcs.run_b_im2colpack(0, activation.data(), k, 0, b_packed.data(), &params);
+        funcs.run_b_im2colpack(0, activation.data(), k, 0, b_packed.data(), &params,
+                               (int8_t)qparams.zero_point_b);
         funcs.run_conv(m, n, k, a_packed.data(), k, 0, b_packed.data(), k, 0, nullptr, n,
                        output.data(), n, bias.data(), clamp_min, clamp_max, &qparams);
         ::benchmark::DoNotOptimize(output.data());
@@ -347,7 +352,8 @@ inline void run_packed_requantized_convcl_benchmark(::benchmark::State &state,
     auto qparams = make_cl_qparams(n, scale_b_buf);
 
     for (auto _ : state) {
-        funcs.run_a_im2colpack(0, activation.data(), k, 0, a_packed.data(), &params);
+        funcs.run_a_im2colpack(0, activation.data(), k, 0, a_packed.data(), &params,
+                               (int8_t)qparams.zero_point_a);
         funcs.run_conv(m, n, k, a_packed.data(), k, 0, b_packed.data(), k, 0, nullptr, n,
                        output.data(), n, bias.data(), clamp_min, clamp_max, &qparams);
         ::benchmark::DoNotOptimize(output.data());

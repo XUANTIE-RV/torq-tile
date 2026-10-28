@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -114,21 +115,55 @@ static inline void tqt_quantize_multiplier(double double_multiplier, int32_t *qu
         q_fixed /= 2;
         ++*shift;
     }
-    // A shift amount smaller than -31 would cause all bits to be shifted out
-    // and thus all results would be zero. We implement that instead with
-    // q_fixed==0, so as to avoid hitting issues with right-shift
-    // operations with shift amounts greater than 31. Note that this happens
-    // roughly when abs(double_multiplier) < 2^-31 and the present handling means
-    // that we're effectively flushing tiny double_multiplier's to zero.
-    // We could conceivably handle values in the range (roughly) [32, 63]
-    // as 'denormals' i.e. (shift==0, q_fixed < 2^30). In that point of view
-    // the present handling is just doing 'flush denormals to zero'. We could
-    // reconsider and actually generate nonzero denormals if a need arises.
-    if (*shift < -31) {
-        *shift = 0;
-        q_fixed = 0;
-    }
     *quantized_multiplier = (int32_t)(q_fixed);
+}
+
+#if defined(__riscv_flen) && __riscv_flen >= 64
+/// Prepare Q31 parameters with explicit RNE, without reading or changing frm.
+/// F32 inputs widen exactly; nonzero products and quotients fit the F64 normal
+/// range for finite nonnegative input scales and a finite positive output scale.
+static inline void tqt_quantize_multiplier_from_scales(float scale_a, float scale_b, float scale_d,
+                                                       int32_t *quantized_multiplier,
+                                                       int32_t *shift)
+{
+    double real_scale;
+    __asm__ volatile("fmul.d %0, %1, %2, rne\n\tfdiv.d %0, %0, %3, rne"
+                     : "=&f"(real_scale)
+                     : "f"((double)scale_a), "f"((double)scale_b), "f"((double)scale_d));
+    tqt_quantize_multiplier(real_scale, quantized_multiplier, shift);
+}
+#endif
+
+/// Scale an I32 accumulator by multiplier * 2^(exponent - 31), round once to
+/// nearest even, add the output zero point, then saturate. No CSR rounding mode
+/// is consumed or changed. Valid quantization scales are finite and nonnegative.
+static inline int8_t tqt_requantize_i32_i8(int32_t value, int32_t multiplier, int32_t exponent,
+                                           int32_t zero_point)
+{
+    const int64_t product = (int64_t)value * multiplier;
+    const uint64_t magnitude = product < 0 ? (uint64_t)(-product) : (uint64_t)product;
+    uint64_t rounded;
+    const int64_t right_shift = 31 - (int64_t)exponent;
+    if (right_shift >= 64) {
+        rounded = 0;
+    } else if (right_shift > 0) {
+        const uint64_t quotient = magnitude >> right_shift;
+        const uint64_t remainder = magnitude & ((UINT64_C(1) << right_shift) - 1);
+        const uint64_t half = UINT64_C(1) << (right_shift - 1);
+        rounded = quotient + (remainder > half || (remainder == half && (quotient & 1)));
+    } else if (magnitude == 0) {
+        rounded = 0;
+    } else if (right_shift <= -32 || magnitude > (UINT64_C(1) << 32) >> -right_shift) {
+        rounded = UINT64_C(1) << 32;
+    } else {
+        rounded = magnitude << -right_shift;
+    }
+    // Clamping here also bounds the signed conversion and zero-point addition.
+    if (rounded > (UINT64_C(1) << 32))
+        rounded = UINT64_C(1) << 32;
+    const int64_t scaled = product < 0 ? -(int64_t)rounded : (int64_t)rounded;
+    const int64_t result = scaled + zero_point;
+    return (int8_t)(result < INT8_MIN ? INT8_MIN : result > INT8_MAX ? INT8_MAX : result);
 }
 
 #ifdef __cplusplus

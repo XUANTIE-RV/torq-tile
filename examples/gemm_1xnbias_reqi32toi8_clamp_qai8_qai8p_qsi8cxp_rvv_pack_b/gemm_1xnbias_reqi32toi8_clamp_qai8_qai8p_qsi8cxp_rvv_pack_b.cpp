@@ -148,23 +148,6 @@ void dequantize_i8_to_fp32(const int8_t *src, float *dst, size_t size, float sca
     }
 }
 
-// Fuse zero_point of asymmetric-quantized A into bias
-// For 1xN bias with packed B from [K,N]:
-// B is stored as [K,N], but per-channel quantization is along N dimension.
-// We need B in [N,K] layout for per-channel sum, so we transpose during sum.
-// bias_fused[n] = bias_q[n] - zp_a * sum(B_i8[0..K-1, n])
-void fuse_zp_to_bias(int32_t *bias_fused, const int32_t *bias, const int8_t *B_i8,
-                     int32_t zero_point, size_t n, size_t k, size_t ldb)
-{
-    for (size_t ch = 0; ch < n; ++ch) {
-        int32_t weight_sum = 0;
-        for (size_t ki = 0; ki < k; ++ki) {
-            weight_sum += (int32_t)B_i8[ki * ldb + ch];
-        }
-        bias_fused[ch] = bias[ch] - zero_point * weight_sum;
-    }
-}
-
 void fill_matrix_random(size_t rows, size_t cols, float *matrix, const float min, const float max)
 {
     for (size_t i = 0; i < rows * cols; ++i) {
@@ -354,11 +337,11 @@ int main()
     int8_t *A_i8 = (int8_t *)malloc(M * K * sizeof(int8_t));
     int8_t *B_i8 = (int8_t *)malloc(K * N * sizeof(int8_t));  // [K, N] layout
     int32_t *bias_i32 = (int32_t *)malloc(N * sizeof(int32_t));
-    int32_t *bias_fused = (int32_t *)malloc(N * sizeof(int32_t));
+
     int8_t *D_i8 = (int8_t *)malloc(M * N * sizeof(int8_t));
     float *D_deq = (float *)malloc(M * N * sizeof(float));
 
-    if (!scale_b || !A_i8 || !B_i8 || !bias_i32 || !bias_fused || !D_i8 || !D_deq) {
+    if (!scale_b || !A_i8 || !B_i8 || !bias_i32 || !D_i8 || !D_deq) {
         fprintf(stderr, "Memory allocation failed\n");
         return 1;
     }
@@ -384,13 +367,10 @@ int main()
         quantize_fp32_to_i32(&bias_fp32[ch], &bias_i32[ch], 1, bias_scale, 0);
     }
 
-    // Fuse zero_point_a into bias
-    fuse_zp_to_bias(bias_fused, bias_i32, B_i8, zp_a, N, K, N);
-
 #ifdef TQT_DEBUG
     print_matrix_int8(M, K, "A_i8", A_i8);
     print_matrix_int8(K, N, "B_i8", B_i8);
-    print_matrix_int32(1, N, "bias_fused", bias_fused);
+    print_matrix_int32(1, N, "bias_i32", bias_i32);
 #endif
 
     // Set up quantization params
@@ -435,7 +415,7 @@ int main()
                 (const uint8_t *)A_packed + ukernel.get_a_packed_offset(m_idx, 0, K, actual_m);
             const uint8_t *b_packed_ptr =
                 (const uint8_t *)B_packed + ukernel.get_b_packed_offset(n_idx, 0, K, actual_n);
-            const uint8_t *bias_ptr = (const uint8_t *)bias_fused + ukernel.get_bias_offset(n_idx);
+            const uint8_t *bias_ptr = (const uint8_t *)bias_i32 + ukernel.get_bias_offset(n_idx);
             uint8_t *d_ptr = (uint8_t *)D_i8 + ukernel.get_d_offset(m_idx, n_idx, N);
 #ifdef TQT_DEBUG
             printf("Processing a %zux%zu output block starting at (%zu, %zu)\n", actual_m, actual_n,
@@ -475,7 +455,7 @@ int main()
     free(A_i8);
     free(B_i8);
     free(bias_i32);
-    free(bias_fused);
+
     free(D_i8);
     free(scale_b);
     free(A_packed);

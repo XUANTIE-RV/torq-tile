@@ -113,7 +113,7 @@ static void igemmcl_packed_kernel(size_t IC, size_t IC_stride, size_t KD, size_t
                                   const int *ow_arr, size_t ID, size_t IH, size_t IW, size_t SD,
                                   size_t SH, size_t SW, size_t DD, size_t DH, size_t DW, size_t PD,
                                   size_t PH, size_t PW, const int32_t *mult, const int32_t *shift,
-                                  int32_t zp)
+                                  int32_t zp, int32_t input_zp)
 {
     static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
 
@@ -154,9 +154,11 @@ static void igemmcl_packed_kernel(size_t IC, size_t IC_stride, size_t KD, size_t
                     w_ptr += vl;
                 };
                 if (all_valid) {
-                    tqt_igemmcl_fma_loop_i8_i8_4x1vl_rvv<MR, false>(IC, b_bases, vl, load_weights);
+                    tqt_igemmcl_fma_loop_i8_i8_4x1vl_rvv<MR, false>(IC, b_bases, vl, load_weights,
+                                                                    input_zp);
                 } else {
-                    tqt_igemmcl_fma_loop_i8_i8_4x1vl_rvv<MR, true>(IC, b_bases, vl, load_weights);
+                    tqt_igemmcl_fma_loop_i8_i8_4x1vl_rvv<MR, true>(IC, b_bases, vl, load_weights,
+                                                                   input_zp);
                 }
             }
         }
@@ -177,7 +179,7 @@ using igemmcl_packed_kernel_fn_t = void (*)(
     const int8_t *input_group, const int32_t *bias, size_t ldd, int8_t clamp_min, int8_t clamp_max,
     size_t vl, const int *od_arr, const int *oh_arr, const int *ow_arr, size_t ID, size_t IH,
     size_t IW, size_t SD, size_t SH, size_t SW, size_t DD, size_t DH, size_t DW, size_t PD,
-    size_t PH, size_t PW, const int32_t *mult, const int32_t *shift, int32_t zp);
+    size_t PH, size_t PW, const int32_t *mult, const int32_t *shift, int32_t zp, int32_t input_zp);
 
 // Kernel dispatch table: [MR] = [4]
 static constexpr igemmcl_packed_kernel_fn_t kernel_table[4] = {
@@ -195,7 +197,7 @@ static void igemmcl_packed_dispatch(size_t M, size_t IC, size_t IC_stride, size_
                                     size_t ID, size_t IH, size_t IW, size_t SD, size_t SH,
                                     size_t SW, size_t DD, size_t DH, size_t DW, size_t PD,
                                     size_t PH, size_t PW, const int32_t *mult, const int32_t *shift,
-                                    int32_t zp, size_t VLENB)
+                                    int32_t zp, int32_t input_zp, size_t VLENB)
 {
     const size_t vlmax = VLENB;
 
@@ -206,7 +208,7 @@ static void igemmcl_packed_dispatch(size_t M, size_t IC, size_t IC_stride, size_
 
     kernel_table[mr_idx](IC, IC_stride, KD, KH, KW, D, W, input_group, bias, ldd, clamp_min,
                          clamp_max, vl, od_arr, oh_arr, ow_arr, ID, IH, IW, SD, SH, SW, DD, DH, DW,
-                         PD, PH, PW, mult, shift, zp);
+                         PD, PH, PW, mult, shift, zp, input_zp);
 }
 
 // ============================================================================
@@ -228,7 +230,7 @@ void tqt_run_igemm_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp_4x1vl_rvv(
     TQT_UNUSED(ldc);
     TQT_UNUSED(k);
 
-    if (!conv_params || !quant_params) {
+    if (!conv_params || !quant_params || m == 0 || n == 0) {
         return;
     }
 
@@ -258,19 +260,16 @@ void tqt_run_igemm_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp_4x1vl_rvv(
     // Pre-compute per-OC requantization parameters
     int32_t mult_arr[n];
     int32_t shift_arr[n];
-    double real_scale = (double)quant_params->scale_a * (double)quant_params->scale_b[0] /
-                        (double)quant_params->scale_d;
-    tqt_quantize_multiplier(real_scale, &mult_arr[0], &shift_arr[0]);
-    shift_arr[0] = -shift_arr[0] - 1;
+    tqt_quantize_multiplier_from_scales(quant_params->scale_a, quant_params->scale_b[0],
+                                        quant_params->scale_d, &mult_arr[0], &shift_arr[0]);
+
     for (size_t i = 1; i < n; i++) {
         if (quant_params->quant_channel_b == 1) {
             mult_arr[i] = mult_arr[0];
             shift_arr[i] = shift_arr[0];
         } else {
-            real_scale = (double)quant_params->scale_a * (double)quant_params->scale_b[i] /
-                         (double)quant_params->scale_d;
-            tqt_quantize_multiplier(real_scale, &mult_arr[i], &shift_arr[i]);
-            shift_arr[i] = -shift_arr[i] - 1;
+            tqt_quantize_multiplier_from_scales(quant_params->scale_a, quant_params->scale_b[i],
+                                                quant_params->scale_d, &mult_arr[i], &shift_arr[i]);
         }
     }
     int32_t zp = quant_params->zero_point_d;
@@ -310,7 +309,8 @@ void tqt_run_igemm_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp_4x1vl_rvv(
             igemmcl_packed_dispatch(actual_m, IC_per_group, conv_params->input_channel, KD, KH, KW,
                                     d_ptr, w_ptr, input_group, bias_ptr, ldd, clamp_min, clamp_max,
                                     actual_n, od_arr, oh_arr, ow_arr, ID, IH, IW, SD, SH, SW, DD,
-                                    DH, DW, PD, PH, PW, mult_ptr, shift_ptr, zp, VLENB);
+                                    DH, DW, PD, PH, PW, mult_ptr, shift_ptr, zp,
+                                    quant_params->zero_point_a, VLENB);
         }
     }
 }

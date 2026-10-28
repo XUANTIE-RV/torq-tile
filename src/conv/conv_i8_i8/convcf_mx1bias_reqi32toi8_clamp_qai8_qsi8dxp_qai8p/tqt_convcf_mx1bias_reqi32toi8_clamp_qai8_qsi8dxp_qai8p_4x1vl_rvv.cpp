@@ -103,7 +103,7 @@ void tqt_run_a_pack_convcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8p_4x1vl_rvv
 
 static void b_im2colpack_cf_fill(int8_t *dst, size_t sub_n, size_t col_start,
                                  const int8_t *input_group, size_t IC_per_group,
-                                 const tqt_conv_params *params)
+                                 const tqt_conv_params *params, int8_t padding_value)
 {
     const size_t ID = params->input_shape[0], IH = params->input_shape[1],
                  IW = params->input_shape[2];
@@ -134,7 +134,7 @@ static void b_im2colpack_cf_fill(int8_t *dst, size_t sub_n, size_t col_start,
                         int ih_in = (int)(oh_v * SH + kh * DH) - (int)PH;
 
                         if (id_in < 0 || id_in >= (int)ID || ih_in < 0 || ih_in >= (int)IH) {
-                            TQT_MEMSET(row_dst + wp, 0, cnt * sizeof(int8_t));
+                            TQT_MEMSET(row_dst + wp, padding_value, cnt * sizeof(int8_t));
                         } else {
                             // Contiguous vector copy when stride == 1
                             if (SW == 1) {
@@ -146,7 +146,7 @@ static void b_im2colpack_cf_fill(int8_t *dst, size_t sub_n, size_t col_start,
                                                 : 0;
                                 size_t vc = cnt - pl - pr;
                                 if (pl)
-                                    TQT_MEMSET(row_dst + wp, 0, pl * sizeof(int8_t));
+                                    TQT_MEMSET(row_dst + wp, padding_value, pl * sizeof(int8_t));
                                 if (vc) {
                                     const int8_t *s = input_group + ic * ID * IH * IW +
                                                       (size_t)id_in * IH * IW + (size_t)ih_in * IW +
@@ -162,7 +162,8 @@ static void b_im2colpack_cf_fill(int8_t *dst, size_t sub_n, size_t col_start,
                                     }
                                 }
                                 if (pr)
-                                    TQT_MEMSET(row_dst + wp + cnt - pr, 0, pr * sizeof(int8_t));
+                                    TQT_MEMSET(row_dst + wp + cnt - pr, padding_value,
+                                               pr * sizeof(int8_t));
                             } else {
                                 // Non-unit stride: scalar fallback
                                 for (size_t i = 0; i < cnt; ++i) {
@@ -173,7 +174,7 @@ static void b_im2colpack_cf_fill(int8_t *dst, size_t sub_n, size_t col_start,
                                                         (size_t)id_in * IH * IW +
                                                         (size_t)ih_in * IW + (size_t)iw_in];
                                     else
-                                        row_dst[wp + i] = (int8_t)0;
+                                        row_dst[wp + i] = padding_value;
                                 }
                             }
                         }
@@ -190,7 +191,7 @@ static void b_im2colpack_cf_fill(int8_t *dst, size_t sub_n, size_t col_start,
 
 void tqt_run_b_im2colpack_convcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8p_4x1vl_rvv(
     size_t group_idx, const void *activation, size_t ldb_packed, size_t k_idx, void *B_packed,
-    const tqt_conv_params *params)
+    const tqt_conv_params *params, int8_t padding_value)
 {
     const size_t IC_per_group = params->input_channel / params->groups;
     const size_t N = params->output_shape[0] * params->output_shape[1] * params->output_shape[2];
@@ -215,10 +216,11 @@ void tqt_run_b_im2colpack_convcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8p_4x1
         size_t remain_n = actual_n - size_n;
 
         if (size_n > 0)
-            b_im2colpack_cf_fill(panel_ptr, size_n, n_idx, input_group, IC_per_group, params);
+            b_im2colpack_cf_fill(panel_ptr, size_n, n_idx, input_group, IC_per_group, params,
+                                 padding_value);
         if (remain_n > 0)
             b_im2colpack_cf_fill(panel_ptr + size_n * ldb_packed, remain_n, n_idx + size_n,
-                                 input_group, IC_per_group, params);
+                                 input_group, IC_per_group, params, padding_value);
     }
 }
 

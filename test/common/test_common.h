@@ -292,19 +292,5 @@ inline int32_t quantize_bias_i32(float val, float input_scale)
     return static_cast<int32_t>(q);
 }
 
-/// Fuse zero-point into bias for int8 GEMM
-/// fused[ch] = bias[ch] - zp * sum(data[ch * channel_size ... (ch+1) * channel_size - 1])
-inline void fuse_zp_to_bias(int32_t *fused, const int32_t *bias, const int8_t *data, int32_t zp,
-                            size_t channels, size_t channel_size)
-{
-    for (size_t ch = 0; ch < channels; ++ch) {
-        int32_t data_sum = 0;
-        for (size_t i = 0; i < channel_size; ++i) {
-            data_sum += static_cast<int32_t>(data[ch * channel_size + i]);
-        }
-        fused[ch] = bias[ch] - zp * data_sum;
-    }
-}
-
 }  // namespace test
 }  // namespace torq_tile

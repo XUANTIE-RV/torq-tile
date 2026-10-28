@@ -25,10 +25,9 @@ extern "C" {
 /// a = base, lda = 2 * n and b = base + n, ldb = 2 * n.
 ///
 /// Accuracy: a single-thread sweep of 200,001 uniformly spaced gate values over
-/// [-10, 10] and integer b in [-10, 10] in the tested QEMU configuration measures
-/// a maximum absolute error of 1.04e-5 against a double-precision tanh-approximate
-/// GeGLU reference.
-/// Non-finite inputs are not covered.
+/// [-10, 10] and integer b in [-10, 10] under the xt-c9501fdvkmt QEMU model
+/// measures a maximum absolute error of 1.04e-5 against a double-precision
+/// tanh-approximate GeGLU reference. Non-finite inputs are not covered.
 
 size_t tqt_get_m_step_geglu_f32_f32_f32_1x4vl_rvv(void);
 size_t tqt_get_n_step_geglu_f32_f32_f32_1x4vl_rvv(void);

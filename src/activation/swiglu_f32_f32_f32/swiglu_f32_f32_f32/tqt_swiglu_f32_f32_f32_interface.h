@@ -30,11 +30,11 @@ extern "C" {
 // so an in-place call (c == a with ldc == lda, or c == b with ldc == ldb) is
 // well defined.
 //
-// The sigmoid is evaluated with a cephes polynomial exp and is not correctly
-// rounded. The variant header states its measured error bound. The absolute error
-// of the result is the SiLU error scaled by |b|, so it grows with the magnitude of
-// the linear operand; callers should judge accuracy by absolute error over their
-// own input range.
+// RVV evaluates the sigmoid with a cephes polynomial exp. It is not
+// correctly rounded, and each variant header states its measured error
+// bound. The absolute error of the result is the SiLU error scaled by |b|, so it
+// grows with the magnitude of the linear operand; callers should judge accuracy
+// by absolute error over their own input range.
 
 /// Returns the M-direction step (number of rows per inner invocation).
 typedef size_t (*tqt_swiglu_f32_f32_f32_get_m_step_func_t)(void);

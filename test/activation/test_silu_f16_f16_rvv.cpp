@@ -15,8 +15,8 @@ using namespace torq_tile::test;
 // there, and narrows once on store, so the error is dominated by that final
 // rounding to FP16 rather than by the polynomial: over the [-10, 10] range used by
 // these tests the measured maximum absolute error is 2.7e-3, exactly the error of
-// rounding the exact result to FP16. The budget below deliberately retains
-// headroom for implementation and toolchain variation.
+// rounding the exact result to FP16. The existing budget adds about 3.7x
+// headroom over that measurement.
 static constexpr float max_abs_error = 1e-2f;
 static constexpr float min_cosine = 0.9999f;
 

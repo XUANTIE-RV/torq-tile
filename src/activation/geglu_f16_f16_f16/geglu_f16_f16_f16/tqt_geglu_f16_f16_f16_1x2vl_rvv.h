@@ -26,10 +26,10 @@ extern "C" {
 /// a = base, lda = 2 * n and b = base + n, ldb = 2 * n.
 ///
 /// Accuracy: an exhaustive single-thread sweep of every finite FP16 gate value in
-/// [-10, 10] and integer b in [-10, 10] in the tested QEMU configuration measures
-/// a maximum absolute error of 3.125e-2 against a double-precision tanh-approximate
-/// GeGLU reference. Of the 784,938 sampled pairs, 754,397 produce the correctly
-/// rounded FP16 result. Non-finite inputs are not covered.
+/// [-10, 10] and integer b in [-10, 10] under the xt-c9501fdvkmt QEMU model
+/// measures a maximum absolute error of 3.125e-2 against a double-precision
+/// tanh-approximate GeGLU reference. Of the 784,938 sampled pairs, 754,397 produce
+/// the correctly rounded FP16 result. Non-finite inputs are not covered.
 
 size_t tqt_get_m_step_geglu_f16_f16_f16_1x2vl_rvv(void);
 size_t tqt_get_n_step_geglu_f16_f16_f16_1x2vl_rvv(void);

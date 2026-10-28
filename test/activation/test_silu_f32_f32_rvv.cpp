@@ -15,8 +15,8 @@ using namespace torq_tile::test;
 // followed by a correctly-rounded divide, so the absolute error of the result
 // scales with |x|. Sweeping x over the [-10, 10] range used by these tests
 // measures a maximum absolute error of 1.1e-6 and a maximum relative error of
-// 1.4e-7. The budget below deliberately retains headroom above that measurement
-// for implementation and toolchain variation.
+// 1.4e-7. The established acceptance budget below is preserved; it is not
+// tightened to this measured error.
 static constexpr float max_abs_error = 5e-5f;
 static constexpr float min_cosine = 0.999999f;
 

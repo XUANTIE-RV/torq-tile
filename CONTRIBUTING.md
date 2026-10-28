@@ -31,11 +31,12 @@ Thank you for your interest in contributing to TORQ-Tile! Please be respectful a
 
 ## Adding a New Micro-Kernel
 
-Follow the existing naming conventions under `src/`:
-
-- **Directory**: `<op>_<dst-type>_<src0-type>_<src1-type>/` (e.g., `gemm_f16_f16/`)
-- **File**: `tqt_<op>_<data-types>_<compute-params>_<extension>.cpp/.h`
-- **Suffixes**: `t` = transposed, `p` = packed, `rvv` = RISC-V Vector
+Follow the [filename convention](README.md#filename-convention) and use an existing
+same-family variant as a reference. Matrix/conv families
+normally group by base A/B types; elementwise and reduction use operation/type families; activation
+uses the complete KERNEL_BASE as its family label. Source/header names are
+`tqt_<KERNEL_BASE>_<tile>_[<strategy>_]<arch>.{cpp,h}`; `t` means transposed, `p` means packed,
+and the architecture is `rvv` or `ztt`.
 
 **Checklist:**
 

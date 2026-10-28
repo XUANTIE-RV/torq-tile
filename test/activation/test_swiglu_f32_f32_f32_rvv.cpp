@@ -18,8 +18,8 @@ using namespace torq_tile::test;
 // which the |b| <= 10 factor lifts to ~1.1e-5; the rounding of the product adds up
 // to |c| * 2^-24 = 6e-6. Over this shape set the measured maximum is 1.5e-5.
 //
-// The budget below deliberately retains headroom above that measurement for
-// implementation and toolchain variation.
+// Preserve the established acceptance budget rather than tightening it to
+// this range-specific measurement.
 static constexpr float max_abs_error = 5e-4f;
 static constexpr float min_cosine = 0.999999f;
 

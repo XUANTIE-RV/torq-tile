@@ -23,8 +23,8 @@ extern "C" {
 /// supported, and c may alias a when ldc == lda.
 ///
 /// Accuracy: a single-thread sweep of 200,001 uniformly spaced FP32 inputs over
-/// [-10, 10] in the tested QEMU configuration measures a maximum absolute error
-/// of 9.2e-7 against a double-precision tanh-approximate GeLU reference.
+/// [-10, 10] under the xt-c9501fdvkmt QEMU model measures a maximum absolute
+/// error of 9.2e-7 against a double-precision tanh-approximate GeLU reference.
 /// Non-finite inputs and values outside that interval are not characterized.
 
 size_t tqt_get_m_step_gelu_f32_f32_1x4vl_rvv(void);

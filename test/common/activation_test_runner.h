@@ -114,7 +114,8 @@ struct ActivationTestParamNameGenerator
 ///
 /// The first block keeps every leading dimension equal to n, which exercises the
 /// fully packed contract. The remaining blocks vary the paddings independently over
-/// small, large, and boundary-shaped cases, including M=7/8 and N=1023/1024.
+/// small, large, and boundary shapes. The M=7/8 and N=1023/1024 cases
+/// provide additional strided coverage.
 ///
 /// `ldb_pad` only means something under the gated contract. The B-only row exists to
 /// catch a gated kernel whose packed fast path forgets to test `ldb == n`; see
@@ -145,7 +146,7 @@ inline const std::vector<ActivationTestParams> &activation_shapes()
         ActivationTestParams(100, 300, 11, 4, 6, "Padded_M100_N300"),  //
         // Long-row strided coverage.
         ActivationTestParams(16, 1024, 3, 7, 5, "PaddedLong_M16_N1024"),  //
-        // Boundary-shaped strided coverage.
+        // Additional strided boundary shapes.
         ActivationTestParams(8, 1023, 2, 4, 2, "PaddedBoundary_M8_N1023"),  //
         ActivationTestParams(7, 1024, 2, 4, 2, "PaddedBoundary_M7_N1024"),
     };

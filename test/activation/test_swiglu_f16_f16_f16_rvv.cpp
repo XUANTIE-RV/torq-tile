@@ -16,8 +16,8 @@ using namespace torq_tile::test;
 // single rounding of the result to FP16. Over the [-10, 10] range used by these
 // tests the measured maximum is 7.8e-3.
 //
-// The budget below deliberately retains headroom above that measurement for
-// implementation and toolchain variation.
+// Preserve the established acceptance budget rather than tightening it to
+// this range-specific measurement.
 static constexpr float max_abs_error = 1e-1f;
 static constexpr float min_cosine = 0.9999f;
 

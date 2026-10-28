@@ -30,11 +30,12 @@ extern "C" {
 // so an in-place call (c == a with ldc == lda, or c == b with ldc == ldb) is
 // well defined.
 //
-// The computation widens to FP32 internally, keeps the final multiply in FP32 and
-// narrows once on store. The sigmoid is not correctly rounded, and the variant
-// header states its measured error bound. The absolute error of the result is the
-// SiLU error scaled by |b|, so it grows with the magnitude of the linear operand;
-// callers should judge accuracy by absolute error over their own input range.
+// RVV widens to FP32 internally, keeps the SiLU and linear multiplies in
+// FP32, and narrows once on store. Its polynomial exp is not correctly
+// rounded, and each variant header states its measured error bound. The
+// absolute error of the result is the SiLU error scaled by |b|, so it grows with
+// the magnitude of the linear operand; callers should judge accuracy by absolute
+// error over their own input range.
 
 /// Returns the M-direction step (number of rows per inner invocation).
 typedef size_t (*tqt_swiglu_f16_f16_f16_get_m_step_func_t)(void);

@@ -27,7 +27,7 @@ extern "C" {
 ///
 /// Accuracy: all 784,938 pairs from every finite FP16 gate value in [-10, 10] and
 /// integer b in [-10, 10] match the correctly rounded FP16 reference bit for bit
-/// in the tested QEMU configuration. The maximum error against the unrounded
+/// under the xt-c9501fdvkmt QEMU model. The maximum error against the unrounded
 /// double-precision value is 3.125e-2. This is a bounded measurement, not a
 /// guarantee for non-finite or untested signed-zero inputs.
 

@@ -20,9 +20,9 @@ extern "C" {
 // c may alias a: the operation is element-wise with no cross-element dependency,
 // so an in-place call (c == a, ldc == lda) is well defined.
 //
-// The RVV implementation widens to FP32, evaluates sigmoid with a cephes
-// polynomial exp approximation, and narrows back. It is not correctly rounded,
-// and the variant header states its measured absolute error over
+// RVV widens to FP32, evaluates the sigmoid with a cephes polynomial exp,
+// and narrows back. The approximation is not correctly rounded, and each
+// variant header states its measured absolute error over
 // x in [-10, 10]. Those are range-specific measurements, not local ULP
 // guarantees; relative error is unbounded in the saturating tails.
 

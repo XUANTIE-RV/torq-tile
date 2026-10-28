@@ -20,9 +20,9 @@ extern "C" {
 // c may alias a: the operation is element-wise with no cross-element dependency,
 // so an in-place call (c == a, ldc == lda) is well defined.
 //
-// The RVV implementation uses a cephes polynomial exp approximation. It is not
-// correctly rounded, and the variant header states its measured error bound.
-// The relative error is much larger in the saturating
+// RVV evaluates the sigmoid with a cephes polynomial exp. It is not
+// correctly rounded, and each variant header states its measured error
+// bound. Across all of them the relative error is much larger in the saturating
 // tails (where the true value is vanishingly small), so callers should judge
 // accuracy by absolute error.
 

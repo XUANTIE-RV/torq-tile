@@ -18,6 +18,7 @@ from common import HERE, LICENSE, lto_flags, source_path, write_json
 COMMON = "src/common/tqt_common.h"
 RELU = "src/activation/relu_f32_f32/relu_f32_f32/tqt_relu_f32_f32_1x8vl_rvv.h"
 RVV_BASE_FLAGS = ["-march=rv64gcv", "-mabi=lp64d"]
+BACKENDS = {"rvv": "__riscv_v", "ztt": "__riscv_ztt"}
 RVV_BASE_CAPABILITIES = dict(RVV=1, RVV_F16=0, RVV_BF16=0, RVV_BF16_TO_F16=0,
                              RVV_F64=1)
 
@@ -85,7 +86,7 @@ def selected_build(ctx, name, flags, macros, expect_empty=False, capabilities=No
     violations = []
     for entry in entries:
         source = source_path(entry)
-        for backend, macro in (("rvv", "__riscv_v"),):
+        for backend, macro in BACKENDS.items():
             if source.stem.endswith(f"_{backend}") and macro not in macros:
                 violations.append(f"{source.relative_to(ctx.root)} requires {macro}")
     write_json(directory / "architecture-violations.json", violations)
@@ -114,7 +115,7 @@ def compile_config(ctx, name, directory, entries, root=None, capabilities=None):
         if files:
             groups[group] = files
             expected[group] = str(int(files <= selected))
-    for backend in ("RVV",):
+    for backend in (name.upper() for name in BACKENDS):
         expected[backend] = str(int(any(x.endswith(f"_{backend.lower()}.cpp") for x in selected)))
     passed = bool(actual) and actual == expected
     write_json(directory / "compile-config-check.json", dict(actual=actual, expected=expected))
@@ -125,12 +126,12 @@ def compile_config(ctx, name, directory, entries, root=None, capabilities=None):
         violations = {}
         for group, required in capabilities.items():
             files = ({x for x in selected if x.endswith(f"_{group.lower()}.cpp")}
-                     if group in ("RVV",) else groups.get(group, set()))
+                     if group.lower() in BACKENDS else groups.get(group, set()))
             available = bool(files) and files <= selected
             absent = not (files & selected)
             if (actual.get(group) != str(required) or
                     not (available if required else absent) or
-                    (group not in ("RVV",) and group not in groups)):
+                    (group.lower() not in BACKENDS and group not in groups)):
                 violations[group] = dict(required=required, actual=actual.get(group),
                                          selected=sorted(files & selected), missing=sorted(files - selected))
         write_json(directory / "capability-contract.json",

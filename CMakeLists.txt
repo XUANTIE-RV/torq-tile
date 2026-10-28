@@ -74,8 +74,93 @@ torq_tile_check_isa("
     int main() { return 0; }
 " TORQ_TILE_CAN_COMPILE_RVV_F64)
 
+# Ztt capability: let the actual intrinsics determine profile compatibility.
+torq_tile_check_isa("
+    #if !defined(__riscv) || !defined(__riscv_ztt)\n #error\n #endif
+    #include <riscv_ztt.h>
+    int main() { return (int)__riscv_ztt_get_ameown(); }
+" TORQ_TILE_CAN_COMPILE_ZTT)
+# Adaptive Ztt f16: probe the complete selected implementation, including epilogues.
+torq_tile_check_isa("
+    #include \"${PROJECT_SOURCE_DIR}/src/gemm/gemm_f16_f16/tqt_kernel_gemm_f16_f16_1nlenxpnlen_ztt.h\"
+    extern float16_t data[];
+    extern size_t dims[];
+    int main() {
+        using namespace tqt_gemm_f16_f16_1nlenxpnlen_ztt;
+        args a{dims[0], dims[1], dims[2], 0, data, data, data, data, data, dims[3], dims[3], dims[3], dims[3]};
+        tqt_run_kernel_gemm_f16_f16_1nlenxpnlen_ztt<false, false, false>(a, (float16_t)-1, (float16_t)1);
+        tqt_run_kernel_gemm_f16_f16_1nlenxpnlen_ztt<false, false, true>(a, (float16_t)-1, (float16_t)1);
+        tqt_run_kernel_gemm_f16_f16_1nlenxpnlen_ztt<false, true, false>(a, (float16_t)-1, (float16_t)1);
+        tqt_run_kernel_gemm_f16_f16_1nlenxpnlen_ztt<true, false, false>(a, (float16_t)-1, (float16_t)1);
+        tqt_run_kernel_gemm_f16_f16_1nlenxpnlen_ztt<true, false, true>(a, (float16_t)-1, (float16_t)1);
+        tqt_run_kernel_gemm_f16_f16_1nlenxpnlen_ztt<true, true, false>(a, (float16_t)-1, (float16_t)1);
+        pack<true>(1, 1, 1, data, data + 1);
+        return (int)geometry::n_step();
+    }
+" TORQ_TILE_CAN_COMPILE_ZTT_GEMM_F16)
+
+# Adaptive Ztt bf16: probe the complete selected implementation, including epilogues.
+torq_tile_check_isa("
+    #include \"${PROJECT_SOURCE_DIR}/src/gemm/gemm_bf16_bf16/tqt_kernel_gemm_bf16_bf16_1nlenxpnlen_ztt.h\"
+    extern bfloat16_t data[];
+    extern size_t dims[];
+    int main() {
+        using namespace tqt_gemm_bf16_bf16_1nlenxpnlen_ztt;
+        args a{dims[0], dims[1], dims[2], 0, data, data, data, data, data, dims[3], dims[3], dims[3], dims[3]};
+        tqt_run_kernel_gemm_bf16_bf16_1nlenxpnlen_ztt<false, false, false>(a, (bfloat16_t)-1, (bfloat16_t)1);
+        tqt_run_kernel_gemm_bf16_bf16_1nlenxpnlen_ztt<false, false, true>(a, (bfloat16_t)-1, (bfloat16_t)1);
+        tqt_run_kernel_gemm_bf16_bf16_1nlenxpnlen_ztt<false, true, false>(a, (bfloat16_t)-1, (bfloat16_t)1);
+        tqt_run_kernel_gemm_bf16_bf16_1nlenxpnlen_ztt<true, false, false>(a, (bfloat16_t)-1, (bfloat16_t)1);
+        tqt_run_kernel_gemm_bf16_bf16_1nlenxpnlen_ztt<true, false, true>(a, (bfloat16_t)-1, (bfloat16_t)1);
+        tqt_run_kernel_gemm_bf16_bf16_1nlenxpnlen_ztt<true, true, false>(a, (bfloat16_t)-1, (bfloat16_t)1);
+        pack<true>(1, 1, 1, data, data + 1);
+        return (int)geometry::n_step();
+    }
+" TORQ_TILE_CAN_COMPILE_ZTT_GEMM_BF16)
+
+# Adaptive Ztt f32: probe the complete selected implementation, including epilogues.
+torq_tile_check_isa("
+    #include \"${PROJECT_SOURCE_DIR}/src/gemm/gemm_f32_f32/tqt_kernel_gemm_f32_f32_1nlenxpnlen_ztt.h\"
+    extern float data[];
+    extern size_t dims[];
+    int main() {
+        using namespace tqt_gemm_f32_f32_1nlenxpnlen_ztt;
+        args a{dims[0], dims[1], dims[2], 0, data, data, data, data, data, dims[3], dims[3], dims[3], dims[3]};
+        tqt_run_kernel_gemm_f32_f32_1nlenxpnlen_ztt<false, false, false>(a, (float)-1, (float)1);
+        tqt_run_kernel_gemm_f32_f32_1nlenxpnlen_ztt<false, false, true>(a, (float)-1, (float)1);
+        tqt_run_kernel_gemm_f32_f32_1nlenxpnlen_ztt<false, true, false>(a, (float)-1, (float)1);
+        pack<true>(1, 1, 1, data, data + 1);
+        return (int)geometry::n_step();
+    }
+" TORQ_TILE_CAN_COMPILE_ZTT_GEMM_F32)
+
+# ============================================================================
 # Source Files Collection
 # ============================================================================
+
+set(TORQ_TILE_ZTT_GEMM_F16_SOURCES
+    src/gemm/gemm_f16_f16/gemm_1xnbias_clamp_f16_f16_f16/tqt_gemm_1xnbias_clamp_f16_f16_f16_1nlenxpnlen_ztt.cpp
+    src/gemm/gemm_f16_f16/gemm_1xnbias_clamp_f16_f16_f16t/tqt_gemm_1xnbias_clamp_f16_f16_f16t_1nlenxpnlen_ztt.cpp
+    src/gemm/gemm_f16_f16/gemm_1xnbias_clamp_f16p_f16p_f16p/tqt_gemm_1xnbias_clamp_f16p_f16p_f16p_1nlenxpnlen_ztt.cpp
+    src/gemm/gemm_f16_f16/gemm_1xnbias_clamp_f16_f16_f16/tqt_gemm_1xnbias_clamp_f16_f16_f16_1nlenxpnlen_f32acc_ztt.cpp
+    src/gemm/gemm_f16_f16/gemm_1xnbias_clamp_f16_f16_f16t/tqt_gemm_1xnbias_clamp_f16_f16_f16t_1nlenxpnlen_f32acc_ztt.cpp
+    src/gemm/gemm_f16_f16/gemm_1xnbias_clamp_f16p_f16p_f16p/tqt_gemm_1xnbias_clamp_f16p_f16p_f16p_1nlenxpnlen_f32acc_ztt.cpp
+)
+
+set(TORQ_TILE_ZTT_GEMM_BF16_SOURCES
+    src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_bf16_bf16_bf16/tqt_gemm_1xnbias_clamp_bf16_bf16_bf16_1nlenxpnlen_ztt.cpp
+    src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_bf16_bf16_bf16t/tqt_gemm_1xnbias_clamp_bf16_bf16_bf16t_1nlenxpnlen_ztt.cpp
+    src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_bf16p_bf16p_bf16p/tqt_gemm_1xnbias_clamp_bf16p_bf16p_bf16p_1nlenxpnlen_ztt.cpp
+    src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_bf16_bf16_bf16/tqt_gemm_1xnbias_clamp_bf16_bf16_bf16_1nlenxpnlen_f32acc_ztt.cpp
+    src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_bf16_bf16_bf16t/tqt_gemm_1xnbias_clamp_bf16_bf16_bf16t_1nlenxpnlen_f32acc_ztt.cpp
+    src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_bf16p_bf16p_bf16p/tqt_gemm_1xnbias_clamp_bf16p_bf16p_bf16p_1nlenxpnlen_f32acc_ztt.cpp
+)
+
+set(TORQ_TILE_ZTT_GEMM_F32_SOURCES
+    src/gemm/gemm_f32_f32/gemm_1xnbias_clamp_f32_f32_f32/tqt_gemm_1xnbias_clamp_f32_f32_f32_1nlenxpnlen_ztt.cpp
+    src/gemm/gemm_f32_f32/gemm_1xnbias_clamp_f32_f32_f32t/tqt_gemm_1xnbias_clamp_f32_f32_f32t_1nlenxpnlen_ztt.cpp
+    src/gemm/gemm_f32_f32/gemm_1xnbias_clamp_f32p_f32p_f32p/tqt_gemm_1xnbias_clamp_f32p_f32p_f32p_1nlenxpnlen_ztt.cpp
+)
 
 # RVV (RISC-V Vector) kernel files
 set(TORQ_TILE_RVV_SOURCES
@@ -345,6 +430,16 @@ set(TORQ_TILE_RVV_F64_SOURCES
 
 set(TORQ_TILE_ALL_SOURCES "")
 
+if(TORQ_TILE_CAN_COMPILE_ZTT AND TORQ_TILE_CAN_COMPILE_ZTT_GEMM_F16)
+    list(APPEND TORQ_TILE_ALL_SOURCES ${TORQ_TILE_ZTT_GEMM_F16_SOURCES})
+endif()
+if(TORQ_TILE_CAN_COMPILE_ZTT AND TORQ_TILE_CAN_COMPILE_ZTT_GEMM_BF16)
+    list(APPEND TORQ_TILE_ALL_SOURCES ${TORQ_TILE_ZTT_GEMM_BF16_SOURCES})
+endif()
+if(TORQ_TILE_CAN_COMPILE_ZTT AND TORQ_TILE_CAN_COMPILE_ZTT_GEMM_F32)
+    list(APPEND TORQ_TILE_ALL_SOURCES ${TORQ_TILE_ZTT_GEMM_F32_SOURCES})
+endif()
+
 # Add RVV sources if detected
 if(TORQ_TILE_CAN_COMPILE_RVV)
     list(APPEND TORQ_TILE_ALL_SOURCES ${TORQ_TILE_RVV_SOURCES})
@@ -391,7 +486,7 @@ foreach(feature IN LISTS TORQ_TILE_ISA_GROUPS)
     endif()
 endforeach()
 # Architecture flags describe the presence of any implementation for that backend.
-foreach(backend RVV)
+foreach(backend RVV ZTT)
     string(TOLOWER "${backend}" suffix)
     set(backend_sources ${TORQ_TILE_ALL_SOURCES})
     list(FILTER backend_sources INCLUDE REGEX "_${suffix}\\.cpp$")

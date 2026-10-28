@@ -91,6 +91,20 @@ endif()
 # Benchmark Executable
 # ============================================================================
 
+if(TORQ_TILE_HAS_ZTT_GEMM_F16)
+    list(APPEND TORQ_TILE_BENCHMARK_SOURCES gemm/bench_gemm_f16_f16_ztt.cpp)
+endif()
+
+if(TORQ_TILE_HAS_ZTT_GEMM_BF16)
+    list(APPEND TORQ_TILE_BENCHMARK_SOURCES gemm/bench_gemm_bf16_bf16_ztt.cpp)
+endif()
+
+
+
+if(TORQ_TILE_HAS_ZTT_GEMM_F32)
+    list(APPEND TORQ_TILE_BENCHMARK_SOURCES gemm/bench_gemm_f32_f32_ztt.cpp)
+endif()
+
 add_executable(torq_tile_benchmark ${TORQ_TILE_BENCHMARK_SOURCES})
 
 target_include_directories(torq_tile_benchmark PRIVATE

@@ -134,7 +134,9 @@ def getter_policy(ctx, name, flags, free):
     directory.mkdir(parents=True)
     source = directory / "getters.cpp"
     body = [LICENSE, '#include "src/common/tqt_common.h"\n']
-    for guard, getter in (("__riscv_vector", "vlenb"),):
+    for guard, getter in (("__riscv_vector", "vlenb"),
+                          ("__riscv_ztt", "amenlen"),
+                          ("__riscv_ztt", "ameudsz")):
         body.append(f'#if defined({guard})\n'
                     f'extern "C" size_t tqt_check_getter_{getter}(void)\n'
                     '{\n'
@@ -268,3 +270,12 @@ def run(ctx, name, flags, entries, objects):
         inspect_elf(ctx, f"{name}/runtime-contract/{case.name}/elf", case, executable)
         trap = failure == 2 or (failure in (1, 3) and ctx.args.build_type == "Debug")
         execute(ctx, f"{name}/runtime-contract/{case.name}/run", case, executable, trap)
+    if any(source_path(entry).stem.endswith("_ztt") for entry in entries):
+        case = directory / "ztt-number-semantics"
+        # Reuse the common fixture with target flags to enable backend helper checks.
+        executable = minimal_link(ctx, case, [HERE / "runtime_probe.cpp"], flags)
+        if not executable:
+            ctx.record(f"{name}/runtime-contract/ztt-number-semantics", "FAIL", "fixture link failed", case)
+        else:
+            inspect_elf(ctx, f"{name}/runtime-contract/ztt-number-semantics/elf", case, executable)
+            execute(ctx, f"{name}/runtime-contract/ztt-number-semantics/run", case, executable)

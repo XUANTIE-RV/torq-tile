@@ -189,6 +189,45 @@ static inline size_t tqt_get_vlenb(void)
 #endif
 #endif
 
+#if defined(__riscv_ztt)
+static inline size_t csrr_amenlen(void)
+{
+    size_t a = 0;
+    __asm__ volatile("csrr %0, amenlen" : "=r"(a) : : "memory");
+    return a;
+}
+
+static inline size_t csrr_ameudsz(void)
+{
+    size_t a = 0;
+    __asm__ volatile("csrr %0, ameudsz" : "=r"(a) : : "memory");
+    return a;
+}
+
+#ifdef __cplusplus
+// Cache per translation unit in hosted code; read on demand in freestanding code.
+static inline size_t tqt_get_amenlen(void)
+{
+#if TORQ_TILE_FREESTANDING
+    return csrr_amenlen();
+#else
+    static const size_t value = csrr_amenlen();
+    return value;
+#endif
+}
+
+static inline size_t tqt_get_ameudsz(void)
+{
+#if TORQ_TILE_FREESTANDING
+    return csrr_ameudsz();
+#else
+    static const size_t value = csrr_ameudsz();
+    return value;
+#endif
+}
+#endif
+#endif
+
 /// Return whether the caller requested floating-point output clamping.
 /// Evaluate the original public bounds before any narrowing conversion.
 static inline bool tqt_clamp_is_enabled(float clamp_min, float clamp_max)

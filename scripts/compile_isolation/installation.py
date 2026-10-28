@@ -125,7 +125,7 @@ def run(ctx, name, entries):
                         "baseline consumer compiled" if not code else "inspect compile.log", target)
     ctx.parallel(check_header, sorted(public))
     # Refer to every public function, so static archive extraction cannot hide missing implementations.
-    lines = [LICENSE, '#if defined(__riscv_vector)',
+    lines = [LICENSE, '#if defined(__riscv_vector) || defined(__riscv_ztt)',
              '#error Baseline consumer inherited backend ISA.', '#endif']
     for header in sorted(public):
         rel = header.relative_to(ctx.root / "src").as_posix()

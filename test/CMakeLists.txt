@@ -206,3 +206,18 @@ endif()
 
 # ============================================================================
 # ============================================================================
+
+# Ztt: packed arbitrary shapes and aligned ordinary layouts.
+if(TORQ_TILE_HAS_ZTT_GEMM_F16)
+    torq_tile_add_test(test_gemm_f16_f16_ztt gemm/test_gemm_f16_f16_ztt.cpp)
+endif()
+
+if(TORQ_TILE_HAS_ZTT_GEMM_BF16)
+    torq_tile_add_test(test_gemm_bf16_bf16_ztt gemm/test_gemm_bf16_bf16_ztt.cpp)
+endif()
+
+
+
+if(TORQ_TILE_HAS_ZTT_GEMM_F32)
+    torq_tile_add_test(test_gemm_f32_f32_ztt gemm/test_gemm_f32_f32_ztt.cpp)
+endif()

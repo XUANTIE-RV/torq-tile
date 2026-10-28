@@ -1,0 +1,140 @@
+{
+  "ztt-uds8-a4": {
+    "flags": [
+      "-march=rv64gc_ztt_zttuds8b_zttm16_ztta4",
+      "-mabi=lp64d",
+      "-fno-unwind-tables",
+      "-fno-asynchronous-unwind-tables"
+    ],
+    "required": [
+      "__riscv_ztt",
+      "__riscv_zttuds8b",
+      "__riscv_ztta4"
+    ],
+    "forbidden": [
+      "__riscv_vector"
+    ],
+    "capabilities": {
+      "ZTT": 1,
+      "ZTT_GEMM_F32": 1,
+      "ZTT_GEMM_F16": 1,
+      "ZTT_GEMM_BF16": 1,
+      "RVV": 0
+    }
+  },
+  "ztt-uds16-a4": {
+    "flags": [
+      "-march=rv64gc_ztt_zttuds16b_zttm16_ztta4",
+      "-mabi=lp64d",
+      "-fno-unwind-tables",
+      "-fno-asynchronous-unwind-tables"
+    ],
+    "required": [
+      "__riscv_ztt",
+      "__riscv_zttuds16b",
+      "__riscv_ztta4"
+    ],
+    "forbidden": [
+      "__riscv_vector"
+    ],
+    "capabilities": {
+      "ZTT": 1,
+      "ZTT_GEMM_F32": 1,
+      "ZTT_GEMM_F16": 1,
+      "ZTT_GEMM_BF16": 1,
+      "RVV": 0
+    }
+  },
+  "ztt-uds32-a4": {
+    "flags": [
+      "-march=rv64gc_ztt_zttuds32b_zttm16_ztta4",
+      "-mabi=lp64d",
+      "-fno-unwind-tables",
+      "-fno-asynchronous-unwind-tables"
+    ],
+    "required": [
+      "__riscv_ztt",
+      "__riscv_zttuds32b",
+      "__riscv_ztta4"
+    ],
+    "forbidden": [
+      "__riscv_vector"
+    ],
+    "capabilities": {
+      "ZTT": 1,
+      "ZTT_GEMM_F32": 1,
+      "ZTT_GEMM_F16": 1,
+      "ZTT_GEMM_BF16": 1,
+      "RVV": 0
+    }
+  },
+  "ztt-uds64-a4": {
+    "flags": [
+      "-march=rv64gc_ztt_zttuds64b_zttm16_ztta4",
+      "-mabi=lp64d",
+      "-fno-unwind-tables",
+      "-fno-asynchronous-unwind-tables"
+    ],
+    "required": [
+      "__riscv_ztt",
+      "__riscv_zttuds64b",
+      "__riscv_ztta4"
+    ],
+    "forbidden": [
+      "__riscv_vector"
+    ],
+    "capabilities": {
+      "ZTT": 1,
+      "ZTT_GEMM_F32": 1,
+      "ZTT_GEMM_F16": 1,
+      "ZTT_GEMM_BF16": 1,
+      "RVV": 0
+    }
+  },
+  "ztt-uds128-a4": {
+    "flags": [
+      "-march=rv64gc_ztt_zttuds128b_zttm16_ztta4",
+      "-mabi=lp64d",
+      "-fno-unwind-tables",
+      "-fno-asynchronous-unwind-tables"
+    ],
+    "required": [
+      "__riscv_ztt",
+      "__riscv_zttuds128b",
+      "__riscv_ztta4"
+    ],
+    "forbidden": [
+      "__riscv_vector"
+    ],
+    "capabilities": {
+      "ZTT": 1,
+      "ZTT_GEMM_F32": 1,
+      "ZTT_GEMM_F16": 0,
+      "ZTT_GEMM_BF16": 0,
+      "RVV": 0
+    }
+  },
+  "ztt-uds128-a8": {
+    "flags": [
+      "-march=rv64gc_ztt_zttuds128b_zttm16_ztta8",
+      "-mabi=lp64d",
+      "-fno-unwind-tables",
+      "-fno-asynchronous-unwind-tables"
+    ],
+    "required": [
+      "__riscv_ztt",
+      "__riscv_zttuds128b",
+      "__riscv_ztta8"
+    ],
+    "forbidden": [
+      "__riscv_vector"
+    ],
+    "capabilities": {
+      "ZTT": 1,
+      "ZTT_GEMM_F32": 1,
+      "ZTT_GEMM_F16": 1,
+      "ZTT_GEMM_BF16": 1,
+      "RVV": 0
+    }
+  }
+}

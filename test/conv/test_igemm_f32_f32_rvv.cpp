@@ -10,7 +10,7 @@
 #include "src/conv/igemm_f32_f32/igemmcf_mx1bias_clamp_f32_f32p_f32/tqt_igemmcf_mx1bias_clamp_f32_f32p_f32_3vlx8_rvv.h"
 #include "src/conv/igemm_f32_f32/igemmcl_1xnbias_clamp_f32_f32_f32p/tqt_igemmcl_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv.h"
 #include "src/conv/igemm_f32_f32/igemmcl_1xnbias_clamp_f32_f32_f32t/tqt_igemmcl_1xnbias_clamp_f32_f32_f32t_8x3vl_rvv.h"
-#include "test/common/igemm_test_runner.h"
+#include "test/common/conv_clamp_test_utils.h"
 
 using namespace torq_tile::test;
 
@@ -211,4 +211,24 @@ TEST(IgemmF32F32Rvv, PackedNonzeroKOrigin)
         ConvTestParams tp(2, oc, 1, 5, 5, 3, 3, "OC" + std::to_string(oc));
         run_packed_igemmcf_nonzero_k_origin_test<float, float>(tp, cf_funcs);
     }
+}
+
+TEST(test_igemm_f32_f32_rvv_make_igemmcf_nonpacked_funcs, ClampSpecialValues)
+{
+    check_igemm_clamp<float>(make_igemmcf_nonpacked_funcs());
+}
+
+TEST(test_igemm_f32_f32_rvv_make_igemmcf_packed_funcs, ClampSpecialValues)
+{
+    check_igemm_clamp<float>(make_igemmcf_packed_funcs());
+}
+
+TEST(test_igemm_f32_f32_rvv_make_igemmcl_nonpacked_funcs, ClampSpecialValues)
+{
+    check_igemm_clamp<float>(make_igemmcl_nonpacked_funcs());
+}
+
+TEST(test_igemm_f32_f32_rvv_make_igemmcl_packed_funcs, ClampSpecialValues)
+{
+    check_igemm_clamp<float>(make_igemmcl_packed_funcs());
 }

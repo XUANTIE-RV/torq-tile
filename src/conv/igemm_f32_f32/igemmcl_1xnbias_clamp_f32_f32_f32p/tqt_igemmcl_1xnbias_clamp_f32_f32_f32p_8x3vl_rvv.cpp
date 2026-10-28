@@ -122,7 +122,7 @@ static void igemmcl_packed_kernel(size_t IC, size_t IC_stride, size_t kd_start, 
                                   const int *ow_arr, size_t ID, size_t IH, size_t IW, size_t SD,
                                   size_t SH, size_t SW, size_t DD, size_t DH, size_t DW, size_t PD,
                                   size_t PH, size_t PW, bool is_first_k, bool is_last_k,
-                                  size_t VLENB)
+                                  bool apply_clamp, size_t VLENB)
 {
     const size_t vlmax = get_vlmax(VLENB);
 
@@ -188,7 +188,7 @@ static void igemmcl_packed_kernel(size_t IC, size_t IC_stride, size_t kd_start, 
         }
     }
 
-    if (is_last_k) {
+    if (is_last_k && apply_clamp) {
         tqt_clamp_kernel_gemm_f32_f32_8x3vl_rvv<MR, NR>(vl, clamp_min, clamp_max);
     }
     tqt_store_kernel_gemm_f32_f32_8x3vl_rvv<MR, NR>(vl, D, d_stride_row, d_stride_col);
@@ -200,7 +200,7 @@ using igemmcl_packed_kernel_fn_t =
              size_t ldd, size_t ldc, float clamp_min, float clamp_max, size_t vl, const int *od_arr,
              const int *oh_arr, const int *ow_arr, size_t ID, size_t IH, size_t IW, size_t SD,
              size_t SH, size_t SW, size_t DD, size_t DH, size_t DW, size_t PD, size_t PH, size_t PW,
-             bool is_first_k, bool is_last_k, size_t VLENB);
+             bool is_first_k, bool is_last_k, bool apply_clamp, size_t VLENB);
 
 static constexpr igemmcl_packed_kernel_fn_t kernel_table[8][3] = {
     {igemmcl_packed_kernel<1, 1>, igemmcl_packed_kernel<1, 2>, igemmcl_packed_kernel<1, 3>},
@@ -221,7 +221,7 @@ static void igemmcl_packed_dispatch(size_t M, size_t N, size_t IC, size_t IC_str
                                     const int *oh_arr, const int *ow_arr, size_t ID, size_t IH,
                                     size_t IW, size_t SD, size_t SH, size_t SW, size_t DD,
                                     size_t DH, size_t DW, size_t PD, size_t PH, size_t PW,
-                                    bool is_first_k, bool is_last_k, size_t VLENB)
+                                    bool is_first_k, bool is_last_k, bool apply_clamp, size_t VLENB)
 {
     const size_t vlmax = get_vlmax(VLENB);
 
@@ -235,7 +235,7 @@ static void igemmcl_packed_dispatch(size_t M, size_t N, size_t IC, size_t IC_str
     kernel_table[mr_idx][nr_idx](IC, IC_stride, kd_start, kd_end, KH, KW, D, W, input_group, C,
                                  bias, ldd, ldc, clamp_min, clamp_max, vl, od_arr, oh_arr, ow_arr,
                                  ID, IH, IW, SD, SH, SW, DD, DH, DW, PD, PH, PW, is_first_k,
-                                 is_last_k, VLENB);
+                                 is_last_k, apply_clamp, VLENB);
 }
 
 // ============================================================================
@@ -250,6 +250,8 @@ void tqt_run_igemm_igemmcl_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv(
     const size_t VLENB = tqt_get_vlenb();
     const size_t vlmax = get_vlmax(VLENB);
     const size_t n_step = get_n_step(VLENB);
+
+    const bool apply_clamp = tqt_clamp_is_enabled((float)clamp_min, (float)clamp_max);
 
     TQT_UNUSED(k_idx_a);
     TQT_UNUSED(k_idx_b);
@@ -288,9 +290,8 @@ void tqt_run_igemm_igemmcl_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv(
 
     const float *input_group = (const float *)input + group_idx * IC_per_group;
 
-    // Packed-weight origin anchor: the caller selects B_packed with the first N
-    // panel's packed width, so the per-panel addressing below is relative to that
-    // anchor.
+    // Packed-weight origin anchor: the caller selects B_packed with the first N panel's packed
+    // width, so the per-panel addressing below is relative to that anchor.
     const size_t origin_n = tqt_gemm_pack_3vl_first_n(TQT_MIN(n, n_step), vlmax);
 
     // M tiling (spatial direction)
@@ -334,7 +335,7 @@ void tqt_run_igemm_igemmcl_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv(
                                         kd_start, kd_end, KH, KW, d_ptr, w_ptr, input_group, c_ptr,
                                         bias_ptr, ldd, ldc, clamp_min, clamp_max, vlmax, od_arr,
                                         oh_arr, ow_arr, ID, IH, IW, SD, SH, SW, DD, DH, DW, PD, PH,
-                                        PW, is_first_k, is_last_k, VLENB);
+                                        PW, is_first_k, is_last_k, apply_clamp, VLENB);
             }
             size_t remain_n = actual_n - size_n;
             if (remain_n > 0) {
@@ -346,11 +347,11 @@ void tqt_run_igemm_igemmcl_1xnbias_clamp_f32_f32_f32p_8x3vl_rvv(
                 const float *bias_remain = bias_ptr ? bias_ptr + size_n : nullptr;
                 const float *c_remain = c_ptr ? c_ptr + size_n : nullptr;
                 float *d_remain = d_ptr + size_n;
-                igemmcl_packed_dispatch(actual_m, remain_n, IC_per_group, params->input_channel,
-                                        kd_start, kd_end, KH, KW, d_remain, w_remain, input_group,
-                                        c_remain, bias_remain, ldd, ldc, clamp_min, clamp_max,
-                                        remain_n, od_arr, oh_arr, ow_arr, ID, IH, IW, SD, SH, SW,
-                                        DD, DH, DW, PD, PH, PW, is_first_k, is_last_k, VLENB);
+                igemmcl_packed_dispatch(
+                    actual_m, remain_n, IC_per_group, params->input_channel, kd_start, kd_end, KH,
+                    KW, d_remain, w_remain, input_group, c_remain, bias_remain, ldd, ldc, clamp_min,
+                    clamp_max, remain_n, od_arr, oh_arr, ow_arr, ID, IH, IW, SD, SH, SW, DD, DH, DW,
+                    PD, PH, PW, is_first_k, is_last_k, apply_clamp, VLENB);
             }
         }
     }

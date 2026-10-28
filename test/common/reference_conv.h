@@ -22,7 +22,7 @@ enum class ConvLayout
     kChannelLast,   // NDHWC
 };
 
-// GEMM-backed conv opts in; independent igemm keeps the existing reference behavior.
+// Floating CONV and IGEMM explicitly select the unbounded-clamp policy.
 enum class ConvClampPolicy
 {
     kAlwaysApply,

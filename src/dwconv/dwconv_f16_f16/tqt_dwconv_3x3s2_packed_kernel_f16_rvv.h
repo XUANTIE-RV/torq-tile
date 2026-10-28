@@ -48,6 +48,8 @@ static inline void tqt_dwconv_3x3s2_packed_kernel_f16_rvv(
     const float16_t *bias, float16_t *packed_output, const tqt_conv_params *params,
     float16_t clamp_min, float16_t clamp_max)
 {
+    const bool apply_clamp = tqt_clamp_is_enabled((float)clamp_min, (float)clamp_max);
+
     const size_t IC = params->input_channel;
     const size_t OC = params->output_channel;
     const size_t IH = params->input_shape[1];
@@ -166,10 +168,12 @@ static inline void tqt_dwconv_3x3s2_packed_kernel_f16_rvv(
                 acc1 = __riscv_vfmacc_vv_f16m1(acc1, r4c1, w21, vl);
                 acc1 = __riscv_vfmacc_vv_f16m1(acc1, r4c2, w22, vl);
 
-                acc0 = __riscv_vfmax_vf_f16m1(acc0, clamp_min, vl);
-                acc0 = __riscv_vfmin_vf_f16m1(acc0, clamp_max, vl);
-                acc1 = __riscv_vfmax_vf_f16m1(acc1, clamp_min, vl);
-                acc1 = __riscv_vfmin_vf_f16m1(acc1, clamp_max, vl);
+                if (apply_clamp) {
+                    acc0 = __riscv_vfmax_vf_f16m1(acc0, clamp_min, vl);
+                    acc0 = __riscv_vfmin_vf_f16m1(acc0, clamp_max, vl);
+                    acc1 = __riscv_vfmax_vf_f16m1(acc1, clamp_min, vl);
+                    acc1 = __riscv_vfmin_vf_f16m1(acc1, clamp_max, vl);
+                }
 
                 __riscv_vse16_v_f16m1(out_block + ((oh + 0) * OW + ow) * vl, acc0, vl);
                 __riscv_vse16_v_f16m1(out_block + ((oh + 1) * OW + ow) * vl, acc1, vl);
@@ -236,8 +240,10 @@ static inline void tqt_dwconv_3x3s2_packed_kernel_f16_rvv(
                 acc = __riscv_vfmacc_vv_f16m1(acc, v1, w21, vl);
                 acc = __riscv_vfmacc_vv_f16m1(acc, v2, w22, vl);
 
-                acc = __riscv_vfmax_vf_f16m1(acc, clamp_min, vl);
-                acc = __riscv_vfmin_vf_f16m1(acc, clamp_max, vl);
+                if (apply_clamp) {
+                    acc = __riscv_vfmax_vf_f16m1(acc, clamp_min, vl);
+                    acc = __riscv_vfmin_vf_f16m1(acc, clamp_max, vl);
+                }
                 __riscv_vse16_v_f16m1(out_block + (oh * OW + ow) * vl, acc, vl);
             }
         }

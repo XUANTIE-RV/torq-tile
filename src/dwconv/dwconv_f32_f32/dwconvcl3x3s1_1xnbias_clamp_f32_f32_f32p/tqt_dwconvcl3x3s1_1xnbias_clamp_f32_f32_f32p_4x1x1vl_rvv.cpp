@@ -95,6 +95,8 @@ void tqt_run_dwconv_dwconvcl3x3s1_1xnbias_clamp_f32_f32_f32p_4x1x1vl_rvv(
     size_t oh_start, size_t oh_end, const void *input, const void *packed_weight, const void *bias,
     void *output, const tqt_conv_params *params, float clamp_min, float clamp_max)
 {
+    const bool apply_clamp = tqt_clamp_is_enabled((float)clamp_min, (float)clamp_max);
+
     // Specialization assertions
     TQT_ASSERT(params->kernel_shape[0] == 1 && params->input_shape[0] == 1 &&
                params->output_shape[0] == 1);
@@ -277,14 +279,16 @@ void tqt_run_dwconv_dwconvcl3x3s1_1xnbias_clamp_f32_f32_f32p_4x1x1vl_rvv(
                 r5c0 = r5c1;
                 r5c1 = r5c2;
 
-                acc0 = __riscv_vfmax_vf_f32m1(acc0, clamp_min, vl);
-                acc0 = __riscv_vfmin_vf_f32m1(acc0, clamp_max, vl);
-                acc1 = __riscv_vfmax_vf_f32m1(acc1, clamp_min, vl);
-                acc1 = __riscv_vfmin_vf_f32m1(acc1, clamp_max, vl);
-                acc2 = __riscv_vfmax_vf_f32m1(acc2, clamp_min, vl);
-                acc2 = __riscv_vfmin_vf_f32m1(acc2, clamp_max, vl);
-                acc3 = __riscv_vfmax_vf_f32m1(acc3, clamp_min, vl);
-                acc3 = __riscv_vfmin_vf_f32m1(acc3, clamp_max, vl);
+                if (apply_clamp) {
+                    acc0 = __riscv_vfmax_vf_f32m1(acc0, clamp_min, vl);
+                    acc0 = __riscv_vfmin_vf_f32m1(acc0, clamp_max, vl);
+                    acc1 = __riscv_vfmax_vf_f32m1(acc1, clamp_min, vl);
+                    acc1 = __riscv_vfmin_vf_f32m1(acc1, clamp_max, vl);
+                    acc2 = __riscv_vfmax_vf_f32m1(acc2, clamp_min, vl);
+                    acc2 = __riscv_vfmin_vf_f32m1(acc2, clamp_max, vl);
+                    acc3 = __riscv_vfmax_vf_f32m1(acc3, clamp_min, vl);
+                    acc3 = __riscv_vfmin_vf_f32m1(acc3, clamp_max, vl);
+                }
 
                 __riscv_vse32_v_f32m1(out_channel_base + ((oh + 0) * OW + ow) * OC, acc0, vl);
                 __riscv_vse32_v_f32m1(out_channel_base + ((oh + 1) * OW + ow) * OC, acc1, vl);
@@ -330,8 +334,10 @@ void tqt_run_dwconv_dwconvcl3x3s1_1xnbias_clamp_f32_f32_f32p_4x1x1vl_rvv(
                 acc = __riscv_vfmacc_vv_f32m1(acc, v1, w21, vl);
                 acc = __riscv_vfmacc_vv_f32m1(acc, v2, w22, vl);
 
-                acc = __riscv_vfmax_vf_f32m1(acc, clamp_min, vl);
-                acc = __riscv_vfmin_vf_f32m1(acc, clamp_max, vl);
+                if (apply_clamp) {
+                    acc = __riscv_vfmax_vf_f32m1(acc, clamp_min, vl);
+                    acc = __riscv_vfmin_vf_f32m1(acc, clamp_max, vl);
+                }
                 __riscv_vse32_v_f32m1(out_channel_base + (oh * OW + ow) * OC, acc, vl);
             }
         }

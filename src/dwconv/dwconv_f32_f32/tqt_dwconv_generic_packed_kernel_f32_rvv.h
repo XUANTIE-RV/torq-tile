@@ -29,6 +29,8 @@ static inline void tqt_dwconv_generic_packed_kernel_f32_rvv(const float *packed_
                                                             const tqt_conv_params *params,
                                                             float clamp_min, float clamp_max)
 {
+    const bool apply_clamp = tqt_clamp_is_enabled((float)clamp_min, (float)clamp_max);
+
     TQT_ASSERT(params->groups == params->input_channel);
     TQT_ASSERT(params->output_channel % params->input_channel == 0);
 
@@ -110,8 +112,10 @@ static inline void tqt_dwconv_generic_packed_kernel_f32_rvv(const float *packed_
                         }
                     }
 
-                    acc = __riscv_vfmax_vf_f32m1(acc, clamp_min, vl);
-                    acc = __riscv_vfmin_vf_f32m1(acc, clamp_max, vl);
+                    if (apply_clamp) {
+                        acc = __riscv_vfmax_vf_f32m1(acc, clamp_min, vl);
+                        acc = __riscv_vfmin_vf_f32m1(acc, clamp_max, vl);
+                    }
 
                     float *out_pos =
                         out_block + ((size_t)od * OH * OW + (size_t)oh * OW + (size_t)ow) * vl;

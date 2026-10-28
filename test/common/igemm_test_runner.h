@@ -155,7 +155,7 @@ inline void run_nonpacked_igemmcf_test(const ConvTestParams &test_params,
     std::vector<T> ref_output(OC_per_group * N, static_cast<T>(0.0f));
     reference_conv<T>(0, activation.data(), weight.data(), bias_ptr, ref_output.data(), &params,
                       ConvLayout::kChannelFirst, to_target_type<T>(test_params.clamp_min),
-                      to_target_type<T>(test_params.clamp_max));
+                      to_target_type<T>(test_params.clamp_max), ConvClampPolicy::kSkipUnbounded);
 
     std::vector<T> act_output(OC_per_group * N, static_cast<T>(0.0f));
     funcs.run_igemm(M, N, K, activation.data(), 0, 0, 0, weight.data(), K, 0, nullptr, N,
@@ -212,7 +212,7 @@ inline void run_packed_igemmcf_test(const ConvTestParams &test_params,
     std::vector<T> ref_output(OC_per_group * N, static_cast<T>(0.0f));
     reference_conv<T>(0, activation.data(), weight.data(), bias_ptr, ref_output.data(), &params,
                       ConvLayout::kChannelFirst, to_target_type<T>(test_params.clamp_min),
-                      to_target_type<T>(test_params.clamp_max));
+                      to_target_type<T>(test_params.clamp_max), ConvClampPolicy::kSkipUnbounded);
 
     size_t w_packed_size = funcs.get_a_packed_size(M, K);
     std::vector<uint8_t> w_packed(w_packed_size);
@@ -272,7 +272,7 @@ inline void run_nonpacked_igemmcl_test(const ConvTestParams &test_params,
     std::vector<T> ref_output(M * N, static_cast<T>(0.0f));
     reference_conv<T>(0, activation.data(), weight.data(), bias_ptr, ref_output.data(), &params,
                       ConvLayout::kChannelLast, to_target_type<T>(test_params.clamp_min),
-                      to_target_type<T>(test_params.clamp_max));
+                      to_target_type<T>(test_params.clamp_max), ConvClampPolicy::kSkipUnbounded);
 
     std::vector<T> act_output(M * N, static_cast<T>(0.0f));
     funcs.run_igemm(M, N, K, activation.data(), 0, 0, 0, weight.data(), K, 0, nullptr, N,
@@ -329,7 +329,7 @@ inline void run_packed_igemmcl_test(const ConvTestParams &test_params,
     std::vector<T> ref_output(M * N, static_cast<T>(0.0f));
     reference_conv<T>(0, activation.data(), weight.data(), bias_ptr, ref_output.data(), &params,
                       ConvLayout::kChannelLast, to_target_type<T>(test_params.clamp_min),
-                      to_target_type<T>(test_params.clamp_max));
+                      to_target_type<T>(test_params.clamp_max), ConvClampPolicy::kSkipUnbounded);
 
     size_t w_packed_size = funcs.get_b_packed_size(N, K);
     std::vector<uint8_t> w_packed(w_packed_size);
@@ -406,7 +406,8 @@ inline void run_packed_igemmcl_nonzero_k_origin_test(const ConvTestParams &test_
 
     std::vector<T> ref_output(M * N, static_cast<T>(0.0f));
     reference_conv<T>(0, activation.data(), weight.data(), bias_ptr, ref_output.data(), &params,
-                      ConvLayout::kChannelLast, clamp_min, clamp_max);
+                      ConvLayout::kChannelLast, clamp_min, clamp_max,
+                      ConvClampPolicy::kSkipUnbounded);
 
     const size_t w_packed_size = funcs.get_b_packed_size(N, K);
 
@@ -493,7 +494,8 @@ inline void run_packed_igemmcf_nonzero_k_origin_test(const ConvTestParams &test_
 
     std::vector<T> ref_output(M * N, static_cast<T>(0.0f));
     reference_conv<T>(0, activation.data(), weight.data(), bias_ptr, ref_output.data(), &params,
-                      ConvLayout::kChannelFirst, clamp_min, clamp_max);
+                      ConvLayout::kChannelFirst, clamp_min, clamp_max,
+                      ConvClampPolicy::kSkipUnbounded);
 
     const size_t w_packed_size = funcs.get_a_packed_size(M, K);
 

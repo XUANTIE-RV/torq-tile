@@ -52,6 +52,8 @@ static inline void tqt_dwconv_3x3s1_packed_kernel_f32_rvv(size_t oh_start, size_
                                                           const tqt_conv_params *params,
                                                           float clamp_min, float clamp_max)
 {
+    const bool apply_clamp = tqt_clamp_is_enabled((float)clamp_min, (float)clamp_max);
+
     const size_t IC = params->input_channel;
     const size_t OC = params->output_channel;
     const size_t IH = params->input_shape[1];
@@ -214,14 +216,16 @@ static inline void tqt_dwconv_3x3s1_packed_kernel_f32_rvv(size_t oh_start, size_
                 r5c0 = r5c1;
                 r5c1 = r5c2;
 
-                acc0 = __riscv_vfmax_vf_f32m1(acc0, clamp_min, vl);
-                acc0 = __riscv_vfmin_vf_f32m1(acc0, clamp_max, vl);
-                acc1 = __riscv_vfmax_vf_f32m1(acc1, clamp_min, vl);
-                acc1 = __riscv_vfmin_vf_f32m1(acc1, clamp_max, vl);
-                acc2 = __riscv_vfmax_vf_f32m1(acc2, clamp_min, vl);
-                acc2 = __riscv_vfmin_vf_f32m1(acc2, clamp_max, vl);
-                acc3 = __riscv_vfmax_vf_f32m1(acc3, clamp_min, vl);
-                acc3 = __riscv_vfmin_vf_f32m1(acc3, clamp_max, vl);
+                if (apply_clamp) {
+                    acc0 = __riscv_vfmax_vf_f32m1(acc0, clamp_min, vl);
+                    acc0 = __riscv_vfmin_vf_f32m1(acc0, clamp_max, vl);
+                    acc1 = __riscv_vfmax_vf_f32m1(acc1, clamp_min, vl);
+                    acc1 = __riscv_vfmin_vf_f32m1(acc1, clamp_max, vl);
+                    acc2 = __riscv_vfmax_vf_f32m1(acc2, clamp_min, vl);
+                    acc2 = __riscv_vfmin_vf_f32m1(acc2, clamp_max, vl);
+                    acc3 = __riscv_vfmax_vf_f32m1(acc3, clamp_min, vl);
+                    acc3 = __riscv_vfmin_vf_f32m1(acc3, clamp_max, vl);
+                }
 
                 __riscv_vse32_v_f32m1(out_block + ((oh + 0) * OW + ow) * vl, acc0, vl);
                 __riscv_vse32_v_f32m1(out_block + ((oh + 1) * OW + ow) * vl, acc1, vl);
@@ -267,8 +271,10 @@ static inline void tqt_dwconv_3x3s1_packed_kernel_f32_rvv(size_t oh_start, size_
                 acc = __riscv_vfmacc_vv_f32m1(acc, v1, w21, vl);
                 acc = __riscv_vfmacc_vv_f32m1(acc, v2, w22, vl);
 
-                acc = __riscv_vfmax_vf_f32m1(acc, clamp_min, vl);
-                acc = __riscv_vfmin_vf_f32m1(acc, clamp_max, vl);
+                if (apply_clamp) {
+                    acc = __riscv_vfmax_vf_f32m1(acc, clamp_min, vl);
+                    acc = __riscv_vfmin_vf_f32m1(acc, clamp_max, vl);
+                }
                 __riscv_vse32_v_f32m1(out_block + (oh * OW + ow) * vl, acc, vl);
             }
         }

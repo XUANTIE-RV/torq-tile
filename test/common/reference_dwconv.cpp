@@ -95,8 +95,10 @@ void reference_dwconv(const T *input, const T *weight, const T *bias, T *output,
                         acc += static_cast<float>(bias[oc]);
                     }
 
-                    acc = std::fmax(acc, clamp_min_f);
-                    acc = std::fmin(acc, clamp_max_f);
+                    if (clamp_min_f != -INFINITY || clamp_max_f != INFINITY) {
+                        acc = std::fmax(acc, clamp_min_f);
+                        acc = std::fmin(acc, clamp_max_f);
+                    }
 
                     if (layout == ConvLayout::kChannelFirst) {
                         // output [OC, OD, OH, OW]

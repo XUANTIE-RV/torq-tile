@@ -27,6 +27,8 @@ void tqt_run_dwconv_dwconvcl_1xnbias_clamp_f16_f16_f16t_1x1vl_rvv(
     const void *input, const void *weight, const void *bias, void *output,
     const tqt_conv_params *params, float16_t clamp_min, float16_t clamp_max)
 {
+    const bool apply_clamp = tqt_clamp_is_enabled((float)clamp_min, (float)clamp_max);
+
     TQT_ASSERT(params->groups == params->input_channel);
     TQT_ASSERT(params->output_channel % params->input_channel == 0);
 
@@ -109,8 +111,10 @@ void tqt_run_dwconv_dwconvcl_1xnbias_clamp_f16_f16_f16t_1x1vl_rvv(
                             }
                         }
 
-                        acc = __riscv_vfmax_vf_f16m1(acc, clamp_min, vl);
-                        acc = __riscv_vfmin_vf_f16m1(acc, clamp_max, vl);
+                        if (apply_clamp) {
+                            acc = __riscv_vfmax_vf_f16m1(acc, clamp_min, vl);
+                            acc = __riscv_vfmin_vf_f16m1(acc, clamp_max, vl);
+                        }
 
                         float16_t *out_pos =
                             out_base + ((size_t)od * OH * OW + (size_t)oh * OW + (size_t)ow) * OC +

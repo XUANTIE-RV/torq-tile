@@ -102,7 +102,7 @@ static void igemmcl_kernel(size_t IC, size_t IC_stride, size_t kd_start, size_t 
                            const int *oh_arr, const int *ow_arr, size_t ID, size_t IH, size_t IW,
                            size_t SD, size_t SH, size_t SW, size_t DD, size_t DH, size_t DW,
                            size_t PD, size_t PH, size_t PW, bool is_first_k, bool is_last_k,
-                           size_t VLENB)
+                           bool apply_clamp, size_t VLENB)
 {
     const size_t vlmax = get_vlmax(VLENB);
 
@@ -143,8 +143,8 @@ static void igemmcl_kernel(size_t IC, size_t IC_stride, size_t kd_start, size_t 
             }
             for (size_t kw = 0; kw < KW; kw++) {
                 // Precompute base addresses for MR spatial positions.
-                // CL: input[id, ih, iw, ic] = base + id*IH*IW*IC + ih*IW*IC + iw*IC +
-                // ic Base address (without ic) is stable for the entire IC loop.
+                // CL: input[id, ih, iw, ic] = base + id*IH*IW*IC + ih*IW*IC + iw*IC + ic
+                // Base address (without ic) is stable for the entire IC loop.
                 const float *b_bases[8] = {nullptr};
                 bool all_valid = true;
                 for (size_t i = 0; i < MR; i++) {
@@ -173,22 +173,20 @@ static void igemmcl_kernel(size_t IC, size_t IC_stride, size_t kd_start, size_t 
     }
 
     // Post-processing
-    if (is_last_k) {
+    if (is_last_k && apply_clamp) {
         tqt_clamp_kernel_gemm_f32_f32_8x3vl_rvv<MR, NR>(vl, clamp_min, clamp_max);
     }
     tqt_store_kernel_gemm_f32_f32_8x3vl_rvv<MR, NR>(vl, D, d_stride_row, d_stride_col);
 }
 
 // Function pointer type for kernel dispatch
-using igemmcl_kernel_fn_t = void (*)(size_t IC, size_t IC_stride, size_t kd_start, size_t kd_end,
-                                     size_t KH, size_t KW, float *D, const float *W,
-                                     const float *input_group, const float *C, const float *bias,
-                                     size_t ldd, size_t ldw, size_t ldc, float clamp_min,
-                                     float clamp_max, size_t vl, const int *od_arr,
-                                     const int *oh_arr, const int *ow_arr, size_t ID, size_t IH,
-                                     size_t IW, size_t SD, size_t SH, size_t SW, size_t DD,
-                                     size_t DH, size_t DW, size_t PD, size_t PH, size_t PW,
-                                     bool is_first_k, bool is_last_k, size_t VLENB);
+using igemmcl_kernel_fn_t =
+    void (*)(size_t IC, size_t IC_stride, size_t kd_start, size_t kd_end, size_t KH, size_t KW,
+             float *D, const float *W, const float *input_group, const float *C, const float *bias,
+             size_t ldd, size_t ldw, size_t ldc, float clamp_min, float clamp_max, size_t vl,
+             const int *od_arr, const int *oh_arr, const int *ow_arr, size_t ID, size_t IH,
+             size_t IW, size_t SD, size_t SH, size_t SW, size_t DD, size_t DH, size_t DW, size_t PD,
+             size_t PH, size_t PW, bool is_first_k, bool is_last_k, bool apply_clamp, size_t VLENB);
 
 // Kernel dispatch table: [MR][NR] = [8][3]
 static constexpr igemmcl_kernel_fn_t kernel_table[8][3] = {
@@ -209,7 +207,7 @@ static void igemmcl_dispatch(size_t M, size_t N, size_t IC, size_t IC_stride, si
                              size_t vl, const int *od_arr, const int *oh_arr, const int *ow_arr,
                              size_t ID, size_t IH, size_t IW, size_t SD, size_t SH, size_t SW,
                              size_t DD, size_t DH, size_t DW, size_t PD, size_t PH, size_t PW,
-                             bool is_first_k, bool is_last_k, size_t VLENB)
+                             bool is_first_k, bool is_last_k, bool apply_clamp, size_t VLENB)
 {
     const size_t vlmax = get_vlmax(VLENB);
 
@@ -223,7 +221,7 @@ static void igemmcl_dispatch(size_t M, size_t N, size_t IC, size_t IC_stride, si
     kernel_table[mr_idx][nr_idx](IC, IC_stride, kd_start, kd_end, KH, KW, D, W, input_group, C,
                                  bias, ldd, ldw, ldc, clamp_min, clamp_max, vl, od_arr, oh_arr,
                                  ow_arr, ID, IH, IW, SD, SH, SW, DD, DH, DW, PD, PH, PW, is_first_k,
-                                 is_last_k, VLENB);
+                                 is_last_k, apply_clamp, VLENB);
 }
 
 // ============================================================================
@@ -238,6 +236,8 @@ void tqt_run_igemm_igemmcl_1xnbias_clamp_f32_f32_f32t_8x3vl_rvv(
     const size_t VLENB = tqt_get_vlenb();
     const size_t vlmax = get_vlmax(VLENB);
     const size_t n_step = get_n_step(VLENB);
+
+    const bool apply_clamp = tqt_clamp_is_enabled((float)clamp_min, (float)clamp_max);
 
     TQT_UNUSED(k_idx_a);
     TQT_UNUSED(k_idx_b);
@@ -317,7 +317,7 @@ void tqt_run_igemm_igemmcl_1xnbias_clamp_f32_f32_f32t_8x3vl_rvv(
                                  kd_end, KH, KW, d_ptr, w_ptr, input_group, c_ptr, bias_ptr, ldd,
                                  ldb, ldc, clamp_min, clamp_max, vlmax, od_arr, oh_arr, ow_arr, ID,
                                  IH, IW, SD, SH, SW, DD, DH, DW, PD, PH, PW, is_first_k, is_last_k,
-                                 VLENB);
+                                 apply_clamp, VLENB);
             }
             size_t remain_n = actual_n - size_n;
             if (remain_n > 0) {
@@ -329,7 +329,7 @@ void tqt_run_igemm_igemmcl_1xnbias_clamp_f32_f32_f32t_8x3vl_rvv(
                                  kd_end, KH, KW, d_remain, w_remain, input_group, c_remain,
                                  bias_remain, ldd, ldb, ldc, clamp_min, clamp_max, remain_n, od_arr,
                                  oh_arr, ow_arr, ID, IH, IW, SD, SH, SW, DD, DH, DW, PD, PH, PW,
-                                 is_first_k, is_last_k, VLENB);
+                                 is_first_k, is_last_k, apply_clamp, VLENB);
             }
         }
     }

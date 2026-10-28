@@ -242,7 +242,7 @@ static inline void tqt_dwconv_unpack_output_cl_f32_rvv(const float *packed, floa
 // FP16 variants (mirror of fp32 above; require zfh + zvfh).
 // ============================================================================
 
-#if defined(__riscv_zfh) && defined(__riscv_zvfh)
+#if TQT_HAS_NATIVE_FP16 && defined(__riscv_zfh) && defined(__riscv_zvfh)
 
 static inline size_t tqt_dwconv_packed_tensor_bytes_f16_rvv(size_t channel, size_t spatial)
 {

@@ -13,10 +13,23 @@
 #include "src/common/tqt_common.h"
 #include "src/gemm/gemm_f16_f16/tqt_kernel_gemm_f16_f16_8x3vl_rvv.h"
 
-static const size_t VLENB = csrr_vlenb();
-static const size_t vlmax = VLENB / sizeof(float16_t);
+static inline size_t get_vlenb()
+{
+    static const size_t value = csrr_vlenb();
+    return value;
+}
+
+static inline size_t get_vlmax(size_t vlenb)
+{
+    return vlenb / sizeof(float16_t);
+}
+
+static inline size_t get_n_step(size_t vlenb)
+{
+    return 3 * get_vlmax(vlenb);
+}
+
 static const size_t m_step = 8;
-static const size_t n_step = 3 * vlmax;
 
 // ============================================================================
 // Helper Functions (Get Methods)
@@ -29,6 +42,9 @@ size_t tqt_get_m_step_gemm_1xnbias_clamp_f16_f16_f16_8x3vl_rvv(void)
 
 size_t tqt_get_n_step_gemm_1xnbias_clamp_f16_f16_f16_8x3vl_rvv(void)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = get_n_step(VLENB);
+
     return n_step;
 }
 
@@ -42,6 +58,9 @@ size_t tqt_get_a_offset_gemm_1xnbias_clamp_f16_f16_f16_8x3vl_rvv(size_t m_idx, s
 size_t tqt_get_b_offset_gemm_1xnbias_clamp_f16_f16_f16_8x3vl_rvv(size_t n_idx, size_t k_idx,
                                                                  size_t ldb)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = get_n_step(VLENB);
+
     TQT_ASSUME(n_idx % n_step == 0);
     return (k_idx * ldb + n_idx) * sizeof(float16_t);
 }
@@ -49,6 +68,9 @@ size_t tqt_get_b_offset_gemm_1xnbias_clamp_f16_f16_f16_8x3vl_rvv(size_t n_idx, s
 size_t tqt_get_c_offset_gemm_1xnbias_clamp_f16_f16_f16_8x3vl_rvv(size_t m_idx, size_t n_idx,
                                                                  size_t ldc)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = get_n_step(VLENB);
+
     TQT_ASSUME(m_idx % m_step == 0);
     TQT_ASSUME(n_idx % n_step == 0);
     return (m_idx * ldc + n_idx) * sizeof(float16_t);
@@ -56,6 +78,9 @@ size_t tqt_get_c_offset_gemm_1xnbias_clamp_f16_f16_f16_8x3vl_rvv(size_t m_idx, s
 
 size_t tqt_get_bias_offset_gemm_1xnbias_clamp_f16_f16_f16_8x3vl_rvv(size_t n_idx)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = get_n_step(VLENB);
+
     TQT_ASSUME(n_idx % n_step == 0);
     return n_idx * sizeof(float16_t);
 }
@@ -63,6 +88,9 @@ size_t tqt_get_bias_offset_gemm_1xnbias_clamp_f16_f16_f16_8x3vl_rvv(size_t n_idx
 size_t tqt_get_d_offset_gemm_1xnbias_clamp_f16_f16_f16_8x3vl_rvv(size_t m_idx, size_t n_idx,
                                                                  size_t ldd)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = get_n_step(VLENB);
+
     TQT_ASSUME(m_idx % m_step == 0);
     TQT_ASSUME(n_idx % n_step == 0);
     return (m_idx * ldd + n_idx) * sizeof(float16_t);
@@ -82,8 +110,10 @@ template <size_t MR, size_t NR>
 static void gemm_kernel(size_t K, float16_t *D, const float16_t *A, const float16_t *B,
                         const float16_t *C, const float16_t *bias, size_t ldd, size_t lda,
                         size_t ldb, size_t ldc, float16_t clamp_min, float16_t clamp_max,
-                        bool apply_clamp, size_t vl)
+                        bool apply_clamp, size_t vl, size_t VLENB)
 {
+    const size_t vlmax = get_vlmax(VLENB);
+
     static_assert(MR >= 1 && MR <= 8, "MR must be in range [1, 8]");
     static_assert(NR >= 1 && NR <= 3, "NR must be in range [1, 3]");
 
@@ -134,7 +164,7 @@ static void gemm_kernel(size_t K, float16_t *D, const float16_t *A, const float1
 using gemm_kernel_fn_t = void (*)(size_t K, float16_t *D, const float16_t *A, const float16_t *B,
                                   const float16_t *C, const float16_t *bias, size_t ldd, size_t lda,
                                   size_t ldb, size_t ldc, float16_t clamp_min, float16_t clamp_max,
-                                  bool apply_clamp, size_t vl);
+                                  bool apply_clamp, size_t vl, size_t VLENB);
 
 // Kernel dispatch table (8 x 3 = 24 kernels)
 static constexpr gemm_kernel_fn_t kernel_table[8][3] = {
@@ -159,8 +189,10 @@ static constexpr gemm_kernel_fn_t kernel_table[8][3] = {
 static void gemm_mrxnr_rvv(size_t M, size_t N, size_t K, float16_t *D, const float16_t *A,
                            const float16_t *B, const float16_t *C, const float16_t *bias,
                            size_t ldd, size_t lda, size_t ldb, size_t ldc, float16_t clamp_min,
-                           float16_t clamp_max, bool apply_clamp, size_t vl)
+                           float16_t clamp_max, bool apply_clamp, size_t vl, size_t VLENB)
 {
+    const size_t vlmax = get_vlmax(VLENB);
+
     TQT_ASSUME(M > 0 && M <= 8);
     TQT_ASSUME(N == 3 * vlmax || N == 2 * vlmax || (N > 0 && N <= vlmax));
     TQT_ASSUME(vl <= vlmax);
@@ -170,7 +202,7 @@ static void gemm_mrxnr_rvv(size_t M, size_t N, size_t K, float16_t *D, const flo
 
     // Dispatch to specialized kernel
     kernel_table[mr_idx][nr_idx](K, D, A, B, C, bias, ldd, lda, ldb, ldc, clamp_min, clamp_max,
-                                 apply_clamp, vl);
+                                 apply_clamp, vl, VLENB);
 }
 
 // ============================================================================
@@ -184,7 +216,11 @@ void tqt_run_gemm_1xnbias_clamp_f16_f16_f16_8x3vl_rvv(size_t m, size_t n, size_t
                                                       const void *bias, float16_t clamp_min,
                                                       float16_t clamp_max)
 {
-    const bool apply_clamp = tqt_gemm_clamp_is_enabled((float)clamp_min, (float)clamp_max);
+    const size_t VLENB = get_vlenb();
+    const size_t vlmax = get_vlmax(VLENB);
+    const size_t n_step = get_n_step(VLENB);
+
+    const bool apply_clamp = tqt_clamp_is_enabled((float)clamp_min, (float)clamp_max);
 
     TQT_UNUSED(k_idx_a);
     TQT_UNUSED(k_idx_b);
@@ -210,7 +246,7 @@ void tqt_run_gemm_1xnbias_clamp_f16_f16_f16_8x3vl_rvv(size_t m, size_t n, size_t
                     size_n = vlmax;
                 }
                 gemm_mrxnr_rvv(actual_m, size_n, k, d_ptr, a_ptr, b_ptr, c_ptr, bias_ptr, ldd, lda,
-                               ldb, ldc, clamp_min, clamp_max, apply_clamp, vlmax);
+                               ldb, ldc, clamp_min, clamp_max, apply_clamp, vlmax, VLENB);
             }
             size_t remain_n = actual_n - size_n;
             if (remain_n > 0) {
@@ -221,7 +257,7 @@ void tqt_run_gemm_1xnbias_clamp_f16_f16_f16_8x3vl_rvv(size_t m, size_t n, size_t
                     bias_ptr += size_n;
                 d_ptr += size_n;
                 gemm_mrxnr_rvv(actual_m, remain_n, k, d_ptr, a_ptr, b_ptr, c_ptr, bias_ptr, ldd,
-                               lda, ldb, ldc, clamp_min, clamp_max, apply_clamp, remain_n);
+                               lda, ldb, ldc, clamp_min, clamp_max, apply_clamp, remain_n, VLENB);
             }
         }
     }

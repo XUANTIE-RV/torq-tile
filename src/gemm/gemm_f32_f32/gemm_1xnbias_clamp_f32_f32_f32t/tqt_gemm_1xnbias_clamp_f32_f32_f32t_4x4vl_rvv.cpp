@@ -13,10 +13,23 @@
 #include "src/common/tqt_common.h"
 #include "src/gemm/gemm_f32_f32/tqt_kernel_gemm_f32_f32_4x4vl_rvv.h"
 
-static const size_t VLENB = csrr_vlenb();
-static const size_t vlmax = VLENB / sizeof(float);
+static inline size_t get_vlenb()
+{
+    static const size_t value = csrr_vlenb();
+    return value;
+}
+
+static inline size_t get_vlmax(size_t vlenb)
+{
+    return vlenb / sizeof(float);
+}
+
+static inline size_t get_n_step(size_t vlenb)
+{
+    return 4 * get_vlmax(vlenb);
+}
+
 static const size_t m_step = 4;
-static const size_t n_step = 4 * vlmax;
 
 // ============================================================================
 // Helper Functions (Get Methods)
@@ -29,6 +42,9 @@ size_t tqt_get_m_step_gemm_1xnbias_clamp_f32_f32_f32t_4x4vl_rvv(void)
 
 size_t tqt_get_n_step_gemm_1xnbias_clamp_f32_f32_f32t_4x4vl_rvv(void)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = get_n_step(VLENB);
+
     return n_step;
 }
 
@@ -42,6 +58,9 @@ size_t tqt_get_a_offset_gemm_1xnbias_clamp_f32_f32_f32t_4x4vl_rvv(size_t m_idx, 
 size_t tqt_get_b_offset_gemm_1xnbias_clamp_f32_f32_f32t_4x4vl_rvv(size_t n_idx, size_t k_idx,
                                                                   size_t ldb)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = get_n_step(VLENB);
+
     TQT_ASSUME(n_idx % n_step == 0);
     // For transposed B [n, k]: element at (n_idx, k_idx) -> offset = (n_idx * ldb + k_idx)
     return (n_idx * ldb + k_idx) * sizeof(float);
@@ -50,6 +69,9 @@ size_t tqt_get_b_offset_gemm_1xnbias_clamp_f32_f32_f32t_4x4vl_rvv(size_t n_idx, 
 size_t tqt_get_c_offset_gemm_1xnbias_clamp_f32_f32_f32t_4x4vl_rvv(size_t m_idx, size_t n_idx,
                                                                   size_t ldc)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = get_n_step(VLENB);
+
     TQT_ASSUME(m_idx % m_step == 0);
     TQT_ASSUME(n_idx % n_step == 0);
     return (m_idx * ldc + n_idx) * sizeof(float);
@@ -57,6 +79,9 @@ size_t tqt_get_c_offset_gemm_1xnbias_clamp_f32_f32_f32t_4x4vl_rvv(size_t m_idx, 
 
 size_t tqt_get_bias_offset_gemm_1xnbias_clamp_f32_f32_f32t_4x4vl_rvv(size_t n_idx)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = get_n_step(VLENB);
+
     TQT_ASSUME(n_idx % n_step == 0);
     return n_idx * sizeof(float);
 }
@@ -64,6 +89,9 @@ size_t tqt_get_bias_offset_gemm_1xnbias_clamp_f32_f32_f32t_4x4vl_rvv(size_t n_id
 size_t tqt_get_d_offset_gemm_1xnbias_clamp_f32_f32_f32t_4x4vl_rvv(size_t m_idx, size_t n_idx,
                                                                   size_t ldd)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = get_n_step(VLENB);
+
     TQT_ASSUME(m_idx % m_step == 0);
     TQT_ASSUME(n_idx % n_step == 0);
     return (m_idx * ldd + n_idx) * sizeof(float);
@@ -141,8 +169,10 @@ static constexpr gemm_kernel_fn_t kernel_table_4vl[4] = {
 static void gemm_mrxnr_4vl_rvv(size_t M, size_t N, size_t K, float *D, const float *A,
                                const float *B, const float *C, const float *bias, size_t ldd,
                                size_t lda, size_t ldb, size_t ldc, float clamp_min, float clamp_max,
-                               bool apply_clamp, size_t vl)
+                               bool apply_clamp, size_t vl, size_t VLENB)
 {
+    const size_t n_step = get_n_step(VLENB);
+
     TQT_UNUSED(N);
     TQT_ASSUME(M > 0 && M <= 4);
     TQT_ASSUME(vl > 0 && vl <= n_step);
@@ -162,7 +192,10 @@ void tqt_run_gemm_1xnbias_clamp_f32_f32_f32t_4x4vl_rvv(size_t m, size_t n, size_
                                                        const void *bias, float clamp_min,
                                                        float clamp_max)
 {
-    const bool apply_clamp = tqt_gemm_clamp_is_enabled((float)clamp_min, (float)clamp_max);
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = get_n_step(VLENB);
+
+    const bool apply_clamp = tqt_clamp_is_enabled((float)clamp_min, (float)clamp_max);
 
     TQT_UNUSED(k_idx_a);
     TQT_UNUSED(k_idx_b);
@@ -183,7 +216,7 @@ void tqt_run_gemm_1xnbias_clamp_f32_f32_f32t_4x4vl_rvv(size_t m, size_t n, size_
             // in [1, n_step] via RVV variable-length vector semantics. The strided
             // vlse32 load also respects vl, so transposed B works identically.
             gemm_mrxnr_4vl_rvv(actual_m, actual_n, k, d_ptr, a_ptr, b_ptr, c_ptr, bias_ptr, ldd,
-                               lda, ldb, ldc, clamp_min, clamp_max, apply_clamp, actual_n);
+                               lda, ldb, ldc, clamp_min, clamp_max, apply_clamp, actual_n, VLENB);
         }
     }
 }

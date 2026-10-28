@@ -16,8 +16,13 @@
 #include "src/common/tqt_gemm_pack_rvv.h"
 #include "src/gemm/gemm_i8_i5/tqt_kernel_gemm_qsi8d32_qsi5c32_4x1vl_rvv.h"
 
+static inline size_t get_vlenb()
+{
+    static const size_t value = csrr_vlenb();
+    return value;
+}
+
 static const size_t m_step = 4;
-static const size_t n_step = csrr_vlenb();
 
 static inline size_t tqt_qsi5c32_bytes(size_t logical_k)
 {
@@ -31,6 +36,7 @@ static inline size_t tqt_qsi5c32_bytes(size_t logical_k)
     }                                                                                      \
     size_t tqt_get_n_step_##BASE(void)                                                     \
     {                                                                                      \
+        const size_t n_step = get_vlenb();                                                 \
         return n_step;                                                                     \
     }                                                                                      \
     size_t tqt_get_a_packed_offset_##BASE(size_t m, size_t k, size_t ld, size_t actual)    \
@@ -39,6 +45,7 @@ static inline size_t tqt_qsi5c32_bytes(size_t logical_k)
     }                                                                                      \
     size_t tqt_get_b_packed_offset_##BASE(size_t n, size_t k, size_t ld, size_t actual)    \
     {                                                                                      \
+        const size_t n_step = get_vlenb();                                                 \
         return n * tqt_qsi5c32_bytes(ld) + tqt_qsi5c32_bytes(k) * TQT_MIN(actual, n_step); \
     }                                                                                      \
     size_t tqt_get_scale_a_offset_##BASE(size_t m, size_t block, size_t ld)                \
@@ -100,7 +107,9 @@ void tqt_run_gemm_1xnbias_clamp_f32_qsi8d32p_qsi5c32p_4x1vl_rvv(
     size_t ldd, const void *bias, float clamp_min, float clamp_max,
     const struct tqt_qsi8d32_qsi5c32_params *params)
 {
-    const bool apply_clamp = tqt_gemm_clamp_is_enabled((float)clamp_min, (float)clamp_max);
+    const size_t n_step = get_vlenb();
+
+    const bool apply_clamp = tqt_clamp_is_enabled((float)clamp_min, (float)clamp_max);
 
     TQT_ASSUME(k % 32 == 0);
     TQT_ASSUME(lda % 32 == 0);

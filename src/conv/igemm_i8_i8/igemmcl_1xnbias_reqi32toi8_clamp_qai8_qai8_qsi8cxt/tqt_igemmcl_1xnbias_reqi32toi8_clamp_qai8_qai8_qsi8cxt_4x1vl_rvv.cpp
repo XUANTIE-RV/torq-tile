@@ -15,10 +15,13 @@
 #include "src/gemm/gemm_i8_i8/tqt_kernel_gemm_i8_i8_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i8/tqt_utils_i8_i8.h"
 
-static const size_t VLENB = csrr_vlenb();
-static const size_t vlmax = VLENB;
+static inline size_t get_vlenb()
+{
+    static const size_t value = csrr_vlenb();
+    return value;
+}
+
 static const size_t m_step = 4;
-static const size_t n_step = vlmax;
 
 // ============================================================================
 // Helper Functions (Get Methods)
@@ -31,6 +34,9 @@ size_t tqt_get_m_step_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt_4x1vl_r
 
 size_t tqt_get_n_step_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt_4x1vl_rvv(void)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = VLENB;
+
     return n_step;
 }
 
@@ -38,6 +44,9 @@ size_t tqt_get_b_offset_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt_4x1vl
                                                                                      size_t k_idx,
                                                                                      size_t ldb)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = VLENB;
+
     TQT_ASSUME(n_idx % n_step == 0);
     return (n_idx * ldb + k_idx) * sizeof(int8_t);
 }
@@ -46,6 +55,9 @@ size_t tqt_get_c_offset_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt_4x1vl
                                                                                      size_t n_idx,
                                                                                      size_t ldc)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = VLENB;
+
     TQT_ASSUME(n_idx % n_step == 0);
     return (m_idx * ldc + n_idx) * sizeof(int32_t);
 }
@@ -53,6 +65,9 @@ size_t tqt_get_c_offset_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt_4x1vl
 size_t tqt_get_bias_offset_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt_4x1vl_rvv(
     size_t n_idx)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = VLENB;
+
     TQT_ASSUME(n_idx % n_step == 0);
     return n_idx * sizeof(int32_t);
 }
@@ -61,6 +76,9 @@ size_t tqt_get_d_offset_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt_4x1vl
                                                                                      size_t n_idx,
                                                                                      size_t ldd)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = VLENB;
+
     TQT_ASSUME(n_idx % n_step == 0);
     return (m_idx * ldd + n_idx) * sizeof(int8_t);
 }
@@ -172,8 +190,10 @@ static void igemmcl_dispatch(size_t M, size_t IC, size_t IC_stride, size_t KD, s
                              const int *ow_arr, size_t ID, size_t IH, size_t IW, size_t SD,
                              size_t SH, size_t SW, size_t DD, size_t DH, size_t DW, size_t PD,
                              size_t PH, size_t PW, const int32_t *mult, const int32_t *shift,
-                             int32_t zp)
+                             int32_t zp, size_t VLENB)
 {
+    const size_t vlmax = VLENB;
+
     TQT_ASSUME(M > 0 && M <= 4);
     TQT_ASSUME(vl <= vlmax);
 
@@ -194,6 +214,9 @@ void tqt_run_igemm_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt_4x1vl_rvv(
     const void *bias, int8_t clamp_min, int8_t clamp_max, const tqt_conv_params *conv_params,
     const struct tqt_qai8_qai8_qsi8cx_params *quant_params)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = VLENB;
+
     TQT_UNUSED(k_idx_a);
     TQT_UNUSED(k_idx_b);
     TQT_UNUSED(C);
@@ -277,7 +300,7 @@ void tqt_run_igemm_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt_4x1vl_rvv(
             igemmcl_dispatch(actual_m, IC_per_group, conv_params->input_channel, KD, KH, KW, d_ptr,
                              w_ptr, input_group, bias_ptr, ldd, ldb, clamp_min, clamp_max, actual_n,
                              od_arr, oh_arr, ow_arr, ID, IH, IW, SD, SH, SW, DD, DH, DW, PD, PH, PW,
-                             mult_ptr, shift_ptr, zp);
+                             mult_ptr, shift_ptr, zp, VLENB);
         }
     }
 }

@@ -20,24 +20,37 @@
 #include <riscv_vector.h>
 #endif
 
+// Native language types, independent of arithmetic ISA and library availability.
+#if defined(__BFLT16_MANT_DIG__)
+#define TQT_HAS_NATIVE_BF16 1
+#elif defined(__clang__) && (__clang_major__ >= 18) && defined(__riscv)
+// Clang RISC-V supports __bf16 but may omit __BFLT16_MANT_DIG__.
+#define TQT_HAS_NATIVE_BF16 1
+#else
+#define TQT_HAS_NATIVE_BF16 0
+#endif
+
+#if defined(__FLT16_MANT_DIG__)
+#define TQT_HAS_NATIVE_FP16 1
+#else
+#define TQT_HAS_NATIVE_FP16 0
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#if TQT_HAS_NATIVE_BF16
 typedef __bf16 bfloat16_t;
+#endif
+#if TQT_HAS_NATIVE_FP16
 typedef _Float16 float16_t;
+#endif
 
 typedef uint8_t float4_e2m1_t;
 typedef uint8_t float8_e4m3_t;
 typedef uint8_t float8_e5m2_t;
 typedef uint8_t float8_e8m0_t;
-
-/// Return whether the caller requested floating-point GEMM clamping.
-/// Evaluate the original public bounds before any narrowing conversion.
-static inline bool tqt_gemm_clamp_is_enabled(float clamp_min, float clamp_max)
-{
-    return clamp_min != -INFINITY || clamp_max != INFINITY;
-}
 
 #ifndef TORQ_TILE_ERROR_TRAP
 #define TORQ_TILE_ERROR_TRAP 0
@@ -140,6 +153,13 @@ static inline int csrr_vlenb(void)
     return a;
 }
 #endif
+
+/// Return whether the caller requested floating-point output clamping.
+/// Evaluate the original public bounds before any narrowing conversion.
+static inline bool tqt_clamp_is_enabled(float clamp_min, float clamp_max)
+{
+    return clamp_min != -INFINITY || clamp_max != INFINITY;
+}
 
 #ifdef __cplusplus
 }  // extern "C"

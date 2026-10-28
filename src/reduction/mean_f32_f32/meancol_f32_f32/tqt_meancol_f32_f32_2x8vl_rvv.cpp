@@ -12,10 +12,23 @@
 
 #include "src/common/tqt_common.h"
 
-static const size_t VLENB = csrr_vlenb();
-static const size_t vlmax = VLENB / sizeof(float);
-static const size_t m_step = 2;              // M-direction 2-way unroll
-static const size_t n_step = 2 * 4 * vlmax;  // 8vl: 2 groups of LMUL=4
+static inline size_t get_vlenb()
+{
+    static const size_t value = csrr_vlenb();
+    return value;
+}
+
+static inline size_t get_vlmax(size_t vlenb)
+{
+    return vlenb / sizeof(float);
+}
+
+static inline size_t get_n_step(size_t vlenb)
+{
+    return 2 * 4 * get_vlmax(vlenb);
+}
+
+static const size_t m_step = 2;  // M-direction 2-way unroll
 
 // ============================================================================
 // Helper Functions (Get Methods)
@@ -28,6 +41,9 @@ size_t tqt_get_m_step_meancol_f32_f32_2x8vl_rvv(void)
 
 size_t tqt_get_n_step_meancol_f32_f32_2x8vl_rvv(void)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = get_n_step(VLENB);
+
     return n_step;
 }
 
@@ -41,8 +57,10 @@ size_t tqt_get_n_step_meancol_f32_f32_2x8vl_rvv(void)
 
 template <size_t NR>
 static void meancol_kernel_4vl(size_t m, size_t n_block, const float *a, size_t lda, float *c,
-                               const float *init)
+                               const float *init, size_t VLENB)
 {
+    const size_t vlmax = get_vlmax(VLENB);
+
     static_assert(NR >= 1 && NR <= 2, "NR must be in range [1, 2]");
 
     const size_t group_width = 4 * vlmax;
@@ -122,7 +140,7 @@ static void meancol_kernel_4vl(size_t m, size_t n_block, const float *a, size_t 
 
 // Function pointer type for kernel dispatch
 using meancol_kernel_fn_t = void (*)(size_t m, size_t n_block, const float *a, size_t lda, float *c,
-                                     const float *init);
+                                     const float *init, size_t VLENB);
 
 static constexpr meancol_kernel_fn_t kernel_table[2] = {
     meancol_kernel_4vl<1>,
@@ -136,6 +154,10 @@ static constexpr meancol_kernel_fn_t kernel_table[2] = {
 void tqt_run_meancol_f32_f32_2x8vl_rvv(size_t m, size_t n, const void *a_ptr, size_t lda,
                                        void *c_ptr, const void *init_ptr)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t vlmax = get_vlmax(VLENB);
+    const size_t n_step = get_n_step(VLENB);
+
     const float *a = (const float *)a_ptr;
     float *c = (float *)c_ptr;
     const float *init = (const float *)init_ptr;
@@ -147,6 +169,7 @@ void tqt_run_meancol_f32_f32_2x8vl_rvv(size_t m, size_t n, const void *a_ptr, si
         const size_t nr = (actual_n > group_width) ? 2 : 1;
         const size_t nr_idx = nr - 1;
 
-        kernel_table[nr_idx](m, actual_n, a + n_idx, lda, c + n_idx, init ? init + n_idx : nullptr);
+        kernel_table[nr_idx](m, actual_n, a + n_idx, lda, c + n_idx, init ? init + n_idx : nullptr,
+                             VLENB);
     }
 }

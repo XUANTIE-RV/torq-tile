@@ -16,60 +16,67 @@
 // Internal Pack Kernel Templates
 // ============================================================================
 
+// Use integer RVV loads/stores to avoid floating-point ISA dependencies.
+// Do not dereference these integer pointers for scalar access to floating-point buffers.
+
 /// Pack kernel for A matrix: [m, k] -> [m/MR, k, MR]
 /// Uses vsseg instructions to interleave MR rows
 /// MR: number of rows (2-8)
 template <size_t MR>
-static inline void tqt_gemm_pack_mxk_e32_kernel(size_t k, const float *src, size_t lda, float *dst)
+static inline void tqt_gemm_pack_mxk_e32_kernel(size_t k, const void *src_data, size_t lda,
+                                                void *dst_data)
 {
     static_assert(MR >= 2 && MR <= 8, "MR must be in range [2, 8]");
+
+    const uint32_t *src = (const uint32_t *)src_data;
+    uint32_t *dst = (uint32_t *)dst_data;
 
     size_t size = k;
     while (size > 0) {
         size_t vl = __riscv_vsetvl_e32m1(size);
 
-        vfloat32m1_t v0, v1, v2, v3, v4, v5, v6, v7;
+        vuint32m1_t v0, v1, v2, v3, v4, v5, v6, v7;
 
         // Load MR rows
         if constexpr (MR >= 1)
-            v0 = __riscv_vle32_v_f32m1(src + 0 * lda, vl);
+            v0 = __riscv_vle32_v_u32m1(src + 0 * lda, vl);
         if constexpr (MR >= 2)
-            v1 = __riscv_vle32_v_f32m1(src + 1 * lda, vl);
+            v1 = __riscv_vle32_v_u32m1(src + 1 * lda, vl);
         if constexpr (MR >= 3)
-            v2 = __riscv_vle32_v_f32m1(src + 2 * lda, vl);
+            v2 = __riscv_vle32_v_u32m1(src + 2 * lda, vl);
         if constexpr (MR >= 4)
-            v3 = __riscv_vle32_v_f32m1(src + 3 * lda, vl);
+            v3 = __riscv_vle32_v_u32m1(src + 3 * lda, vl);
         if constexpr (MR >= 5)
-            v4 = __riscv_vle32_v_f32m1(src + 4 * lda, vl);
+            v4 = __riscv_vle32_v_u32m1(src + 4 * lda, vl);
         if constexpr (MR >= 6)
-            v5 = __riscv_vle32_v_f32m1(src + 5 * lda, vl);
+            v5 = __riscv_vle32_v_u32m1(src + 5 * lda, vl);
         if constexpr (MR >= 7)
-            v6 = __riscv_vle32_v_f32m1(src + 6 * lda, vl);
+            v6 = __riscv_vle32_v_u32m1(src + 6 * lda, vl);
         if constexpr (MR >= 8)
-            v7 = __riscv_vle32_v_f32m1(src + 7 * lda, vl);
+            v7 = __riscv_vle32_v_u32m1(src + 7 * lda, vl);
 
         // Store with vsseg (interleaved)
         if constexpr (MR == 2) {
-            vfloat32m1x2_t src = __riscv_vcreate_v_f32m1x2(v0, v1);
-            __riscv_vsseg2e32_v_f32m1x2(dst, src, vl);
+            vuint32m1x2_t src = __riscv_vcreate_v_u32m1x2(v0, v1);
+            __riscv_vsseg2e32_v_u32m1x2(dst, src, vl);
         } else if constexpr (MR == 3) {
-            vfloat32m1x3_t src = __riscv_vcreate_v_f32m1x3(v0, v1, v2);
-            __riscv_vsseg3e32_v_f32m1x3(dst, src, vl);
+            vuint32m1x3_t src = __riscv_vcreate_v_u32m1x3(v0, v1, v2);
+            __riscv_vsseg3e32_v_u32m1x3(dst, src, vl);
         } else if constexpr (MR == 4) {
-            vfloat32m1x4_t src = __riscv_vcreate_v_f32m1x4(v0, v1, v2, v3);
-            __riscv_vsseg4e32_v_f32m1x4(dst, src, vl);
+            vuint32m1x4_t src = __riscv_vcreate_v_u32m1x4(v0, v1, v2, v3);
+            __riscv_vsseg4e32_v_u32m1x4(dst, src, vl);
         } else if constexpr (MR == 5) {
-            vfloat32m1x5_t src = __riscv_vcreate_v_f32m1x5(v0, v1, v2, v3, v4);
-            __riscv_vsseg5e32_v_f32m1x5(dst, src, vl);
+            vuint32m1x5_t src = __riscv_vcreate_v_u32m1x5(v0, v1, v2, v3, v4);
+            __riscv_vsseg5e32_v_u32m1x5(dst, src, vl);
         } else if constexpr (MR == 6) {
-            vfloat32m1x6_t src = __riscv_vcreate_v_f32m1x6(v0, v1, v2, v3, v4, v5);
-            __riscv_vsseg6e32_v_f32m1x6(dst, src, vl);
+            vuint32m1x6_t src = __riscv_vcreate_v_u32m1x6(v0, v1, v2, v3, v4, v5);
+            __riscv_vsseg6e32_v_u32m1x6(dst, src, vl);
         } else if constexpr (MR == 7) {
-            vfloat32m1x7_t src = __riscv_vcreate_v_f32m1x7(v0, v1, v2, v3, v4, v5, v6);
-            __riscv_vsseg7e32_v_f32m1x7(dst, src, vl);
+            vuint32m1x7_t src = __riscv_vcreate_v_u32m1x7(v0, v1, v2, v3, v4, v5, v6);
+            __riscv_vsseg7e32_v_u32m1x7(dst, src, vl);
         } else if constexpr (MR == 8) {
-            vfloat32m1x8_t src = __riscv_vcreate_v_f32m1x8(v0, v1, v2, v3, v4, v5, v6, v7);
-            __riscv_vsseg8e32_v_f32m1x8(dst, src, vl);
+            vuint32m1x8_t src = __riscv_vcreate_v_u32m1x8(v0, v1, v2, v3, v4, v5, v6, v7);
+            __riscv_vsseg8e32_v_u32m1x8(dst, src, vl);
         }
 
         src += vl;
@@ -81,13 +88,15 @@ static inline void tqt_gemm_pack_mxk_e32_kernel(size_t k, const float *src, size
 /// Pack kernel for single row A matrix: [1, k] -> [1, k]
 /// Special case for MR = 1, no interleaving needed
 /// Simply copies the row from src to dst
-static inline void tqt_gemm_pack_mxk_e32_kernel_1row(size_t k, const float *src, float *dst)
+static inline void tqt_gemm_pack_mxk_e32_kernel_1row(size_t k, const void *src_data, void *dst_data)
 {
+    const uint32_t *src = (const uint32_t *)src_data;
+    uint32_t *dst = (uint32_t *)dst_data;
     size_t size = k;
     while (size > 0) {
         size_t vl = __riscv_vsetvl_e32m1(size);
-        vfloat32m1_t v = __riscv_vle32_v_f32m1(src, vl);
-        __riscv_vse32_v_f32m1(dst, v, vl);
+        vuint32m1_t v = __riscv_vle32_v_u32m1(src, vl);
+        __riscv_vse32_v_u32m1(dst, v, vl);
         src += vl;
         dst += vl;
         size -= vl;
@@ -98,57 +107,60 @@ static inline void tqt_gemm_pack_mxk_e32_kernel_1row(size_t k, const float *src,
 /// Uses vsseg instructions to interleave MR rows
 /// MR: number of rows (2-8)
 template <size_t MR>
-static inline void tqt_gemm_pack_mxk_e16_kernel(size_t k, const float16_t *src, size_t lda,
-                                                float16_t *dst)
+static inline void tqt_gemm_pack_mxk_e16_kernel(size_t k, const void *src_data, size_t lda,
+                                                void *dst_data)
 {
     static_assert(MR >= 2 && MR <= 8, "MR must be in range [2, 8]");
+
+    const uint16_t *src = (const uint16_t *)src_data;
+    uint16_t *dst = (uint16_t *)dst_data;
 
     size_t size = k;
     while (size > 0) {
         size_t vl = __riscv_vsetvl_e16m1(size);
 
-        vfloat16m1_t v0, v1, v2, v3, v4, v5, v6, v7;
+        vuint16m1_t v0, v1, v2, v3, v4, v5, v6, v7;
 
         // Load MR rows
         if constexpr (MR >= 1)
-            v0 = __riscv_vle16_v_f16m1(src + 0 * lda, vl);
+            v0 = __riscv_vle16_v_u16m1(src + 0 * lda, vl);
         if constexpr (MR >= 2)
-            v1 = __riscv_vle16_v_f16m1(src + 1 * lda, vl);
+            v1 = __riscv_vle16_v_u16m1(src + 1 * lda, vl);
         if constexpr (MR >= 3)
-            v2 = __riscv_vle16_v_f16m1(src + 2 * lda, vl);
+            v2 = __riscv_vle16_v_u16m1(src + 2 * lda, vl);
         if constexpr (MR >= 4)
-            v3 = __riscv_vle16_v_f16m1(src + 3 * lda, vl);
+            v3 = __riscv_vle16_v_u16m1(src + 3 * lda, vl);
         if constexpr (MR >= 5)
-            v4 = __riscv_vle16_v_f16m1(src + 4 * lda, vl);
+            v4 = __riscv_vle16_v_u16m1(src + 4 * lda, vl);
         if constexpr (MR >= 6)
-            v5 = __riscv_vle16_v_f16m1(src + 5 * lda, vl);
+            v5 = __riscv_vle16_v_u16m1(src + 5 * lda, vl);
         if constexpr (MR >= 7)
-            v6 = __riscv_vle16_v_f16m1(src + 6 * lda, vl);
+            v6 = __riscv_vle16_v_u16m1(src + 6 * lda, vl);
         if constexpr (MR >= 8)
-            v7 = __riscv_vle16_v_f16m1(src + 7 * lda, vl);
+            v7 = __riscv_vle16_v_u16m1(src + 7 * lda, vl);
 
         // Store with vsseg (interleaved)
         if constexpr (MR == 2) {
-            vfloat16m1x2_t src = __riscv_vcreate_v_f16m1x2(v0, v1);
-            __riscv_vsseg2e16_v_f16m1x2(dst, src, vl);
+            vuint16m1x2_t src = __riscv_vcreate_v_u16m1x2(v0, v1);
+            __riscv_vsseg2e16_v_u16m1x2(dst, src, vl);
         } else if constexpr (MR == 3) {
-            vfloat16m1x3_t src = __riscv_vcreate_v_f16m1x3(v0, v1, v2);
-            __riscv_vsseg3e16_v_f16m1x3(dst, src, vl);
+            vuint16m1x3_t src = __riscv_vcreate_v_u16m1x3(v0, v1, v2);
+            __riscv_vsseg3e16_v_u16m1x3(dst, src, vl);
         } else if constexpr (MR == 4) {
-            vfloat16m1x4_t src = __riscv_vcreate_v_f16m1x4(v0, v1, v2, v3);
-            __riscv_vsseg4e16_v_f16m1x4(dst, src, vl);
+            vuint16m1x4_t src = __riscv_vcreate_v_u16m1x4(v0, v1, v2, v3);
+            __riscv_vsseg4e16_v_u16m1x4(dst, src, vl);
         } else if constexpr (MR == 5) {
-            vfloat16m1x5_t src = __riscv_vcreate_v_f16m1x5(v0, v1, v2, v3, v4);
-            __riscv_vsseg5e16_v_f16m1x5(dst, src, vl);
+            vuint16m1x5_t src = __riscv_vcreate_v_u16m1x5(v0, v1, v2, v3, v4);
+            __riscv_vsseg5e16_v_u16m1x5(dst, src, vl);
         } else if constexpr (MR == 6) {
-            vfloat16m1x6_t src = __riscv_vcreate_v_f16m1x6(v0, v1, v2, v3, v4, v5);
-            __riscv_vsseg6e16_v_f16m1x6(dst, src, vl);
+            vuint16m1x6_t src = __riscv_vcreate_v_u16m1x6(v0, v1, v2, v3, v4, v5);
+            __riscv_vsseg6e16_v_u16m1x6(dst, src, vl);
         } else if constexpr (MR == 7) {
-            vfloat16m1x7_t src = __riscv_vcreate_v_f16m1x7(v0, v1, v2, v3, v4, v5, v6);
-            __riscv_vsseg7e16_v_f16m1x7(dst, src, vl);
+            vuint16m1x7_t src = __riscv_vcreate_v_u16m1x7(v0, v1, v2, v3, v4, v5, v6);
+            __riscv_vsseg7e16_v_u16m1x7(dst, src, vl);
         } else if constexpr (MR == 8) {
-            vfloat16m1x8_t src = __riscv_vcreate_v_f16m1x8(v0, v1, v2, v3, v4, v5, v6, v7);
-            __riscv_vsseg8e16_v_f16m1x8(dst, src, vl);
+            vuint16m1x8_t src = __riscv_vcreate_v_u16m1x8(v0, v1, v2, v3, v4, v5, v6, v7);
+            __riscv_vsseg8e16_v_u16m1x8(dst, src, vl);
         }
 
         src += vl;
@@ -160,13 +172,15 @@ static inline void tqt_gemm_pack_mxk_e16_kernel(size_t k, const float16_t *src, 
 /// Pack kernel for single row A matrix: [1, k] -> [1, k]
 /// Special case for MR = 1, no interleaving needed
 /// Simply copies the row from src to dst
-static inline void tqt_gemm_pack_mxk_e16_kernel_1row(size_t k, const float16_t *src, float16_t *dst)
+static inline void tqt_gemm_pack_mxk_e16_kernel_1row(size_t k, const void *src_data, void *dst_data)
 {
+    const uint16_t *src = (const uint16_t *)src_data;
+    uint16_t *dst = (uint16_t *)dst_data;
     size_t size = k;
     while (size > 0) {
         size_t vl = __riscv_vsetvl_e16m1(size);
-        vfloat16m1_t v = __riscv_vle16_v_f16m1(src, vl);
-        __riscv_vse16_v_f16m1(dst, v, vl);
+        vuint16m1_t v = __riscv_vle16_v_u16m1(src, vl);
+        __riscv_vse16_v_u16m1(dst, v, vl);
         src += vl;
         dst += vl;
         size -= vl;
@@ -331,15 +345,17 @@ static void tqt_gemm_pack_mxk_8x1_e32_rvv(size_t m, size_t k, size_t lda, size_t
                                           size_t k_idx, const void *A, void *A_packed)
 {
     const size_t m_step = 8;
+    const uint32_t *a = (const uint32_t *)A;
+    uint32_t *a_packed = (uint32_t *)A_packed;
 
     for (size_t m_idx = 0; m_idx < m; m_idx += m_step) {
         const size_t actual_m = TQT_MIN(m - m_idx, m_step);
-        const float *a_ptr = (const float *)A + m_idx * lda;
-        float *a_packed_ptr;
+        const uint32_t *a_ptr = a + m_idx * lda;
+        uint32_t *a_packed_ptr;
         if (m_idx == 0 || k_idx == 0 || actual_m == m_step) {
-            a_packed_ptr = (float *)A_packed + m_idx * lda_packed;
+            a_packed_ptr = a_packed + m_idx * lda_packed;
         } else {
-            a_packed_ptr = (float *)A_packed + m_idx * lda_packed - k_idx * (m_step - actual_m);
+            a_packed_ptr = a_packed + (m_idx * lda_packed - k_idx * (m_step - actual_m));
         }
 
         switch (actual_m) {
@@ -380,15 +396,17 @@ static void tqt_gemm_pack_mxk_8x1_e16_rvv(size_t m, size_t k, size_t lda, size_t
                                           size_t k_idx, const void *A, void *A_packed)
 {
     const size_t m_step = 8;
+    const uint16_t *a = (const uint16_t *)A;
+    uint16_t *a_packed = (uint16_t *)A_packed;
 
     for (size_t m_idx = 0; m_idx < m; m_idx += m_step) {
         const size_t actual_m = TQT_MIN(m - m_idx, m_step);
-        const float16_t *a_ptr = (const float16_t *)A + m_idx * lda;
-        float16_t *a_packed_ptr;
+        const uint16_t *a_ptr = a + m_idx * lda;
+        uint16_t *a_packed_ptr;
         if (m_idx == 0 || k_idx == 0 || actual_m == m_step) {
-            a_packed_ptr = (float16_t *)A_packed + m_idx * lda_packed;
+            a_packed_ptr = a_packed + m_idx * lda_packed;
         } else {
-            a_packed_ptr = (float16_t *)A_packed + m_idx * lda_packed - k_idx * (m_step - actual_m);
+            a_packed_ptr = a_packed + (m_idx * lda_packed - k_idx * (m_step - actual_m));
         }
 
         switch (actual_m) {
@@ -690,7 +708,7 @@ static inline void tqt_gemm_pack_mxk_e8_kernel_1row(size_t k, const int8_t *src,
 }
 
 /// Pack kernel for transposed B matrix: [n, k] -> [n/(NR*vl), k, NR*vl]
-/// NR: number of vector registers (1)
+/// NR: number of vector registers (1-3)
 template <size_t NR>
 static inline void tqt_gemm_pack_nxk_e8_kernel(size_t n, size_t k, const uint8_t *src, size_t ldb,
                                                uint8_t *dst, size_t vl)

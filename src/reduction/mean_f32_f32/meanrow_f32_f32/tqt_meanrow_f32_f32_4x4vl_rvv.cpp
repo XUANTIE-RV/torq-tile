@@ -12,10 +12,23 @@
 
 #include "src/common/tqt_common.h"
 
-static const size_t VLENB = csrr_vlenb();
-static const size_t vlmax = VLENB / sizeof(float);
+static inline size_t get_vlenb()
+{
+    static const size_t value = csrr_vlenb();
+    return value;
+}
+
+static inline size_t get_vlmax(size_t vlenb)
+{
+    return vlenb / sizeof(float);
+}
+
+static inline size_t get_n_step(size_t vlenb)
+{
+    return 4 * get_vlmax(vlenb);
+}
+
 static const size_t m_step = 4;
-static const size_t n_step = 4 * vlmax;  // LMUL=4
 
 // ============================================================================
 // Helper Functions (Get Methods)
@@ -28,6 +41,9 @@ size_t tqt_get_m_step_meanrow_f32_f32_4x4vl_rvv(void)
 
 size_t tqt_get_n_step_meanrow_f32_f32_4x4vl_rvv(void)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = get_n_step(VLENB);
+
     return n_step;
 }
 
@@ -48,8 +64,11 @@ static inline float vf32m1_extract(vfloat32m1_t v)
 // ============================================================================
 
 template <size_t MR>
-static void meanrow_kernel_4vl(size_t n, const float *a, size_t lda, float *c, const float *init)
+static void meanrow_kernel_4vl(size_t n, const float *a, size_t lda, float *c, const float *init,
+                               size_t VLENB)
 {
+    const size_t n_step = get_n_step(VLENB);
+
     static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
 
     const size_t full_vl = __riscv_vsetvl_e32m4(n_step);
@@ -122,7 +141,7 @@ static void meanrow_kernel_4vl(size_t n, const float *a, size_t lda, float *c, c
 
 // Function pointer type for kernel dispatch
 using meanrow_kernel_fn_t = void (*)(size_t n, const float *a, size_t lda, float *c,
-                                     const float *init);
+                                     const float *init, size_t VLENB);
 
 static constexpr meanrow_kernel_fn_t kernel_table[4] = {
     meanrow_kernel_4vl<1>,
@@ -138,6 +157,8 @@ static constexpr meanrow_kernel_fn_t kernel_table[4] = {
 void tqt_run_meanrow_f32_f32_4x4vl_rvv(size_t m, size_t n, const void *a_ptr, size_t lda,
                                        void *c_ptr, const void *init_ptr)
 {
+    const size_t VLENB = get_vlenb();
+
     const float *a = (const float *)a_ptr;
     float *c = (float *)c_ptr;
     const float *init = (const float *)init_ptr;
@@ -146,6 +167,7 @@ void tqt_run_meanrow_f32_f32_4x4vl_rvv(size_t m, size_t n, const void *a_ptr, si
         const size_t actual_m = TQT_MIN(m - m_idx, m_step);
         const size_t mr_idx = actual_m - 1;
 
-        kernel_table[mr_idx](n, a + m_idx * lda, lda, c + m_idx, init ? init + m_idx : nullptr);
+        kernel_table[mr_idx](n, a + m_idx * lda, lda, c + m_idx, init ? init + m_idx : nullptr,
+                             VLENB);
     }
 }

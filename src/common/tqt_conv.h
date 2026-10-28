@@ -17,7 +17,7 @@ extern "C" {
 // Convolution parameters (unified 3D, 1D/2D set higher dims to 1)
 // ============================================================================
 
-struct tqt_conv_params
+typedef struct tqt_conv_params
 {
     size_t input_shape[3];   // {input_d, input_h, input_w}
     size_t output_shape[3];  // {output_d, output_h, output_w} (caller pre-computes)
@@ -28,14 +28,13 @@ struct tqt_conv_params
     size_t input_channel;
     size_t output_channel;
     size_t groups;
-};
+} tqt_conv_params;
 // 1D conv: input_shape={1,1,IW}, kernel_shape={1,1,KW}, ...
 // 2D conv: input_shape={1,IH,IW}, kernel_shape={1,KH,KW}, ...
 // 3D conv: input_shape={ID,IH,IW}, kernel_shape={KD,KH,KW}, ...
 
 #ifdef __cplusplus
 }  // extern "C"
-#endif
 
 // ============================================================================
 // im2col for channel-first (NCDHW) layout
@@ -200,3 +199,5 @@ static inline void tqt_im2col_cl(size_t group_idx, const void *activation, void 
         }
     }
 }
+
+#endif  // __cplusplus

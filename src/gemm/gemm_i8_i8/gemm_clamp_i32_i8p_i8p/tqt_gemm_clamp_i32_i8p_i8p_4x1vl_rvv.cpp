@@ -14,10 +14,13 @@
 #include "src/common/tqt_gemm_pack_rvv.h"
 #include "src/gemm/gemm_i8_i8/tqt_kernel_gemm_i8_i8_4x1vl_rvv.h"
 
-static const size_t VLENB = csrr_vlenb();
-static const size_t vlmax = VLENB;
+static inline size_t get_vlenb()
+{
+    static const size_t value = csrr_vlenb();
+    return value;
+}
+
 static const size_t m_step = 4;
-static const size_t n_step = vlmax;
 
 // ============================================================================
 // Helper Functions (Get Methods)
@@ -30,6 +33,9 @@ size_t tqt_get_m_step_gemm_clamp_i32_i8p_i8p_4x1vl_rvv(void)
 
 size_t tqt_get_n_step_gemm_clamp_i32_i8p_i8p_4x1vl_rvv(void)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = VLENB;
+
     return n_step;
 }
 
@@ -43,12 +49,18 @@ size_t tqt_get_a_packed_offset_gemm_clamp_i32_i8p_i8p_4x1vl_rvv(size_t m_idx, si
 size_t tqt_get_b_packed_offset_gemm_clamp_i32_i8p_i8p_4x1vl_rvv(size_t n_idx, size_t k_idx,
                                                                 size_t ldb, size_t actual_n)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = VLENB;
+
     TQT_ASSUME(n_idx % n_step == 0);
     return (n_idx * ldb + k_idx * TQT_MIN(actual_n, n_step)) * sizeof(int8_t);
 }
 
 size_t tqt_get_c_offset_gemm_clamp_i32_i8p_i8p_4x1vl_rvv(size_t m_idx, size_t n_idx, size_t ldc)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = VLENB;
+
     TQT_ASSUME(m_idx % m_step == 0);
     TQT_ASSUME(n_idx % n_step == 0);
     return (m_idx * ldc + n_idx) * sizeof(int32_t);
@@ -56,6 +68,9 @@ size_t tqt_get_c_offset_gemm_clamp_i32_i8p_i8p_4x1vl_rvv(size_t m_idx, size_t n_
 
 size_t tqt_get_d_offset_gemm_clamp_i32_i8p_i8p_4x1vl_rvv(size_t m_idx, size_t n_idx, size_t ldd)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = VLENB;
+
     TQT_ASSUME(m_idx % m_step == 0);
     TQT_ASSUME(n_idx % n_step == 0);
     return (m_idx * ldd + n_idx) * sizeof(int32_t);
@@ -162,6 +177,9 @@ void tqt_run_gemm_clamp_i32_i8p_i8p_4x1vl_rvv(size_t m, size_t n, size_t k, cons
                                               void *D, size_t ldd, int32_t clamp_min,
                                               int32_t clamp_max)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = VLENB;
+
     for (size_t m_idx = 0; m_idx < m; m_idx += m_step) {
         for (size_t n_idx = 0; n_idx < n; n_idx += n_step) {
             const size_t actual_m = TQT_MIN(m - m_idx, m_step);

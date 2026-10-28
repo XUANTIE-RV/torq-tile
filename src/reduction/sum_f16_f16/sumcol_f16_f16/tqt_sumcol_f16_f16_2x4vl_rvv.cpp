@@ -12,10 +12,23 @@
 
 #include "src/common/tqt_common.h"
 
-static const size_t VLENB = csrr_vlenb();
-static const size_t vlmax = VLENB / sizeof(float);  // fp32 accumulator lanes per LMUL=1
-static const size_t m_step = 2;                     // M-direction 2-way unroll
-static const size_t n_step = 2 * 4 * vlmax;         // 4vl (f16): 2 groups of f16m2
+static inline size_t get_vlenb()
+{
+    static const size_t value = csrr_vlenb();
+    return value;
+}
+
+static inline size_t get_vlmax(size_t vlenb)
+{
+    return vlenb / sizeof(float);
+}
+
+static inline size_t get_n_step(size_t vlenb)
+{
+    return 2 * 4 * get_vlmax(vlenb);
+}
+
+static const size_t m_step = 2;  // M-direction 2-way unroll
 
 // ============================================================================
 // Helper Functions (Get Methods)
@@ -28,6 +41,9 @@ size_t tqt_get_m_step_sumcol_f16_f16_2x4vl_rvv(void)
 
 size_t tqt_get_n_step_sumcol_f16_f16_2x4vl_rvv(void)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = get_n_step(VLENB);
+
     return n_step;
 }
 
@@ -41,8 +57,10 @@ size_t tqt_get_n_step_sumcol_f16_f16_2x4vl_rvv(void)
 
 template <size_t NR>
 static void sumcol_kernel_4vl(size_t m, size_t n_block, const float16_t *a, size_t lda,
-                              float16_t *c, const float16_t *init)
+                              float16_t *c, const float16_t *init, size_t VLENB)
 {
+    const size_t vlmax = get_vlmax(VLENB);
+
     static_assert(NR >= 1 && NR <= 2, "NR must be in range [1, 2]");
 
     const size_t group_width = 4 * vlmax;
@@ -123,7 +141,7 @@ static void sumcol_kernel_4vl(size_t m, size_t n_block, const float16_t *a, size
 
 // Function pointer type for kernel dispatch
 using sumcol_kernel_fn_t = void (*)(size_t m, size_t n_block, const float16_t *a, size_t lda,
-                                    float16_t *c, const float16_t *init);
+                                    float16_t *c, const float16_t *init, size_t VLENB);
 
 static constexpr sumcol_kernel_fn_t kernel_table[2] = {
     sumcol_kernel_4vl<1>,
@@ -137,6 +155,10 @@ static constexpr sumcol_kernel_fn_t kernel_table[2] = {
 void tqt_run_sumcol_f16_f16_2x4vl_rvv(size_t m, size_t n, const void *a_ptr, size_t lda,
                                       void *c_ptr, const void *init_ptr)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t vlmax = get_vlmax(VLENB);
+    const size_t n_step = get_n_step(VLENB);
+
     const float16_t *a = (const float16_t *)a_ptr;
     float16_t *c = (float16_t *)c_ptr;
     const float16_t *init = (const float16_t *)init_ptr;
@@ -148,6 +170,7 @@ void tqt_run_sumcol_f16_f16_2x4vl_rvv(size_t m, size_t n, const void *a_ptr, siz
         const size_t nr = (actual_n > group_width) ? 2 : 1;
         const size_t nr_idx = nr - 1;
 
-        kernel_table[nr_idx](m, actual_n, a + n_idx, lda, c + n_idx, init ? init + n_idx : nullptr);
+        kernel_table[nr_idx](m, actual_n, a + n_idx, lda, c + n_idx, init ? init + n_idx : nullptr,
+                             VLENB);
     }
 }

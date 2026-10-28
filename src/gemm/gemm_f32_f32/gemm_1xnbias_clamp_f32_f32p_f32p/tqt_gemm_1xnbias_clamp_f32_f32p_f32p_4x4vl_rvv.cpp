@@ -14,10 +14,23 @@
 #include "src/common/tqt_gemm_pack_rvv.h"
 #include "src/gemm/gemm_f32_f32/tqt_kernel_gemm_f32_f32_4x4vl_rvv.h"
 
-static const size_t VLENB = csrr_vlenb();
-static const size_t vlmax = VLENB / sizeof(float);
+static inline size_t get_vlenb()
+{
+    static const size_t value = csrr_vlenb();
+    return value;
+}
+
+static inline size_t get_vlmax(size_t vlenb)
+{
+    return vlenb / sizeof(float);
+}
+
+static inline size_t get_n_step(size_t vlenb)
+{
+    return 4 * get_vlmax(vlenb);
+}
+
 static const size_t m_step = 4;
-static const size_t n_step = 4 * vlmax;
 
 // ============================================================================
 // Helper Functions (Get Methods)
@@ -30,6 +43,9 @@ size_t tqt_get_m_step_gemm_1xnbias_clamp_f32_f32p_f32p_4x4vl_rvv(void)
 
 size_t tqt_get_n_step_gemm_1xnbias_clamp_f32_f32p_f32p_4x4vl_rvv(void)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = get_n_step(VLENB);
+
     return n_step;
 }
 
@@ -45,6 +61,9 @@ size_t tqt_get_b_packed_offset_gemm_1xnbias_clamp_f32_f32p_f32p_4x4vl_rvv(size_t
                                                                           size_t k_idx, size_t ldb,
                                                                           size_t actual_n)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = get_n_step(VLENB);
+
     TQT_ASSUME(n_idx % n_step == 0);
     return (n_idx * ldb + k_idx * TQT_MIN(actual_n, n_step)) * sizeof(float);
 }
@@ -52,6 +71,9 @@ size_t tqt_get_b_packed_offset_gemm_1xnbias_clamp_f32_f32p_f32p_4x4vl_rvv(size_t
 size_t tqt_get_c_offset_gemm_1xnbias_clamp_f32_f32p_f32p_4x4vl_rvv(size_t m_idx, size_t n_idx,
                                                                    size_t ldc)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = get_n_step(VLENB);
+
     TQT_ASSUME(m_idx % m_step == 0);
     TQT_ASSUME(n_idx % n_step == 0);
     return (m_idx * ldc + n_idx) * sizeof(float);
@@ -59,6 +81,9 @@ size_t tqt_get_c_offset_gemm_1xnbias_clamp_f32_f32p_f32p_4x4vl_rvv(size_t m_idx,
 
 size_t tqt_get_bias_offset_gemm_1xnbias_clamp_f32_f32p_f32p_4x4vl_rvv(size_t n_idx)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = get_n_step(VLENB);
+
     TQT_ASSUME(n_idx % n_step == 0);
     return n_idx * sizeof(float);
 }
@@ -66,6 +91,9 @@ size_t tqt_get_bias_offset_gemm_1xnbias_clamp_f32_f32p_f32p_4x4vl_rvv(size_t n_i
 size_t tqt_get_d_offset_gemm_1xnbias_clamp_f32_f32p_f32p_4x4vl_rvv(size_t m_idx, size_t n_idx,
                                                                    size_t ldd)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = get_n_step(VLENB);
+
     TQT_ASSUME(m_idx % m_step == 0);
     TQT_ASSUME(n_idx % n_step == 0);
     return (m_idx * ldd + n_idx) * sizeof(float);
@@ -128,6 +156,10 @@ void tqt_run_b_pack_gemm_1xnbias_clamp_f32_f32p_f32p_4x4vl_rvv(size_t n, size_t 
                                                                size_t ldb_packed, size_t k_idx,
                                                                const void *B, void *B_packed)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t vlmax = get_vlmax(VLENB);
+    const size_t n_step = get_n_step(VLENB);
+
     // B packed format: each n-block laid out as a single contiguous [k, actual_n_in_block]
     // region (per-k row stride = actual_n_in_block). For trailing partial blocks,
     // the row stride shrinks accordingly so total packed size stays n*k*sizeof(float).
@@ -171,6 +203,10 @@ void tqt_run_bt_pack_gemm_1xnbias_clamp_f32_f32p_f32p_4x4vl_rvv(size_t n, size_t
                                                                 size_t ldb_packed, size_t k_idx,
                                                                 const void *B, void *B_packed)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t vlmax = get_vlmax(VLENB);
+    const size_t n_step = get_n_step(VLENB);
+
     // Pack transposed B [n, k] into the same flat [k, actual_n_in_block] per-block
     // layout used by the row-major variant above. Inner loop slices by vlmax because
     // the nxk helper kernel is LMUL=1.
@@ -271,8 +307,10 @@ static constexpr gemm_kernel_fn_t kernel_table_4vl[4] = {
 static void gemm_mrxnr_4vl_rvv(size_t M, size_t N, size_t K, float *D, const float *A,
                                const float *B, const float *C, const float *bias, size_t ldd,
                                size_t lda, size_t ldb, size_t ldc, float clamp_min, float clamp_max,
-                               bool apply_clamp, size_t vl)
+                               bool apply_clamp, size_t vl, size_t VLENB)
 {
+    const size_t n_step = get_n_step(VLENB);
+
     TQT_UNUSED(N);
     TQT_ASSUME(M > 0 && M <= 4);
     TQT_ASSUME(vl > 0 && vl <= n_step);
@@ -292,7 +330,10 @@ void tqt_run_gemm_1xnbias_clamp_f32_f32p_f32p_4x4vl_rvv(size_t m, size_t n, size
                                                         const void *bias, float clamp_min,
                                                         float clamp_max)
 {
-    const bool apply_clamp = tqt_gemm_clamp_is_enabled((float)clamp_min, (float)clamp_max);
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = get_n_step(VLENB);
+
+    const bool apply_clamp = tqt_clamp_is_enabled((float)clamp_min, (float)clamp_max);
 
     const size_t origin_m = TQT_MIN(m, m_step);
     const size_t origin_n = TQT_MIN(n, n_step);
@@ -313,7 +354,7 @@ void tqt_run_gemm_1xnbias_clamp_f32_f32p_f32p_4x4vl_rvv(size_t m, size_t n, size
             // Single LMUL=4 kernel call: vl = actual_n. The kernel uses vl as the
             // per-k stride into packed B, matching the new flat block layout.
             gemm_mrxnr_4vl_rvv(actual_m, actual_n, k, d_ptr, a_ptr, b_ptr, c_ptr, bias_ptr, ldd,
-                               lda, ldb, ldc, clamp_min, clamp_max, apply_clamp, actual_n);
+                               lda, ldb, ldc, clamp_min, clamp_max, apply_clamp, actual_n, VLENB);
         }
     }
 }

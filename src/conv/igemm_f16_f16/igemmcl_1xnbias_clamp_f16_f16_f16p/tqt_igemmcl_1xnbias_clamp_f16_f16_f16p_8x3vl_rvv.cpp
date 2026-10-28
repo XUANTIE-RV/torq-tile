@@ -15,10 +15,23 @@
 #include "src/conv/igemm_f16_f16/tqt_kernel_igemm_f16_f16_8x3vl_rvv.h"
 #include "src/gemm/gemm_f16_f16/tqt_kernel_gemm_f16_f16_8x3vl_rvv.h"
 
-static const size_t VLENB = csrr_vlenb();
-static const size_t vlmax = VLENB / sizeof(float16_t);
+static inline size_t get_vlenb()
+{
+    static const size_t value = csrr_vlenb();
+    return value;
+}
+
+static inline size_t get_vlmax(size_t vlenb)
+{
+    return vlenb / sizeof(float16_t);
+}
+
+static inline size_t get_n_step(size_t vlenb)
+{
+    return 3 * get_vlmax(vlenb);
+}
+
 static const size_t m_step = 8;
-static const size_t n_step = 3 * vlmax;
 
 // ============================================================================
 // Helper Functions (Get Methods)
@@ -31,6 +44,9 @@ size_t tqt_get_m_step_igemmcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv(void)
 
 size_t tqt_get_n_step_igemmcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv(void)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = get_n_step(VLENB);
+
     return n_step;
 }
 
@@ -39,6 +55,10 @@ size_t tqt_get_b_packed_offset_igemmcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv(size
                                                                             size_t ldb,
                                                                             size_t actual_n)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t vlmax = get_vlmax(VLENB);
+    const size_t n_step = get_n_step(VLENB);
+
     TQT_ASSUME(n_idx % n_step == 0);
     return (n_idx * ldb + k_idx * tqt_gemm_pack_3vl_first_n(actual_n, vlmax)) * sizeof(float16_t);
 }
@@ -46,12 +66,18 @@ size_t tqt_get_b_packed_offset_igemmcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv(size
 size_t tqt_get_c_offset_igemmcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv(size_t m_idx, size_t n_idx,
                                                                      size_t ldc)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = get_n_step(VLENB);
+
     TQT_ASSUME(n_idx % n_step == 0);
     return (m_idx * ldc + n_idx) * sizeof(float16_t);
 }
 
 size_t tqt_get_bias_offset_igemmcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv(size_t n_idx)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = get_n_step(VLENB);
+
     TQT_ASSUME(n_idx % n_step == 0);
     return n_idx * sizeof(float16_t);
 }
@@ -59,6 +85,9 @@ size_t tqt_get_bias_offset_igemmcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv(size_t n
 size_t tqt_get_d_offset_igemmcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv(size_t m_idx, size_t n_idx,
                                                                      size_t ldd)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = get_n_step(VLENB);
+
     TQT_ASSUME(n_idx % n_step == 0);
     return (m_idx * ldd + n_idx) * sizeof(float16_t);
 }
@@ -99,8 +128,10 @@ static void igemmcl_packed_kernel(size_t IC, size_t IC_stride, size_t kd_start, 
                                   const int *od_arr, const int *oh_arr, const int *ow_arr,
                                   size_t ID, size_t IH, size_t IW, size_t SD, size_t SH, size_t SW,
                                   size_t DD, size_t DH, size_t DW, size_t PD, size_t PH, size_t PW,
-                                  bool is_first_k, bool is_last_k)
+                                  bool is_first_k, bool is_last_k, size_t VLENB)
 {
+    const size_t vlmax = get_vlmax(VLENB);
+
     static_assert(MR >= 1 && MR <= 8, "MR must be in range [1, 8]");
     static_assert(NR >= 1 && NR <= 3, "NR must be in range [1, 3]");
 
@@ -175,7 +206,7 @@ using igemmcl_packed_kernel_fn_t = void (*)(
     size_t ldd, size_t ldc, float16_t clamp_min, float16_t clamp_max, size_t vl, const int *od_arr,
     const int *oh_arr, const int *ow_arr, size_t ID, size_t IH, size_t IW, size_t SD, size_t SH,
     size_t SW, size_t DD, size_t DH, size_t DW, size_t PD, size_t PH, size_t PW, bool is_first_k,
-    bool is_last_k);
+    bool is_last_k, size_t VLENB);
 
 static constexpr igemmcl_packed_kernel_fn_t kernel_table[8][3] = {
     {igemmcl_packed_kernel<1, 1>, igemmcl_packed_kernel<1, 2>, igemmcl_packed_kernel<1, 3>},
@@ -188,16 +219,16 @@ static constexpr igemmcl_packed_kernel_fn_t kernel_table[8][3] = {
     {igemmcl_packed_kernel<8, 1>, igemmcl_packed_kernel<8, 2>, igemmcl_packed_kernel<8, 3>},
 };
 
-static void igemmcl_packed_dispatch(size_t M, size_t N, size_t IC, size_t IC_stride,
-                                    size_t kd_start, size_t kd_end, size_t KH, size_t KW,
-                                    float16_t *D, const float16_t *W, const float16_t *input_group,
-                                    const float16_t *C, const float16_t *bias, size_t ldd,
-                                    size_t ldc, float16_t clamp_min, float16_t clamp_max, size_t vl,
-                                    const int *od_arr, const int *oh_arr, const int *ow_arr,
-                                    size_t ID, size_t IH, size_t IW, size_t SD, size_t SH,
-                                    size_t SW, size_t DD, size_t DH, size_t DW, size_t PD,
-                                    size_t PH, size_t PW, bool is_first_k, bool is_last_k)
+static void igemmcl_packed_dispatch(
+    size_t M, size_t N, size_t IC, size_t IC_stride, size_t kd_start, size_t kd_end, size_t KH,
+    size_t KW, float16_t *D, const float16_t *W, const float16_t *input_group, const float16_t *C,
+    const float16_t *bias, size_t ldd, size_t ldc, float16_t clamp_min, float16_t clamp_max,
+    size_t vl, const int *od_arr, const int *oh_arr, const int *ow_arr, size_t ID, size_t IH,
+    size_t IW, size_t SD, size_t SH, size_t SW, size_t DD, size_t DH, size_t DW, size_t PD,
+    size_t PH, size_t PW, bool is_first_k, bool is_last_k, size_t VLENB)
 {
+    const size_t vlmax = get_vlmax(VLENB);
+
     TQT_ASSUME(M > 0 && M <= 8);
     TQT_ASSUME(N == 3 * vlmax || N == 2 * vlmax || (N > 0 && N <= vlmax));
     TQT_ASSUME(vl <= vlmax);
@@ -208,7 +239,7 @@ static void igemmcl_packed_dispatch(size_t M, size_t N, size_t IC, size_t IC_str
     kernel_table[mr_idx][nr_idx](IC, IC_stride, kd_start, kd_end, KH, KW, D, W, input_group, C,
                                  bias, ldd, ldc, clamp_min, clamp_max, vl, od_arr, oh_arr, ow_arr,
                                  ID, IH, IW, SD, SH, SW, DD, DH, DW, PD, PH, PW, is_first_k,
-                                 is_last_k);
+                                 is_last_k, VLENB);
 }
 
 // ============================================================================
@@ -221,6 +252,10 @@ void tqt_run_igemm_igemmcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv(
     size_t ldd, const void *bias, float16_t clamp_min, float16_t clamp_max,
     const tqt_conv_params *params)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t vlmax = get_vlmax(VLENB);
+    const size_t n_step = get_n_step(VLENB);
+
     TQT_UNUSED(k_idx_a);
     TQT_UNUSED(k_idx_b);
 
@@ -258,8 +293,9 @@ void tqt_run_igemm_igemmcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv(
 
     const float16_t *input_group = (const float16_t *)input + group_idx * IC_per_group;
 
-    // Packed-weight origin anchor: the caller selects B_packed with the first N panel's packed
-    // width, so the per-panel addressing below is relative to that anchor.
+    // Packed-weight origin anchor: the caller selects B_packed with the first N
+    // panel's packed width, so the per-panel addressing below is relative to that
+    // anchor.
     const size_t origin_n = tqt_gemm_pack_3vl_first_n(TQT_MIN(n, n_step), vlmax);
 
     // M tiling (spatial direction)
@@ -303,7 +339,7 @@ void tqt_run_igemm_igemmcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv(
                                         kd_start, kd_end, KH, KW, d_ptr, w_ptr, input_group, c_ptr,
                                         bias_ptr, ldd, ldc, clamp_min, clamp_max, vlmax, od_arr,
                                         oh_arr, ow_arr, ID, IH, IW, SD, SH, SW, DD, DH, DW, PD, PH,
-                                        PW, is_first_k, is_last_k);
+                                        PW, is_first_k, is_last_k, VLENB);
             }
             size_t remain_n = actual_n - size_n;
             if (remain_n > 0) {
@@ -319,7 +355,7 @@ void tqt_run_igemm_igemmcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv(
                                         kd_start, kd_end, KH, KW, d_remain, w_remain, input_group,
                                         c_remain, bias_remain, ldd, ldc, clamp_min, clamp_max,
                                         remain_n, od_arr, oh_arr, ow_arr, ID, IH, IW, SD, SH, SW,
-                                        DD, DH, DW, PD, PH, PW, is_first_k, is_last_k);
+                                        DD, DH, DW, PD, PH, PW, is_first_k, is_last_k, VLENB);
             }
         }
     }

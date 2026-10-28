@@ -12,10 +12,23 @@
 
 #include "src/common/tqt_common.h"
 
-static const size_t VLENB = csrr_vlenb();
-static const size_t vlmax = VLENB / sizeof(float);
+static inline size_t get_vlenb()
+{
+    static const size_t value = csrr_vlenb();
+    return value;
+}
+
+static inline size_t get_vlmax(size_t vlenb)
+{
+    return vlenb / sizeof(float);
+}
+
+static inline size_t get_n_step(size_t vlenb)
+{
+    return 8 * get_vlmax(vlenb);
+}
+
 static const size_t m_step = 1;
-static const size_t n_step = 8 * vlmax;  // LMUL=8
 
 // ============================================================================
 // Helper Functions (Get Methods)
@@ -28,6 +41,9 @@ size_t tqt_get_m_step_relu_f32_f32_1x8vl_rvv(void)
 
 size_t tqt_get_n_step_relu_f32_f32_1x8vl_rvv(void)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t n_step = get_n_step(VLENB);
+
     return n_step;
 }
 

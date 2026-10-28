@@ -17,9 +17,12 @@
 #include "src/gemm/gemm_i8_i8/tqt_kernel_gemm_i8_i8_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i8/tqt_utils_i8_i8.h"
 
-static const size_t VLENB = csrr_vlenb();
-static const size_t vlmax = VLENB;
-static const size_t m_step = vlmax;
+static inline size_t get_vlenb()
+{
+    static const size_t value = csrr_vlenb();
+    return value;
+}
+
 static const size_t n_step = 4;
 
 // ============================================================================
@@ -28,6 +31,9 @@ static const size_t n_step = 4;
 
 size_t tqt_get_m_step_igemmcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8_1vlx4_rvv(void)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t m_step = VLENB;
+
     return m_step;
 }
 
@@ -39,6 +45,9 @@ size_t tqt_get_n_step_igemmcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8_1vlx4_r
 size_t tqt_get_a_packed_offset_igemmcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8_1vlx4_rvv(
     size_t m_idx, size_t k_idx, size_t lda, size_t actual_m)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t m_step = VLENB;
+
     TQT_ASSUME(m_idx % m_step == 0);
     return (m_idx * lda + k_idx * TQT_MIN(actual_m, m_step)) * sizeof(int8_t);
 }
@@ -47,6 +56,9 @@ size_t tqt_get_c_offset_igemmcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8_1vlx4
                                                                                      size_t n_idx,
                                                                                      size_t ldc)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t m_step = VLENB;
+
     TQT_ASSUME(m_idx % m_step == 0);
     return (m_idx * ldc + n_idx) * sizeof(int32_t);
 }
@@ -54,6 +66,9 @@ size_t tqt_get_c_offset_igemmcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8_1vlx4
 size_t tqt_get_bias_offset_igemmcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8_1vlx4_rvv(
     size_t m_idx)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t m_step = VLENB;
+
     TQT_ASSUME(m_idx % m_step == 0);
     return m_idx * sizeof(int32_t);
 }
@@ -62,6 +77,9 @@ size_t tqt_get_d_offset_igemmcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8_1vlx4
                                                                                      size_t n_idx,
                                                                                      size_t ldd)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t m_step = VLENB;
+
     TQT_ASSUME(m_idx % m_step == 0);
     return (m_idx * ldd + n_idx) * sizeof(int8_t);
 }
@@ -200,8 +218,11 @@ static void igemmcf_packed_dispatch(size_t N, size_t ic_start, size_t ic_end, in
                                     size_t ID, size_t IH, size_t IW, size_t KD, size_t KH,
                                     size_t KW, size_t SD, size_t SH, size_t SW, size_t DD,
                                     size_t DH, size_t DW, size_t PD, size_t PH, size_t PW,
-                                    const int32_t *mult, const int32_t *shift, int32_t zp)
+                                    const int32_t *mult, const int32_t *shift, int32_t zp,
+                                    size_t VLENB)
 {
+    const size_t vlmax = VLENB;
+
     TQT_ASSUME(N > 0 && N <= 4);
     TQT_ASSUME(vl <= vlmax);
 
@@ -222,6 +243,9 @@ void tqt_run_igemm_igemmcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8_1vlx4_rvv(
     size_t ldd, const void *bias, int8_t clamp_min, int8_t clamp_max,
     const tqt_conv_params *conv_params, const struct tqt_qai8_qsi8dx_qai8_params *quant_params)
 {
+    const size_t VLENB = get_vlenb();
+    const size_t m_step = VLENB;
+
     TQT_UNUSED(k_idx_a);
     TQT_UNUSED(k_idx_b);
     TQT_UNUSED(C);
@@ -309,7 +333,7 @@ void tqt_run_igemm_igemmcf_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8_1vlx4_rvv(
             igemmcf_packed_dispatch(actual_n, 0, IC_per_group, d_ptr, w_ptr, input_group, bias_ptr,
                                     ldd, clamp_min, clamp_max, actual_m, od_arr, oh_arr, ow_arr, ID,
                                     IH, IW, KD, KH, KW, SD, SH, SW, DD, DH, DW, PD, PH, PW,
-                                    mult_ptr, shift_ptr, zp);
+                                    mult_ptr, shift_ptr, zp, VLENB);
         }
     }
 }

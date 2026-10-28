@@ -12,3 +12,9 @@ repos:
         types_or: [c++, c]
         args: ['-i', '-style=file']
         files: \.(cpp|h|hpp|cc|cxx)$
+      - id: check-merge-conflict
+        name: check for merge conflict markers
+        description: Fail if any staged text file contains leftover conflict markers
+        language: pygrep
+        entry: '^(<<<<<<<|>>>>>>>)( |$)'
+        types: [text]

@@ -6,14 +6,17 @@
 
 #include <benchmark/benchmark.h>
 
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <string>
 #include <vector>
 
 #include "benchmark/common/benchmark_common.h"
 #include "benchmark/common/conv_benchmark_runner.h"
+#include "torq_tile/tqt_compile_config.h"
 
 // ============================================================================
 // Forward declarations: each bench_*.cpp provides a registration function
@@ -25,7 +28,7 @@ namespace torq_tile
 namespace benchmark
 {
 
-#ifdef TORQ_TILE_ENABLE_RVV
+#if TORQ_TILE_HAS_RVV
 void register_gemm_f32_f32_rvv_benchmarks();
 void register_gemm_i8_i8_rvv_benchmarks();
 void register_gemm_i8_i4_rvv_benchmarks();
@@ -59,7 +62,7 @@ void register_geglu_f32_f32_f32_rvv_benchmarks();
 void register_swiglu_f32_f32_f32_rvv_benchmarks();
 #endif
 
-#ifdef TORQ_TILE_ENABLE_RVV_FP16
+#if TORQ_TILE_HAS_RVV_F16
 void register_gemm_f32_f16_rvv_benchmarks();
 void register_gemm_f16_f16_rvv_benchmarks();
 void register_gemm_f16_i4_rvv_benchmarks();
@@ -81,19 +84,19 @@ void register_geglu_f16_f16_f16_rvv_benchmarks();
 void register_swiglu_f16_f16_f16_rvv_benchmarks();
 #endif
 
-#ifdef TORQ_TILE_ENABLE_RVV_BF16
+#if TORQ_TILE_HAS_RVV_BF16
 void register_gemm_f32_bf16_rvv_benchmarks();
 void register_gemm_bf16_bf16_rvv_benchmarks();
 void register_conv_bf16_bf16_rvv_benchmarks();
 #endif
 
-#ifdef TORQ_TILE_ENABLE_RVV_F64
+#if TORQ_TILE_HAS_RVV_F64
 void register_gemm_f64_f64_rvv_benchmarks();
 #endif
 
 inline void register_gemm_benchmarks()
 {
-#ifdef TORQ_TILE_ENABLE_RVV
+#if TORQ_TILE_HAS_RVV
     register_gemm_f32_f32_rvv_benchmarks();
     register_gemm_i8_i8_rvv_benchmarks();
     register_gemm_i8_i4_rvv_benchmarks();
@@ -108,23 +111,23 @@ inline void register_gemm_benchmarks()
     register_gemm_i8_i2_rvv_benchmarks();
     register_gemm_u8_u8_rvv_benchmarks();
 #endif
-#ifdef TORQ_TILE_ENABLE_RVV_FP16
+#if TORQ_TILE_HAS_RVV_F16
     register_gemm_f32_f16_rvv_benchmarks();
     register_gemm_f16_f16_rvv_benchmarks();
     register_gemm_f16_i4_rvv_benchmarks();
 #endif
-#ifdef TORQ_TILE_ENABLE_RVV_BF16
+#if TORQ_TILE_HAS_RVV_BF16
     register_gemm_f32_bf16_rvv_benchmarks();
     register_gemm_bf16_bf16_rvv_benchmarks();
 #endif
-#ifdef TORQ_TILE_ENABLE_RVV_F64
+#if TORQ_TILE_HAS_RVV_F64
     register_gemm_f64_f64_rvv_benchmarks();
 #endif
 }
 
 inline void register_conv_benchmarks()
 {
-#ifdef TORQ_TILE_ENABLE_RVV
+#if TORQ_TILE_HAS_RVV
     register_conv_f32_f32_rvv_benchmarks();
     register_conv_i8_i8_rvv_benchmarks();
     register_igemmcf_f32_f32_rvv_benchmarks();
@@ -132,26 +135,26 @@ inline void register_conv_benchmarks()
     register_igemm_i8_i8_rvv_benchmarks();
     register_dwconv_f32_f32_rvv_benchmarks();
 #endif
-#ifdef TORQ_TILE_ENABLE_RVV_FP16
+#if TORQ_TILE_HAS_RVV_F16
     register_conv_f16_f16_rvv_benchmarks();
     register_igemmcf_f16_f16_rvv_benchmarks();
     register_igemmcl_f16_f16_rvv_benchmarks();
     register_dwconv_f16_f16_rvv_benchmarks();
 #endif
-#ifdef TORQ_TILE_ENABLE_RVV_BF16
+#if TORQ_TILE_HAS_RVV_BF16
     register_conv_bf16_bf16_rvv_benchmarks();
 #endif
 }
 
 inline void register_elementwise_benchmarks()
 {
-#ifdef TORQ_TILE_ENABLE_RVV
+#if TORQ_TILE_HAS_RVV
     register_add_f32_f32_rvv_benchmarks();
     register_sub_f32_f32_rvv_benchmarks();
     register_mul_f32_f32_rvv_benchmarks();
     register_div_f32_f32_rvv_benchmarks();
 #endif
-#ifdef TORQ_TILE_ENABLE_RVV_FP16
+#if TORQ_TILE_HAS_RVV_F16
     register_add_f16_f16_rvv_benchmarks();
     register_sub_f16_f16_rvv_benchmarks();
     register_mul_f16_f16_rvv_benchmarks();
@@ -161,11 +164,11 @@ inline void register_elementwise_benchmarks()
 
 inline void register_reduction_benchmarks()
 {
-#ifdef TORQ_TILE_ENABLE_RVV
+#if TORQ_TILE_HAS_RVV
     register_sum_f32_f32_rvv_benchmarks();
     register_mean_f32_f32_rvv_benchmarks();
 #endif
-#ifdef TORQ_TILE_ENABLE_RVV_FP16
+#if TORQ_TILE_HAS_RVV_F16
     register_sum_f16_f16_rvv_benchmarks();
     register_mean_f16_f16_rvv_benchmarks();
 #endif
@@ -173,7 +176,7 @@ inline void register_reduction_benchmarks()
 
 inline void register_activation_benchmarks()
 {
-#ifdef TORQ_TILE_ENABLE_RVV
+#if TORQ_TILE_HAS_RVV
     register_relu_f32_f32_rvv_benchmarks();
     register_gelu_f32_f32_rvv_benchmarks();
     register_silu_f32_f32_rvv_benchmarks();
@@ -181,7 +184,7 @@ inline void register_activation_benchmarks()
     register_geglu_f32_f32_f32_rvv_benchmarks();
     register_swiglu_f32_f32_f32_rvv_benchmarks();
 #endif
-#ifdef TORQ_TILE_ENABLE_RVV_FP16
+#if TORQ_TILE_HAS_RVV_F16
     register_relu_f16_f16_rvv_benchmarks();
     register_gelu_f16_f16_rvv_benchmarks();
     register_silu_f16_f16_rvv_benchmarks();
@@ -211,7 +214,10 @@ static void print_usage(const char *program_name)
                  "M/N/K are shared by the GEMM, activation, reduction and elementwise\n"
                  "benchmarks, and each op reads only the dimensions it needs: GEMM uses\n"
                  "M/N/K, activation and reduction use M/N, elementwise uses N. The conv and\n"
-                 "dwconv benchmarks ignore M/N/K and use their own built-in conv shape.\n"
+                 "dwconv benchmarks ignore M/N/K and use their own conv shape.\n"
+                 "  --conv-ic/ih/iw/kh/kw VALUE  Override one conv dimension.\n"
+                 "  --conv-pad-h/w VALUE        Override one padding offset.\n"
+                 "1D dwconv: --conv-ih 1 --conv-kh 1 --conv-kw 4 --conv-pad-h 0\n"
                  "\n"
                  "All other flags are passed to Google Benchmark.\n"
                  "Example:\n"
@@ -222,12 +228,46 @@ static void print_usage(const char *program_name)
 static void parse_custom_args(int &argc, char **argv)
 {
     auto &shape = torq_tile::benchmark::global_gemm_shape();
+    auto &conv = torq_tile::benchmark::global_conv_shape();
 
     // Collect indices of consumed arguments for removal
     std::vector<int> consumed_indices;
 
     for (int i = 1; i < argc; ++i) {
-        if ((std::strcmp(argv[i], "-m") == 0) && i + 1 < argc) {
+        size_t *dimension = nullptr;
+        bool padding = false;
+        if (std::strcmp(argv[i], "--conv-ic") == 0)
+            dimension = &conv.ic;
+        if (std::strcmp(argv[i], "--conv-ih") == 0)
+            dimension = &conv.ih;
+        if (std::strcmp(argv[i], "--conv-iw") == 0)
+            dimension = &conv.iw;
+        if (std::strcmp(argv[i], "--conv-kh") == 0)
+            dimension = &conv.kh;
+        if (std::strcmp(argv[i], "--conv-kw") == 0)
+            dimension = &conv.kw;
+        if (std::strcmp(argv[i], "--conv-pad-h") == 0) {
+            dimension = &conv.pad_h;
+            padding = true;
+        }
+        if (std::strcmp(argv[i], "--conv-pad-w") == 0) {
+            dimension = &conv.pad_w;
+            padding = true;
+        }
+        if (dimension) {
+            char *end = nullptr;
+            errno = 0;
+            const unsigned long long value =
+                i + 1 < argc ? std::strtoull(argv[i + 1], &end, 10) : 0;
+            if (i + 1 == argc || argv[i + 1][0] == '-' || !end || end == argv[i + 1] || *end ||
+                errno || (!padding && value == 0) || value > std::numeric_limits<size_t>::max()) {
+                std::fprintf(stderr, "Invalid value for %s\n", argv[i]);
+                std::exit(1);
+            }
+            *dimension = size_t(value);
+            consumed_indices.push_back(i);
+            consumed_indices.push_back(++i);
+        } else if ((std::strcmp(argv[i], "-m") == 0) && i + 1 < argc) {
             shape.m = static_cast<size_t>(std::atol(argv[i + 1]));
             consumed_indices.push_back(i);
             consumed_indices.push_back(i + 1);
@@ -246,6 +286,13 @@ static void parse_custom_args(int &argc, char **argv)
             print_usage(argv[0]);
             // Don't consume --help, let Google Benchmark also handle it
         }
+    }
+
+    const size_t max_extent = std::numeric_limits<size_t>::max();
+    if (conv.pad_h > (max_extent - conv.ih) / 2 || conv.pad_w > (max_extent - conv.iw) / 2 ||
+        conv.ih + 2 * conv.pad_h < conv.kh || conv.iw + 2 * conv.pad_w < conv.kw) {
+        std::fprintf(stderr, "Invalid padded conv extent\n");
+        std::exit(1);
     }
 
     // Remove consumed arguments by shifting remaining ones
@@ -273,7 +320,7 @@ static void parse_custom_args(int &argc, char **argv)
 
 int main(int argc, char **argv)
 {
-    // Parse custom -m/-n/-k arguments before Google Benchmark initialization
+    // Parse custom dimensions before Google Benchmark initialization
     parse_custom_args(argc, argv);
 
     const auto &shape = torq_tile::benchmark::global_gemm_shape();
@@ -284,9 +331,10 @@ int main(int argc, char **argv)
                  "    (GEMM uses M/N/K; activation and reduction use M/N; elementwise uses N)\n");
     std::fprintf(stdout,
                  "  Conv shape: IC=%zu, OC=%zu, IH=%zu, IW=%zu, KH=%zu, KW=%zu, "
-                 "stride=%zu, pad=%zu\n",
+                 "stride_h=%zu, stride_w=%zu, pad_h=%zu, pad_w=%zu\n",
                  conv_shape.ic, conv_shape.oc, conv_shape.ih, conv_shape.iw, conv_shape.kh,
-                 conv_shape.kw, conv_shape.stride_h, conv_shape.pad_h);
+                 conv_shape.kw, conv_shape.stride_h, conv_shape.stride_w, conv_shape.pad_h,
+                 conv_shape.pad_w);
     std::fprintf(stdout, "\n");
 
     // Register all benchmarks

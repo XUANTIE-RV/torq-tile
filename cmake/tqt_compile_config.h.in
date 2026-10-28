@@ -1,0 +1,19 @@
+//
+// SPDX-FileCopyrightText: Copyright 2024-2026 C-SKY Microsystems Co., Ltd.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+
+#pragma once
+
+// Generated from this build's final source selection. Do not predefine these macros.
+// RVV indicates any selected implementation for that backend. Other macros
+// indicate a complete source group; arbitrary per-kernel subsets are not described.
+// These values describe the matching library after a successful build, not the
+// consumer compiler's ISA/type support or the runtime CPU's capabilities.
+// Always test these 0/1 values with #if, not #ifdef.
+#cmakedefine01 TORQ_TILE_HAS_RVV
+#cmakedefine01 TORQ_TILE_HAS_RVV_F16
+#cmakedefine01 TORQ_TILE_HAS_RVV_BF16
+#cmakedefine01 TORQ_TILE_HAS_RVV_BF16_TO_F16
+#cmakedefine01 TORQ_TILE_HAS_RVV_F64

@@ -1,0 +1,119 @@
+{
+  "rv64-scalar": {
+    "flags": [
+      "-march=rv64gc",
+      "-mabi=lp64d"
+    ],
+    "required": [
+      "__riscv"
+    ],
+    "forbidden": [
+      "__riscv_vector"
+    ],
+    "expect_empty": true
+  },
+  "rvv": {
+    "flags": [
+      "-march=rv64gcv",
+      "-mabi=lp64d"
+    ],
+    "required": [
+      "__riscv_v"
+    ],
+    "forbidden": [
+      "__riscv_zfh",
+      "__riscv_zvfh",
+      "__riscv_zvfbfwma"
+    ],
+    "capabilities": {
+      "RVV": 1,
+      "RVV_F16": 0,
+      "RVV_BF16": 0,
+      "RVV_BF16_TO_F16": 0,
+      "RVV_F64": 1
+    }
+  },
+  "rvv-fp16": {
+    "flags": [
+      "-march=rv64gcv_zfh_zvfh",
+      "-mabi=lp64d"
+    ],
+    "required": [
+      "__riscv_v",
+      "__riscv_zfh",
+      "__riscv_zvfh"
+    ],
+    "forbidden": [
+      "__riscv_zvfbfwma"
+    ],
+    "capabilities": {
+      "RVV": 1,
+      "RVV_F16": 1,
+      "RVV_BF16": 0,
+      "RVV_BF16_TO_F16": 0,
+      "RVV_F64": 1
+    }
+  },
+  "rvv-bf16": {
+    "flags": [
+      "-march=rv64gcv_zvfbfwma",
+      "-mabi=lp64d"
+    ],
+    "required": [
+      "__riscv_v",
+      "__riscv_zvfbfwma"
+    ],
+    "forbidden": [
+      "__riscv_zfh",
+      "__riscv_zvfh"
+    ],
+    "capabilities": {
+      "RVV": 1,
+      "RVV_F16": 0,
+      "RVV_BF16": 1,
+      "RVV_BF16_TO_F16": 0,
+      "RVV_F64": 1
+    }
+  },
+  "rvv-bf16-zvfhmin": {
+    "flags": [
+      "-march=rv64gcv_zvfbfwma_zvfhmin",
+      "-mabi=lp64d"
+    ],
+    "required": [
+      "__riscv_v",
+      "__riscv_zvfbfwma",
+      "__riscv_zvfhmin"
+    ],
+    "forbidden": [
+      "__riscv_zvfh"
+    ],
+    "capabilities": {
+      "RVV": 1,
+      "RVV_F16": 0,
+      "RVV_BF16": 1,
+      "RVV_BF16_TO_F16": 1,
+      "RVV_F64": 1
+    }
+  },
+  "rvv-fp16-bf16": {
+    "flags": [
+      "-march=rv64gcv_zfh_zvfh_zvfbfwma",
+      "-mabi=lp64d"
+    ],
+    "required": [
+      "__riscv_v",
+      "__riscv_zfh",
+      "__riscv_zvfh",
+      "__riscv_zvfbfwma"
+    ],
+    "forbidden": [],
+    "capabilities": {
+      "RVV": 1,
+      "RVV_F16": 1,
+      "RVV_BF16": 1,
+      "RVV_BF16_TO_F16": 1,
+      "RVV_F64": 1
+    }
+  }
+}

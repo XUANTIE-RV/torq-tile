@@ -11,8 +11,8 @@ set(TORQ_TILE_BENCHMARK_SOURCES
     main.cpp
 )
 
-# RVV benchmarks (auto-detected via TORQ_TILE_ENABLE_RVV)
-if(TORQ_TILE_ENABLE_RVV)
+# RVV benchmarks (auto-detected via TORQ_TILE_HAS_RVV)
+if(TORQ_TILE_HAS_RVV)
     list(APPEND TORQ_TILE_BENCHMARK_SOURCES
         gemm/bench_gemm_f32_f32_rvv.cpp
         gemm/bench_gemm_i8_i8_rvv.cpp
@@ -47,15 +47,15 @@ if(TORQ_TILE_ENABLE_RVV)
     )
 endif()
 
-# RVV F64 benchmarks (auto-detected via TORQ_TILE_ENABLE_RVV_F64)
-if(TORQ_TILE_ENABLE_RVV_F64)
+# RVV F64 benchmarks (auto-detected via TORQ_TILE_HAS_RVV_F64)
+if(TORQ_TILE_HAS_RVV_F64)
     list(APPEND TORQ_TILE_BENCHMARK_SOURCES
         gemm/bench_gemm_f64_f64_rvv.cpp
     )
 endif()
 
-# RVV FP16 benchmarks (auto-detected via TORQ_TILE_ENABLE_RVV_FP16)
-if(TORQ_TILE_ENABLE_RVV_FP16)
+# RVV FP16 benchmarks (auto-detected via TORQ_TILE_HAS_RVV_F16)
+if(TORQ_TILE_HAS_RVV_F16)
     list(APPEND TORQ_TILE_BENCHMARK_SOURCES
         gemm/bench_gemm_f32_f16_rvv.cpp
         gemm/bench_gemm_f16_f16_rvv.cpp
@@ -78,8 +78,8 @@ if(TORQ_TILE_ENABLE_RVV_FP16)
     )
 endif()
 
-# RVV BF16 benchmarks (auto-detected via TORQ_TILE_ENABLE_RVV_BF16)
-if(TORQ_TILE_ENABLE_RVV_BF16)
+# RVV BF16 benchmarks (auto-detected via TORQ_TILE_HAS_RVV_BF16)
+if(TORQ_TILE_HAS_RVV_BF16)
     list(APPEND TORQ_TILE_BENCHMARK_SOURCES
         gemm/bench_gemm_f32_bf16_rvv.cpp
         gemm/bench_gemm_bf16_bf16_rvv.cpp
@@ -90,6 +90,7 @@ endif()
 # ============================================================================
 # Benchmark Executable
 # ============================================================================
+
 add_executable(torq_tile_benchmark ${TORQ_TILE_BENCHMARK_SOURCES})
 
 target_include_directories(torq_tile_benchmark PRIVATE
@@ -100,20 +101,6 @@ target_link_libraries(torq_tile_benchmark PRIVATE
     torq_tile
     benchmark::benchmark
 )
-
-# Pass architecture feature flags as compile definitions
-if(TORQ_TILE_ENABLE_RVV)
-    target_compile_definitions(torq_tile_benchmark PRIVATE TORQ_TILE_ENABLE_RVV)
-endif()
-if(TORQ_TILE_ENABLE_RVV_FP16)
-    target_compile_definitions(torq_tile_benchmark PRIVATE TORQ_TILE_ENABLE_RVV_FP16)
-endif()
-if(TORQ_TILE_ENABLE_RVV_BF16)
-    target_compile_definitions(torq_tile_benchmark PRIVATE TORQ_TILE_ENABLE_RVV_BF16)
-endif()
-if(TORQ_TILE_ENABLE_RVV_F64)
-    target_compile_definitions(torq_tile_benchmark PRIVATE TORQ_TILE_ENABLE_RVV_F64)
-endif()
 
 # Static library needs --whole-archive to ensure all symbols are visible
 if(NOT TORQ_TILE_BUILD_SHARED)

@@ -12,9 +12,12 @@
 #include "src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_bf16_bf16_bf16p/tqt_gemm_1xnbias_clamp_bf16_bf16_bf16p_8x1vl_rvv.h"
 #include "src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_bf16_bf16_bf16t/tqt_gemm_1xnbias_clamp_bf16_bf16_bf16t_8x1vl_rvv.h"
 #include "src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_bf16_bf16p_bf16p/tqt_gemm_1xnbias_clamp_bf16_bf16p_bf16p_8x1vl_rvv.h"
+#include "torq_tile/tqt_compile_config.h"
+#if TORQ_TILE_HAS_RVV_BF16_TO_F16
 #include "src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f16_bf16_bf16/tqt_gemm_1xnbias_clamp_f16_bf16_bf16_8x1vl_rvv.h"
 #include "src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f16_bf16_bf16t/tqt_gemm_1xnbias_clamp_f16_bf16_bf16t_8x1vl_rvv.h"
 #include "src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f16_bf16p_bf16p/tqt_gemm_1xnbias_clamp_f16_bf16p_bf16p_8x1vl_rvv.h"
+#endif
 #include "src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f32_bf16_bf16/tqt_gemm_1xnbias_clamp_f32_bf16_bf16_8x1vl_rvv.h"
 #include "src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f32_bf16_bf16t/tqt_gemm_1xnbias_clamp_f32_bf16_bf16t_8x1vl_rvv.h"
 #include "src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f32_bf16p_bf16p/tqt_gemm_1xnbias_clamp_f32_bf16p_bf16p_8x1vl_rvv.h"
@@ -247,6 +250,7 @@ INSTANTIATE_TEST_SUITE_P(
                           false),
     GemmTestParamNameGenerator());
 
+#if TORQ_TILE_HAS_RVV_BF16_TO_F16
 // ============================================================================
 // D=f16, With 1xN bias, With clamp, NonPacked, B RowMajor, Tile=8x1vl
 // ============================================================================
@@ -393,6 +397,8 @@ INSTANTIATE_TEST_SUITE_P(
                           tqt_get_n_step_gemm_1xnbias_clamp_f16_bf16p_bf16p_8x1vl_rvv(), 1, true,
                           false),
     GemmTestParamNameGenerator());
+
+#endif  // TORQ_TILE_HAS_RVV_BF16_TO_F16
 
 // ============================================================================
 // D=f32, With 1xN bias, With clamp, NonPacked, B RowMajor, Tile=8x1vl

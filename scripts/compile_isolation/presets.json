@@ -1,0 +1,64 @@
+{
+  "quick": [
+    {
+      "profiles": [
+        "rv64-scalar",
+        "rvv",
+        "rvv-fp16-bf16"
+      ],
+      "suites": [
+        "compile-probes"
+      ]
+    }
+  ],
+  "full": [
+    {
+      "profiles": [
+        "rv64-scalar"
+      ],
+      "suites": [
+        "compile-probes",
+        "source-selection"
+      ]
+    },
+    {
+      "profiles": [
+        "rvv"
+      ],
+      "suites": [
+        "compile-probes",
+        "source-selection",
+        "source-compile",
+        "global-init",
+        "install-package"
+      ]
+    },
+    {
+      "profiles": [
+        "rvv-fp16",
+        "rvv-bf16",
+        "rvv-bf16-zvfhmin"
+      ],
+      "suites": [
+        "compile-probes",
+        "source-selection",
+        "source-compile",
+        "global-init"
+      ]
+    },
+    {
+      "profiles": [
+        "rvv-fp16-bf16"
+      ],
+      "suites": [
+        "compile-probes",
+        "source-selection",
+        "source-compile",
+        "global-init",
+        "cmake-config",
+        "install-package",
+        "install-incremental"
+      ]
+    }
+  ]
+}

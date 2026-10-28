@@ -14,7 +14,8 @@
 #include "src/gemm/gemm_i8_i8/gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt/tqt_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i8/gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi8cxp/tqt_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi8cxp_4x1vl_rvv.h"
 #include "test/common/gemm_clamp_test_utils.h"
-#if defined(__riscv_zfh) && defined(__riscv_zvfh)
+#include "torq_tile/tqt_compile_config.h"
+#if TORQ_TILE_HAS_RVV_F16
 #include "src/gemm/gemm_i8_i8/gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt/tqt_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i8/gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp/tqt_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv.h"
 #endif
@@ -413,7 +414,7 @@ INSTANTIATE_TEST_SUITE_P(
                           true, false),
     GemmTestParamNameGenerator());
 
-#if defined(__riscv_zfh) && defined(__riscv_zvfh)
+#if TORQ_TILE_HAS_RVV_F16
 // ============================================================================
 // gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv
 // NonPacked a_bt: int8 inputs -> f16 output with 1xN bias
@@ -510,7 +511,7 @@ INSTANTIATE_TEST_SUITE_P(
                           tqt_get_n_step_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv(), 1,
                           true, false),
     GemmTestParamNameGenerator());
-#endif  // __riscv_zfh && __riscv_zvfh
+#endif  // TORQ_TILE_HAS_RVV_F16
 
 TEST(GemmI8I8Rvv, PackedNonzeroKOrigin)
 {
@@ -527,7 +528,7 @@ TEST(GemmI8I8Rvv, PackedNonzeroKOrigin)
         make_packed_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8p_4x1vl_rvv_funcs());
     run_packed_clamp_fp_i8_nonzero_origin_test(
         m, n, k, split, make_packed_1xnbias_clamp_f32_qai8dxp_qsi8cxp_4x1vl_rvv_funcs());
-#if defined(__riscv_zfh) && defined(__riscv_zvfh)
+#if TORQ_TILE_HAS_RVV_F16
     run_packed_clamp_fp_i8_nonzero_origin_test(
         m, n, k, split, make_packed_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv_funcs());
 #endif

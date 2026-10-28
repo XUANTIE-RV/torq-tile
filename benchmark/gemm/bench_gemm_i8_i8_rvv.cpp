@@ -15,7 +15,8 @@
 #include "src/gemm/gemm_i8_i8/gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp/tqt_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i8/gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt/tqt_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxt_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i8/gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi8cxp/tqt_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi8cxp_4x1vl_rvv.h"
-#if defined(__riscv_zfh) && defined(__riscv_zvfh)
+#include "torq_tile/tqt_compile_config.h"
+#if TORQ_TILE_HAS_RVV_F16
 #include "src/gemm/gemm_i8_i8/gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt/tqt_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i8/gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp/tqt_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv.h"
 #endif
@@ -352,7 +353,7 @@ static PackedGemmFuncs<float> make_packed_1xnbias_clamp_f32_qai8dxp_qsi8cxp_4x1v
     };
 }
 
-#if defined(__riscv_zfh) && defined(__riscv_zvfh)
+#if TORQ_TILE_HAS_RVV_F16
 // ============================================================================
 // NonPacked: gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv
 // ============================================================================
@@ -430,7 +431,7 @@ static PackedGemmFuncs<float16_t> make_packed_1xnbias_clamp_f16_qai8dxp_qsi8cxp_
         },
     };
 }
-#endif  // __riscv_zfh && __riscv_zvfh
+#endif  // TORQ_TILE_HAS_RVV_F16
 
 static tqt_qsi8d256_qsi8c16_params make_qsi8d256_qsi8c16_block_params(const float *scale_a,
                                                                       size_t ldsa, const int16_t *,
@@ -488,7 +489,7 @@ void register_gemm_i8_i8_rvv_benchmarks()
         "tqt_gemm_1xnbias_clamp_f32_qai8dxp_qsi8cxp_4x1vl_rvv",
         make_packed_1xnbias_clamp_f32_qai8dxp_qsi8cxp_4x1vl_rvv());
 
-#if defined(__riscv_zfh) && defined(__riscv_zvfh)
+#if TORQ_TILE_HAS_RVV_F16
     register_nonpacked_gemm_benchmark<int8_t, float16_t, BLayout::kTransposed, float16_t>(
         "tqt_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv",
         make_nonpacked_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv());

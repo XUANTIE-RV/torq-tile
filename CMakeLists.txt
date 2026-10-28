@@ -32,35 +32,45 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Compiler Flags Configuration
 # ============================================================================
 
-# Auto-detect architecture feature via try_compile
-# Users pass compiler flags via CMAKE_C_FLAGS / CMAKE_CXX_FLAGS (or toolchain file)
-include(CheckCSourceCompiles)
+# Detect kernel ISA support with the actual C++ flags.
+include(cmake/torq_tile_isa.cmake)
+set(TORQ_TILE_ISA_GROUPS "")
 
 # Detect RISC-V Vector support
-check_c_source_compiles("
+torq_tile_check_isa("
     #if !defined(__riscv) || !defined(__riscv_v)\n #error\n #endif
     int main() { return 0; }
-" TORQ_TILE_ENABLE_RVV)
+" TORQ_TILE_CAN_COMPILE_RVV)
 
 # Detect RISC-V Vector FP16 support (Zfh + Zvfh)
-check_c_source_compiles("
+torq_tile_check_isa("
     #if !defined(__riscv) || !defined(__riscv_v) || !defined(__riscv_zfh) || !defined(__riscv_zvfh)\n #error\n #endif
     int main() { __asm__ volatile(\"vfwcvt.f.f.v v2, v0\"); return 0; }
-" TORQ_TILE_ENABLE_RVV_FP16)
+" TORQ_TILE_CAN_COMPILE_RVV_F16)
 
 # Detect RISC-V Vector BF16 support (Zvfbfwma)
-check_c_source_compiles("
+torq_tile_check_isa("
     #if !defined(__riscv) || !defined(__riscv_v) || !defined(__riscv_zvfbfwma)\n #error\n #endif
     int main() { __asm__ volatile(\"vfwcvtbf16.f.f.v v2, v0\"); return 0; }
-" TORQ_TILE_ENABLE_RVV_BF16)
+" TORQ_TILE_CAN_COMPILE_RVV_BF16)
 
-# Detect RISC-V Vector FP64 support (V + D, ELEN >= 64)
-check_c_source_compiles("
-    #if !defined(__riscv) || !defined(__riscv_v) || !defined(__riscv_v_elen) || (__riscv_v_elen < 64)\\n #error\\n #endif
+# BF16-input GEMM with FP16 output also needs vector FP16 conversions at SEW=16.
+torq_tile_check_isa("
+    #if !defined(__riscv) || !defined(__riscv_v) || !defined(__riscv_zvfbfwma) || (!defined(__riscv_zvfhmin) && !defined(__riscv_zvfh))\n #error\n #endif
+    int main() {
+        __asm__ volatile(\"vfwcvtbf16.f.f.v v2, v0\");
+        __asm__ volatile(\"vfwcvt.f.f.v v2, v0\");
+        __asm__ volatile(\"vfncvt.f.f.w v0, v2\");
+        return 0;
+    }
+" TORQ_TILE_CAN_COMPILE_RVV_BF16_TO_F16)
+
+# Detect RISC-V Vector FP64 support (Zve64d / V + D, ELEN >= 64)
+torq_tile_check_isa("
+    #if !defined(__riscv) || !defined(__riscv_v) || !defined(__riscv_v_elen) || (__riscv_v_elen < 64)\n #error\n #endif
     int main() { return 0; }
-" TORQ_TILE_ENABLE_RVV_F64)
+" TORQ_TILE_CAN_COMPILE_RVV_F64)
 
-# ============================================================================
 # Source Files Collection
 # ============================================================================
 
@@ -79,7 +89,7 @@ set(TORQ_TILE_RVV_SOURCES
     src/gemm/gemm_f32_f32/gemm_1xnbias_clamp_f32_f32p_f32p/tqt_gemm_1xnbias_clamp_f32_f32p_f32p_2x8vl_rvv.cpp
     src/gemm/gemm_f32_f32/gemm_mx1bias_clamp_f32_f32_f32/tqt_gemm_mx1bias_clamp_f32_f32_f32_8x3vl_rvv.cpp
     src/gemm/gemm_f32_f32/gemm_mx1bias_clamp_f32_f32p_f32p/tqt_gemm_mx1bias_clamp_f32_f32p_f32p_8x3vl_rvv.cpp
-    # BLAS-style SGEMM: D = alpha * A * B + beta * C
+    # F32 RVV — sgemm (BLAS-style: D = alpha*A*B + beta*C, no bias/clamp)
     src/gemm/gemm_f32_f32/sgemm_f32_f32_f32/tqt_sgemm_f32_f32_f32_8x3vl_rvv.cpp
     src/gemm/gemm_f32_f32/sgemm_f32_f32_f32t/tqt_sgemm_f32_f32_f32t_8x3vl_rvv.cpp
     src/gemm/gemm_f32_f32/sgemm_f32_f32t_f32/tqt_sgemm_f32_f32t_f32_8x3vl_rvv.cpp
@@ -122,9 +132,9 @@ set(TORQ_TILE_RVV_SOURCES
     src/activation/relu_f32_f32/relu_f32_f32/tqt_relu_f32_f32_1x8vl_rvv.cpp
     src/activation/gelu_f32_f32/gelu_f32_f32/tqt_gelu_f32_f32_1x4vl_rvv.cpp
     src/activation/silu_f32_f32/silu_f32_f32/tqt_silu_f32_f32_1x4vl_rvv.cpp
-    src/activation/swiglu_f32_f32_f32/swiglu_f32_f32_f32/tqt_swiglu_f32_f32_f32_1x4vl_rvv.cpp
     src/activation/reglu_f32_f32_f32/reglu_f32_f32_f32/tqt_reglu_f32_f32_f32_1x8vl_rvv.cpp
     src/activation/geglu_f32_f32_f32/geglu_f32_f32_f32/tqt_geglu_f32_f32_f32_1x4vl_rvv.cpp
+    src/activation/swiglu_f32_f32_f32/swiglu_f32_f32_f32/tqt_swiglu_f32_f32_f32_1x4vl_rvv.cpp
     # INT8 RVV
     src/gemm/gemm_i8_i8/gemm_clamp_i32_i8_i8/tqt_gemm_clamp_i32_i8_i8_4x1vl_rvv.cpp
     src/gemm/gemm_i8_i8/gemm_clamp_i32_i8p_i8p/tqt_gemm_clamp_i32_i8p_i8p_4x1vl_rvv.cpp
@@ -180,7 +190,7 @@ set(TORQ_TILE_RVV_SOURCES
 )
 
 # RVV FP16 (RISC-V Vector + Zfh + Zvfh) kernel files
-set(TORQ_TILE_RVV_FP16_SOURCES
+set(TORQ_TILE_RVV_F16_SOURCES
     src/gemm/gemm_f32_f16/gemm_1xnbias_clamp_f32_f32_f16t/tqt_gemm_1xnbias_clamp_f32_f32_f16t_8x1vl_rvv.cpp
     src/gemm/gemm_f32_f16/gemm_1xnbias_clamp_f32_f32p_f16p/tqt_gemm_1xnbias_clamp_f32_f32p_f16p_8x1vl_rvv.cpp
     src/gemm/gemm_f16_f16/gemm_1xnbias_clamp_f16_f16_f16/tqt_gemm_1xnbias_clamp_f16_f16_f16_8x3vl_rvv.cpp
@@ -249,9 +259,9 @@ set(TORQ_TILE_RVV_FP16_SOURCES
     src/activation/relu_f16_f16/relu_f16_f16/tqt_relu_f16_f16_1x8vl_rvv.cpp
     src/activation/gelu_f16_f16/gelu_f16_f16/tqt_gelu_f16_f16_1x2vl_rvv.cpp
     src/activation/silu_f16_f16/silu_f16_f16/tqt_silu_f16_f16_1x2vl_rvv.cpp
-    src/activation/swiglu_f16_f16_f16/swiglu_f16_f16_f16/tqt_swiglu_f16_f16_f16_1x2vl_rvv.cpp
     src/activation/reglu_f16_f16_f16/reglu_f16_f16_f16/tqt_reglu_f16_f16_f16_1x8vl_rvv.cpp
     src/activation/geglu_f16_f16_f16/geglu_f16_f16_f16/tqt_geglu_f16_f16_f16_1x2vl_rvv.cpp
+    src/activation/swiglu_f16_f16_f16/swiglu_f16_f16_f16/tqt_swiglu_f16_f16_f16_1x2vl_rvv.cpp
 )
 
 # RVV BF16 (RISC-V Vector + Zvfbfwma) kernel files
@@ -262,15 +272,12 @@ set(TORQ_TILE_RVV_BF16_SOURCES
     src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_bf16_bf16_bf16t/tqt_gemm_1xnbias_clamp_bf16_bf16_bf16t_8x1vl_rvv.cpp
     src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_bf16_bf16_bf16p/tqt_gemm_1xnbias_clamp_bf16_bf16_bf16p_8x1vl_rvv.cpp
     src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_bf16_bf16p_bf16p/tqt_gemm_1xnbias_clamp_bf16_bf16p_bf16p_8x1vl_rvv.cpp
-    src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f16_bf16_bf16/tqt_gemm_1xnbias_clamp_f16_bf16_bf16_8x1vl_rvv.cpp
-    src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f16_bf16_bf16t/tqt_gemm_1xnbias_clamp_f16_bf16_bf16t_8x1vl_rvv.cpp
-    src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f16_bf16p_bf16p/tqt_gemm_1xnbias_clamp_f16_bf16p_bf16p_8x1vl_rvv.cpp
     src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f32_bf16_bf16/tqt_gemm_1xnbias_clamp_f32_bf16_bf16_8x1vl_rvv.cpp
     src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f32_bf16_bf16t/tqt_gemm_1xnbias_clamp_f32_bf16_bf16t_8x1vl_rvv.cpp
     src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f32_bf16p_bf16p/tqt_gemm_1xnbias_clamp_f32_bf16p_bf16p_8x1vl_rvv.cpp
     src/gemm/gemm_bf16_bf16/gemm_mx1bias_clamp_bf16_bf16_bf16/tqt_gemm_mx1bias_clamp_bf16_bf16_bf16_8x1vl_rvv.cpp
     src/gemm/gemm_bf16_bf16/gemm_mx1bias_clamp_bf16_bf16p_bf16p/tqt_gemm_mx1bias_clamp_bf16_bf16p_bf16p_8x1vl_rvv.cpp
-    # BF16 convolution
+    # BF16 conv (RVV) — delegate to the 8x1vl bf16 gemm backends
     src/conv/conv_bf16_bf16/convcf_mx1bias_clamp_bf16_bf16_bf16/tqt_convcf_mx1bias_clamp_bf16_bf16_bf16_8x1vl_rvv.cpp
     src/conv/conv_bf16_bf16/convcf_mx1bias_clamp_bf16_bf16p_bf16p/tqt_convcf_mx1bias_clamp_bf16_bf16p_bf16p_8x1vl_rvv.cpp
     src/conv/conv_bf16_bf16/convcl_1xnbias_clamp_bf16_bf16_bf16t/tqt_convcl_1xnbias_clamp_bf16_bf16_bf16t_8x1vl_rvv.cpp
@@ -285,14 +292,23 @@ set(TORQ_TILE_RVV_BF16_SOURCES
     src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_bf16_qsi8d2p_qai4c2p/tqt_gemm_1xnbias_clamp_bf16_qsi8d2p_qai4c2p_4x1vl_rvv.cpp
 )
 
+# BF16-input GEMM with FP16 output (Zvfbfwma + Zvfhmin, also provided by Zvfh)
+set(TORQ_TILE_RVV_BF16_TO_F16_SOURCES
+    src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f16_bf16_bf16/tqt_gemm_1xnbias_clamp_f16_bf16_bf16_8x1vl_rvv.cpp
+    src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f16_bf16_bf16t/tqt_gemm_1xnbias_clamp_f16_bf16_bf16t_8x1vl_rvv.cpp
+    src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_f16_bf16p_bf16p/tqt_gemm_1xnbias_clamp_f16_bf16p_bf16p_8x1vl_rvv.cpp
+)
+
 # RVV F64 (RISC-V Vector with ELEN >= 64) kernel files
 set(TORQ_TILE_RVV_F64_SOURCES
+    # F64 RVV — dgemm (BLAS-style: D = alpha*A*B + beta*C, no bias/clamp)
     src/gemm/gemm_f64_f64/dgemm_f64_f64_f64/tqt_dgemm_f64_f64_f64_8x3vl_rvv.cpp
     src/gemm/gemm_f64_f64/dgemm_f64_f64_f64t/tqt_dgemm_f64_f64_f64t_8x3vl_rvv.cpp
     src/gemm/gemm_f64_f64/dgemm_f64_f64t_f64/tqt_dgemm_f64_f64t_f64_8x3vl_rvv.cpp
     src/gemm/gemm_f64_f64/dgemm_f64_f64t_f64t/tqt_dgemm_f64_f64t_f64t_8x3vl_rvv.cpp
 )
 
+# GeGLU, SiLU and SwiGLU
 # ============================================================================
 # Collect All Sources Based on Detected Extensions
 # ============================================================================
@@ -300,22 +316,27 @@ set(TORQ_TILE_RVV_F64_SOURCES
 set(TORQ_TILE_ALL_SOURCES "")
 
 # Add RVV sources if detected
-if(TORQ_TILE_ENABLE_RVV)
+if(TORQ_TILE_CAN_COMPILE_RVV)
     list(APPEND TORQ_TILE_ALL_SOURCES ${TORQ_TILE_RVV_SOURCES})
 endif()
 
 # Add RVV FP16 sources if detected
-if(TORQ_TILE_ENABLE_RVV_FP16)
-    list(APPEND TORQ_TILE_ALL_SOURCES ${TORQ_TILE_RVV_FP16_SOURCES})
+if(TORQ_TILE_CAN_COMPILE_RVV AND TORQ_TILE_CAN_COMPILE_RVV_F16)
+    list(APPEND TORQ_TILE_ALL_SOURCES ${TORQ_TILE_RVV_F16_SOURCES})
 endif()
 
 # Add RVV BF16 sources if detected
-if(TORQ_TILE_ENABLE_RVV_BF16)
+if(TORQ_TILE_CAN_COMPILE_RVV AND TORQ_TILE_CAN_COMPILE_RVV_BF16)
     list(APPEND TORQ_TILE_ALL_SOURCES ${TORQ_TILE_RVV_BF16_SOURCES})
 endif()
 
+# Add BF16-input, FP16-output GEMM sources if vector FP16 conversions are available.
+if(TORQ_TILE_CAN_COMPILE_RVV AND TORQ_TILE_CAN_COMPILE_RVV_BF16_TO_F16)
+    list(APPEND TORQ_TILE_ALL_SOURCES ${TORQ_TILE_RVV_BF16_TO_F16_SOURCES})
+endif()
+
 # Add RVV F64 sources if detected
-if(TORQ_TILE_ENABLE_RVV_F64)
+if(TORQ_TILE_CAN_COMPILE_RVV AND TORQ_TILE_CAN_COMPILE_RVV_F64)
     list(APPEND TORQ_TILE_ALL_SOURCES ${TORQ_TILE_RVV_F64_SOURCES})
 endif()
 
@@ -324,6 +345,34 @@ endif()
 # ============================================================================
 
 # Create library
+
+if(NOT TORQ_TILE_ALL_SOURCES)
+    message(FATAL_ERROR
+        "No buildable kernels: check the C++ compiler and target ISA flags.")
+endif()
+
+# Describe complete source groups in the final selection, not compiler macros.
+foreach(feature IN LISTS TORQ_TILE_ISA_GROUPS)
+    set(TORQ_TILE_HAS_${feature} 0)
+    set(missing_sources ${TORQ_TILE_${feature}_SOURCES})
+    list(REMOVE_ITEM missing_sources ${TORQ_TILE_ALL_SOURCES})
+    if(TORQ_TILE_${feature}_SOURCES AND NOT missing_sources)
+        set(TORQ_TILE_HAS_${feature} 1)
+    endif()
+endforeach()
+# Architecture flags describe the presence of any implementation for that backend.
+foreach(backend RVV)
+    string(TOLOWER "${backend}" suffix)
+    set(backend_sources ${TORQ_TILE_ALL_SOURCES})
+    list(FILTER backend_sources INCLUDE REGEX "_${suffix}\\.cpp$")
+    set(TORQ_TILE_HAS_${backend} 0)
+    if(backend_sources)
+        set(TORQ_TILE_HAS_${backend} 1)
+    endif()
+endforeach()
+configure_file(cmake/tqt_compile_config.h.in
+    "${CMAKE_CURRENT_BINARY_DIR}/include/torq_tile/tqt_compile_config.h" @ONLY)
+
 if(TORQ_TILE_BUILD_SHARED)
     add_library(torq_tile SHARED ${TORQ_TILE_ALL_SOURCES})
 else()
@@ -334,6 +383,7 @@ endif()
 target_include_directories(torq_tile
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
         $<INSTALL_INTERFACE:include>
 )
 
@@ -395,6 +445,15 @@ else()
     )
 endif()
 
+# When cross-compiling, CMake's check_symbol_exists may incorrectly conclude that
+# pthread functions live in libc (CMAKE_HAVE_LIBC_PTHREAD=TRUE), causing
+# Threads::Threads to omit -lpthread.  Force the check result so the explicit
+# library is always linked — harmless on toolchains where pthread IS in libc.
+if(CMAKE_CROSSCOMPILING)
+    set(CMAKE_HAVE_LIBC_PTHREAD FALSE CACHE BOOL "" FORCE)
+endif()
+find_package(Threads REQUIRED)
+
 # Add test subdirectory if enabled
 if(TORQ_TILE_BUILD_TEST)
     enable_testing()
@@ -421,26 +480,5 @@ endif()
 # Installation Rules
 # ============================================================================
 
-# Install library target
-install(TARGETS torq_tile
-    EXPORT torq_tile_targets
-    ARCHIVE DESTINATION lib
-    LIBRARY DESTINATION lib
-    RUNTIME DESTINATION bin
-)
-
-# Install header files
-install(DIRECTORY src/
-    DESTINATION include/torq_tile
-    FILES_MATCHING
-    PATTERN "*.h"
-    PATTERN "*.hpp"
-    PATTERN "todo" EXCLUDE
-)
-
-# Install CMake config files
-install(EXPORT torq_tile_targets
-    FILE torq_tile_targets.cmake
-    NAMESPACE torq_tile::
-    DESTINATION lib/cmake/torq_tile
-)
+include(cmake/torq_tile_install.cmake)
+torq_tile_install()

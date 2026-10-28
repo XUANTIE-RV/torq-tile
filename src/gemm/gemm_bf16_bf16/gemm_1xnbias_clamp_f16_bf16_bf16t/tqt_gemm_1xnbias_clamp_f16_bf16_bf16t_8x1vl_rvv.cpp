@@ -4,8 +4,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-#if !defined(__riscv) || !defined(__riscv_v) || !defined(__riscv_zvfbfwma)
-#error This file must be compiled for riscv, riscv_vector, zvfbfwma.
+#if !defined(__riscv) || !defined(__riscv_v) || !defined(__riscv_zvfbfwma) || \
+    (!defined(__riscv_zvfhmin) && !defined(__riscv_zvfh))
+#error This file must be compiled for riscv, riscv_vector, zvfbfwma, and zvfhmin (or zvfh).
 #endif  // Architectural features check.
 
 #include "tqt_gemm_1xnbias_clamp_f16_bf16_bf16t_8x1vl_rvv.h"

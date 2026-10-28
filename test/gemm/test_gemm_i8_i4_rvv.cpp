@@ -11,6 +11,7 @@
 
 #include "src/gemm/gemm_i8_i4/tqt_params_i8_i4.h"
 #include "test/common/gemm_clamp_test_utils.h"
+#include "torq_tile/tqt_compile_config.h"
 
 // --- W4A8 per-channel (qai8dx × qsi4cxt): F32 always; F16/BF16 gated below ---
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f32_qai8dx_qsi4cxt/tqt_gemm_1xnbias_clamp_f32_qai8dx_qsi4cxt_4x1vl_rvv.h"
@@ -31,7 +32,7 @@
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f32_qsi8d2_qai4c2t/tqt_gemm_1xnbias_clamp_f32_qsi8d2_qai4c2t_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f32_qsi8d2p_qai4c2p/tqt_gemm_1xnbias_clamp_f32_qsi8d2p_qai4c2p_4x1vl_rvv.h"
 
-#if defined(__riscv_zfh) && defined(__riscv_zvfh)
+#if TORQ_TILE_HAS_RVV_F16
 // W4A8 per-channel F16
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qai8dx_qsi4cxt/tqt_gemm_1xnbias_clamp_f16_qai8dx_qsi4cxt_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qai8dxp_qsi4cxp/tqt_gemm_1xnbias_clamp_f16_qai8dxp_qsi4cxp_4x1vl_rvv.h"
@@ -42,9 +43,9 @@
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qsi8d2_qsi4c2t/tqt_gemm_1xnbias_clamp_f16_qsi8d2_qsi4c2t_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qsi8d2p_qai4c2p/tqt_gemm_1xnbias_clamp_f16_qsi8d2p_qai4c2p_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qsi8d2p_qsi4c2p/tqt_gemm_1xnbias_clamp_f16_qsi8d2p_qsi4c2p_4x1vl_rvv.h"
-#endif  // __riscv_zfh && __riscv_zvfh
+#endif  // TORQ_TILE_HAS_RVV_F16
 
-#if defined(__riscv_zvfbfwma)
+#if TORQ_TILE_HAS_RVV_BF16
 // W4A8 per-channel BF16
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_bf16_qai8dx_qsi4cxt/tqt_gemm_1xnbias_clamp_bf16_qai8dx_qsi4cxt_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_bf16_qai8dxp_qsi4cxp/tqt_gemm_1xnbias_clamp_bf16_qai8dxp_qsi4cxp_4x1vl_rvv.h"
@@ -55,7 +56,7 @@
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_bf16_qsi8d2_qsi4c2t/tqt_gemm_1xnbias_clamp_bf16_qsi8d2_qsi4c2t_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_bf16_qsi8d2p_qai4c2p/tqt_gemm_1xnbias_clamp_bf16_qsi8d2p_qai4c2p_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_bf16_qsi8d2p_qsi4c2p/tqt_gemm_1xnbias_clamp_bf16_qsi8d2p_qsi4c2p_4x1vl_rvv.h"
-#endif  // __riscv_zvfbfwma
+#endif  // TORQ_TILE_HAS_RVV_BF16
 
 #include "test/common/gemm_test_runner.h"
 #include "test/common/quantized_gemm_test_runner.h"
@@ -119,7 +120,7 @@ static auto common_w4a8_bq_test_values()
 // W4A8 per-channel (qai8dx × qsi4cxt)
 // ============================================================================
 
-#if defined(__riscv_zfh) && defined(__riscv_zvfh)
+#if TORQ_TILE_HAS_RVV_F16
 // ---------- gemm_1xnbias_clamp_f16_qai8dx_qsi4cxt_4x1vl_rvv (a_bt) ----------
 static W4A8GemmFuncs<float16_t> make_gemm_1xnbias_clamp_f16_qai8dx_qsi4cxt_4x1vl_rvv_funcs()
 {
@@ -205,7 +206,7 @@ INSTANTIATE_TEST_SUITE_P(
                           tqt_get_n_step_gemm_1xnbias_clamp_f16_qai8dxp_qsi4cxp_4x1vl_rvv(), 1,
                           true, false),
     GemmTestParamNameGenerator());
-#endif  // __riscv_zfh && __riscv_zvfh
+#endif  // TORQ_TILE_HAS_RVV_F16
 
 // ---------- gemm_1xnbias_clamp_f32_qai8dx_qsi4cxt_4x1vl_rvv (a_bt) ----------
 static W4A8GemmFuncs<float> make_gemm_1xnbias_clamp_f32_qai8dx_qsi4cxt_4x1vl_rvv_funcs()
@@ -357,7 +358,7 @@ INSTANTIATE_TEST_SUITE_P(GemmTests,
                          Test_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp_4x1vl_rvv,
                          common_w4a8_test_values(), GemmTestParamNameGenerator());
 
-#if defined(__riscv_zvfbfwma)
+#if TORQ_TILE_HAS_RVV_BF16
 // ---------- gemm_1xnbias_clamp_bf16_qai8dx_qsi4cxt_4x1vl_rvv (a_bt) ----------
 static W4A8GemmFuncs<bfloat16_t> make_gemm_1xnbias_clamp_bf16_qai8dx_qsi4cxt_4x1vl_rvv_funcs()
 {
@@ -444,7 +445,7 @@ INSTANTIATE_TEST_SUITE_P(
                           tqt_get_n_step_gemm_1xnbias_clamp_bf16_qai8dxp_qsi4cxp_4x1vl_rvv(), 1,
                           true, false),
     GemmTestParamNameGenerator());
-#endif  // __riscv_zvfbfwma
+#endif  // TORQ_TILE_HAS_RVV_BF16
 
 static tqt_qsi8d32_qsi4c32_params make_qsi8d32_qsi4c32_rvv_params(const float *scale_a, size_t ldsa,
                                                                   const float *scale_b, size_t ldsb)
@@ -509,19 +510,19 @@ W4A8_BQ_DEFINE_UNPACKED_TEST(1xnbias_clamp_f32_qai8dx_qsi4c2t, float,
 W4A8_BQ_DEFINE_PACKED_TEST(1xnbias_clamp_f32_qai8dxp_qsi4c2p, float,
                            run_w4a8_bq_qai8dxp_qsi4c2p_test, W4A8BQ_Qai8dx_Qsi4c2_PackedFuncs);
 
-#if defined(__riscv_zfh) && defined(__riscv_zvfh)
+#if TORQ_TILE_HAS_RVV_F16
 W4A8_BQ_DEFINE_UNPACKED_TEST(1xnbias_clamp_f16_qai8dx_qsi4c2t, float16_t,
                              run_w4a8_bq_qai8dx_qsi4c2t_test, W4A8BQ_Qai8dx_Qsi4c2_Funcs);
 W4A8_BQ_DEFINE_PACKED_TEST(1xnbias_clamp_f16_qai8dxp_qsi4c2p, float16_t,
                            run_w4a8_bq_qai8dxp_qsi4c2p_test, W4A8BQ_Qai8dx_Qsi4c2_PackedFuncs);
-#endif  // __riscv_zfh && __riscv_zvfh
+#endif  // TORQ_TILE_HAS_RVV_F16
 
-#if defined(__riscv_zvfbfwma)
+#if TORQ_TILE_HAS_RVV_BF16
 W4A8_BQ_DEFINE_UNPACKED_TEST(1xnbias_clamp_bf16_qai8dx_qsi4c2t, bfloat16_t,
                              run_w4a8_bq_qai8dx_qsi4c2t_test, W4A8BQ_Qai8dx_Qsi4c2_Funcs);
 W4A8_BQ_DEFINE_PACKED_TEST(1xnbias_clamp_bf16_qai8dxp_qsi4c2p, bfloat16_t,
                            run_w4a8_bq_qai8dxp_qsi4c2p_test, W4A8BQ_Qai8dx_Qsi4c2_PackedFuncs);
-#endif  // __riscv_zvfbfwma
+#endif  // TORQ_TILE_HAS_RVV_BF16
 
 // ============================================================================
 // W4A8 block-quantized — Class 2: qsi8d2 × qsi4c2 (F32 always; F16/BF16 gated)
@@ -532,19 +533,19 @@ W4A8_BQ_DEFINE_UNPACKED_TEST(1xnbias_clamp_f32_qsi8d2_qsi4c2t, float,
 W4A8_BQ_DEFINE_PACKED_TEST(1xnbias_clamp_f32_qsi8d2p_qsi4c2p, float,
                            run_w4a8_bq_qsi8d2p_qsi4c2p_test, W4A8BQ_Qsi8d2_Qsi4c2_PackedFuncs);
 
-#if defined(__riscv_zfh) && defined(__riscv_zvfh)
+#if TORQ_TILE_HAS_RVV_F16
 W4A8_BQ_DEFINE_UNPACKED_TEST(1xnbias_clamp_f16_qsi8d2_qsi4c2t, float16_t,
                              run_w4a8_bq_qsi8d2_qsi4c2t_test, W4A8BQ_Qsi8d2_Qsi4c2_Funcs);
 W4A8_BQ_DEFINE_PACKED_TEST(1xnbias_clamp_f16_qsi8d2p_qsi4c2p, float16_t,
                            run_w4a8_bq_qsi8d2p_qsi4c2p_test, W4A8BQ_Qsi8d2_Qsi4c2_PackedFuncs);
-#endif  // __riscv_zfh && __riscv_zvfh
+#endif  // TORQ_TILE_HAS_RVV_F16
 
-#if defined(__riscv_zvfbfwma)
+#if TORQ_TILE_HAS_RVV_BF16
 W4A8_BQ_DEFINE_UNPACKED_TEST(1xnbias_clamp_bf16_qsi8d2_qsi4c2t, bfloat16_t,
                              run_w4a8_bq_qsi8d2_qsi4c2t_test, W4A8BQ_Qsi8d2_Qsi4c2_Funcs);
 W4A8_BQ_DEFINE_PACKED_TEST(1xnbias_clamp_bf16_qsi8d2p_qsi4c2p, bfloat16_t,
                            run_w4a8_bq_qsi8d2p_qsi4c2p_test, W4A8BQ_Qsi8d2_Qsi4c2_PackedFuncs);
-#endif  // __riscv_zvfbfwma
+#endif  // TORQ_TILE_HAS_RVV_BF16
 
 // ============================================================================
 // W4A8 block-quantized — Class 3: qsi8d2 × qai4c2 (F32 always; F16/BF16 gated)
@@ -555,16 +556,16 @@ W4A8_BQ_DEFINE_UNPACKED_TEST(1xnbias_clamp_f32_qsi8d2_qai4c2t, float,
 W4A8_BQ_DEFINE_PACKED_TEST(1xnbias_clamp_f32_qsi8d2p_qai4c2p, float,
                            run_w4a8_bq_qsi8d2p_qai4c2p_test, W4A8BQ_Qsi8d2_Qai4c2_PackedFuncs);
 
-#if defined(__riscv_zfh) && defined(__riscv_zvfh)
+#if TORQ_TILE_HAS_RVV_F16
 W4A8_BQ_DEFINE_UNPACKED_TEST(1xnbias_clamp_f16_qsi8d2_qai4c2t, float16_t,
                              run_w4a8_bq_qsi8d2_qai4c2t_test, W4A8BQ_Qsi8d2_Qai4c2_Funcs);
 W4A8_BQ_DEFINE_PACKED_TEST(1xnbias_clamp_f16_qsi8d2p_qai4c2p, float16_t,
                            run_w4a8_bq_qsi8d2p_qai4c2p_test, W4A8BQ_Qsi8d2_Qai4c2_PackedFuncs);
-#endif  // __riscv_zfh && __riscv_zvfh
+#endif  // TORQ_TILE_HAS_RVV_F16
 
-#if defined(__riscv_zvfbfwma)
+#if TORQ_TILE_HAS_RVV_BF16
 W4A8_BQ_DEFINE_UNPACKED_TEST(1xnbias_clamp_bf16_qsi8d2_qai4c2t, bfloat16_t,
                              run_w4a8_bq_qsi8d2_qai4c2t_test, W4A8BQ_Qsi8d2_Qai4c2_Funcs);
 W4A8_BQ_DEFINE_PACKED_TEST(1xnbias_clamp_bf16_qsi8d2p_qai4c2p, bfloat16_t,
                            run_w4a8_bq_qsi8d2p_qai4c2p_test, W4A8BQ_Qsi8d2_Qai4c2_PackedFuncs);
-#endif  // __riscv_zvfbfwma
+#endif  // TORQ_TILE_HAS_RVV_BF16

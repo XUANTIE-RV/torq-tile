@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import re
+import resource
 import shlex
 import sys
 import tempfile
@@ -25,13 +26,14 @@ import compilation
 import initialization
 import installation
 import incremental
+import runtime
 from common import Context, HERE, SUITES, lto_flags, within, write_json
 
 
 def main():
     parser = argparse.ArgumentParser(prog="scripts/compile_isolation/check.py",
         usage="%(prog)s [--quick | --full | --profile NAME] [options]",
-        description="Compile-time ISA isolation checks; no target execution.",
+        description="ISA isolation checks with optional freestanding runtime execution.",
         epilog="Examples:\n"
                "  python3 %(prog)s\n"
                "  time python3 %(prog)s --full -j8\n"
@@ -55,6 +57,9 @@ def main():
     basic.add_argument("--probe-filter", default=".", help="regex on probe names only; marks the run as filtered")
     basic.add_argument("--source-filter", default=".",
                        help="regex for source-compile/global-init; installation stays complete")
+    basic.add_argument("--build-type", choices=("Debug", "Release"), default="Release")
+    basic.add_argument("--freestanding", choices=("AUTO", "ON", "OFF"), default="AUTO",
+                       help="core environment; ON also applies to standalone probes")
     toolchain = parser.add_argument_group("Toolchain (executables must be on PATH or absolute paths)")
     toolchain.add_argument("--cc", default="riscv64-unknown-linux-gnu-gcc", help="C compiler (default: %(default)s)")
     toolchain.add_argument("--cxx", default="riscv64-unknown-linux-gnu-g++", help="C++ compiler (default: %(default)s)")
@@ -69,11 +74,16 @@ def main():
     advanced.add_argument("--cmake-arg", action="append", default=[], help="extra CMake argument; use --cmake-arg=-D...")
     advanced.add_argument("--timeout", type=int, default=300, help="per-command timeout in seconds (default: %(default)s)")
     advanced.add_argument("--readelf", default="readelf")
+    advanced.add_argument("--qemu", help="optional RISC-V runner for runtime-contract executables")
+    advanced.add_argument("--qemu-cpu", default="rv64", help="baseline CPU for runtime-contract")
     advanced.add_argument("--output-dir", type=Path, help="new output directory; logs/builds/install prefixes are retained")
     advanced.add_argument("--source-root", type=Path, default=HERE.parent.parent)
     advanced.add_argument("--allow-skip", action="store_true", help="exploration only: permit SKIP exit status 0")
     advanced.add_argument("-v", "--verbose", action="store_true", help="print every PASS (failures always print)")
     args = parser.parse_args()
+    if args.qemu:
+        # Expected assertion traps must not leave guest/host core dumps behind.
+        resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     try:
         profiles = json.loads(args.profiles_file.read_text())
         presets = json.loads((HERE / "presets.json").read_text())
@@ -233,12 +243,15 @@ def main():
                     continue
                 if not entries:
                     continue
-                if "source-compile" in suites or "global-init" in suites:
+                if suites & {"source-compile", "global-init", "runtime-contract"}:
                     with checker.stage(name, "source-compile"):
                         objects = compilation.sources(checker, name, entries)
                     if "global-init" in suites:
                         with checker.stage(name, "global-init"):
                             initialization.run(checker, name, objects)
+                    if "runtime-contract" in suites:
+                        with checker.stage(name, "runtime-contract"):
+                            runtime.run(checker, name, flags, entries, objects)
                 control_entries = None
                 if "cmake-config" in suites:
                     with checker.stage(name, "cmake-config"):

@@ -12,7 +12,8 @@ import re
 import shlex
 import shutil
 
-from common import LICENSE, source_path, within, write_json
+from common import HERE, LICENSE, source_path, within, write_json
+import runtime
 
 
 def relocated_library(path, prefix):
@@ -137,31 +138,42 @@ def run(ctx, name, entries):
     for index, symbol in enumerate(sorted(symbols)):
         lines.append(f"auto *volatile reference_{index} = &{symbol};")
         c_lines.append(f"void (*volatile reference_{index})(void) = (void (*)(void))&{symbol};")
-    lines.append("int main() { return 0; }")
+    lines.append('extern "C" int main() { return 0; }')
     c_lines.append("int main(void) { return 0; }")
     consumer = directory / "consumer.cpp"
     consumer.write_text("\n".join(lines) + "\n")
-    code, _ = ctx.command(directory, "direct-link", [ctx.cxx, *ctx.extra, *ctx.cxx_extra, *low,
-                          "-std=c++17", "-I", str(include_root), str(consumer),
-                          str(library), "-lm",
-                          "-o", str(directory / "consumer")])
-    ctx.record(f"{name}/install-package/direct-link", "PASS" if not code and symbols else "FAIL",
-                f"{len(symbols)} public function references; inspect direct-link.log", directory)
     c_consumer = directory / "consumer.c"
     c_consumer.write_text("\n".join(c_lines) + "\n")
-    c_directory = directory / "c-consumer"
-    code, _ = ctx.compile(c_directory, c_consumer, low, "c", include_root)
-    if not code:
-        code, _ = ctx.command(c_directory, "link", [ctx.cxx, *ctx.extra, *ctx.cxx_extra, *low,
-                              str(c_directory / "probe.o"), str(library),
-                              "-lm", "-o", str(c_directory / "consumer")])
-    ctx.record(f"{name}/install-package/c-direct-link", "PASS" if not code and symbols else "FAIL",
-               f"{len(symbols)} C declarations linked with the C++ runtime", c_directory)
+    free = runtime.is_freestanding(build)
+    if free:
+        for case, source in (("direct-link", consumer), ("c-direct-link", c_consumer)):
+            target = directory / case
+            executable = runtime.minimal_link(ctx, target, [source], low, library, include_root)
+            if not executable or not symbols:
+                ctx.record(f"{name}/install-package/{case}", "FAIL", "minimal C-driver link failed", target)
+            else:
+                runtime.inspect_elf(ctx, f"{name}/install-package/{case}", target, executable)
+                if ctx.args.qemu:
+                    runtime.execute(ctx, f"{name}/install-package/{case}/load", target, executable)
+    else:
+        code, _ = ctx.command(directory, "direct-link", [ctx.cxx, *ctx.extra, *ctx.cxx_extra, *low,
+                              "-std=c++17", "-I", str(include_root), str(consumer),
+                              str(library), "-lm", "-o", str(directory / "consumer")])
+        ctx.record(f"{name}/install-package/direct-link", "PASS" if not code and symbols else "FAIL",
+                    f"{len(symbols)} public function references; inspect direct-link.log", directory)
+        c_directory = directory / "c-consumer"
+        code, _ = ctx.compile(c_directory, c_consumer, low, "c", include_root)
+        if not code:
+            code, _ = ctx.command(c_directory, "link", [ctx.cxx, *ctx.extra, *ctx.cxx_extra, *low,
+                                  str(c_directory / "probe.o"), str(library),
+                                  "-lm", "-o", str(c_directory / "consumer")])
+        ctx.record(f"{name}/install-package/c-direct-link", "PASS" if not code and symbols else "FAIL",
+                   f"{len(symbols)} C declarations linked with the C++ runtime", c_directory)
     cmake_source = directory / "cmake-consumer"
     cmake_source.mkdir()
     shutil.copy2(consumer, cmake_source / "consumer.cpp")
     shutil.copy2(c_consumer, cmake_source / "consumer.c")
-    (cmake_source / "CMakeLists.txt").write_text(
+    cmake_content = (
         'cmake_minimum_required(VERSION 3.16)\nproject(consumer LANGUAGES C CXX)\n'
         'set(CMAKE_CXX_STANDARD 17)\n'
         'find_package(torq_tile CONFIG REQUIRED NO_DEFAULT_PATH PATHS "${CHECK_PREFIX}")\n'
@@ -171,6 +183,20 @@ def run(ctx, name, entries):
         'target_link_libraries(consumer PRIVATE torq_tile::torq_tile)\n'
         'add_executable(c_consumer consumer.c)\n'
         'target_link_libraries(c_consumer PRIVATE torq_tile::torq_tile)\n')
+    if free:
+        for fixture in ("runtime_memory.c", "runtime_start.S"):
+            shutil.copy2(HERE / fixture, cmake_source / fixture)
+        cmake_content += (
+            'enable_language(ASM)\n'
+            'get_target_property(core_links torq_tile::torq_tile INTERFACE_LINK_LIBRARIES)\n'
+            'file(WRITE "${CMAKE_BINARY_DIR}/core-link-interface.txt" "${core_links}\\n")\n'
+            'set_source_files_properties(runtime_memory.c PROPERTIES COMPILE_OPTIONS "-ffreestanding;-fno-builtin")\n'
+            'foreach(target consumer c_consumer)\n'
+            '  target_sources(${target} PRIVATE runtime_memory.c runtime_start.S)\n'
+            '  target_link_options(${target} PRIVATE -nostdlib -static -no-pie -Wl,-e,_start)\n'
+            '  target_link_libraries(${target} PRIVATE gcc)\n'
+            'endforeach()\n')
+    (cmake_source / "CMakeLists.txt").write_text(cmake_content)
     consumer_build = directory / "cmake-build"
     code, _ = ctx.command(directory, "consumer-configure", ["cmake", "-S", str(cmake_source),
                           "-B", str(consumer_build), f"-DCMAKE_CXX_COMPILER={ctx.cxx}",
@@ -209,5 +235,18 @@ def run(ctx, name, entries):
         write_json(directory / "consumer-include-leaks.json", invalid)
         if invalid:
             code = 1
+    if not code and free:
+        interface = (consumer_build / "core-link-interface.txt").read_text().strip()
+        if interface and interface != "core_links-NOTFOUND":
+            ctx.record(f"{name}/install-package/runtime-interface", "FAIL",
+                       f"unexpected exported runtime dependencies: {interface}", directory)
+            code = 1
+        else:
+            ctx.record(f"{name}/install-package/runtime-interface", "PASS",
+                       "no exported hosted runtime dependencies", directory)
+        for target in ("consumer", "c_consumer"):
+            if not runtime.inspect_elf(ctx, f"{name}/install-package/{target}/elf",
+                                       directory / target, consumer_build / target):
+                code = 1
     ctx.record(f"{name}/install-package/cmake-consumer", "PASS" if not code else "FAIL",
                 "relocated find_package and link" if not code else "inspect consumer logs", directory)

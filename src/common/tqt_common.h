@@ -6,15 +6,20 @@
 
 #pragma once
 
-#include <assert.h>
 #include <float.h>
-#include <math.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#include "src/common/tqt_runtime.h"
+
+#if !TORQ_TILE_FREESTANDING
+#include <assert.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#endif
 
 #if defined(__riscv_vector)
 #include <riscv_vector.h>
@@ -53,7 +58,11 @@ typedef uint8_t float8_e5m2_t;
 typedef uint8_t float8_e8m0_t;
 
 #ifndef TORQ_TILE_ERROR_TRAP
-#define TORQ_TILE_ERROR_TRAP 0
+#define TORQ_TILE_ERROR_TRAP TORQ_TILE_FREESTANDING
+#endif
+
+#if TORQ_TILE_FREESTANDING && TORQ_TILE_ERROR_TRAP != 1
+#error Freestanding builds require TORQ_TILE_ERROR_TRAP=1.
 #endif
 
 #ifndef TORQ_TILE_HAS_BUILTIN_UNREACHABLE
@@ -78,20 +87,13 @@ typedef uint8_t float8_e8m0_t;
 #define TQT_UNREACHABLE()
 #endif
 
-#ifdef NDEBUG
+#if defined(NDEBUG) || TORQ_TILE_FREESTANDING
 #define TQT_ERROR(msg)   \
     do {                 \
         TQT_UNUSED(msg); \
         TQT_ABORT();     \
     } while (0)
 
-#define TQT_ASSERT_MSG(cond, msg) \
-    do {                          \
-        TQT_UNUSED(msg);          \
-        if (!(cond)) {            \
-            TQT_UNREACHABLE();    \
-        }                         \
-    } while (0)
 #else
 #define TQT_ERROR(msg)                                          \
     do {                                                        \
@@ -100,8 +102,28 @@ typedef uint8_t float8_e8m0_t;
         TQT_ABORT();                                            \
     } while (0)
 
+#endif
+
+#ifdef NDEBUG
+#define TQT_ASSERT_MSG(cond, msg) \
+    do {                          \
+        TQT_UNUSED(msg);          \
+        if (!(cond)) {            \
+            TQT_UNREACHABLE();    \
+        }                         \
+    } while (0)
+#else
 #define TQT_ASSERT_MSG(cond, msg) TQT_ASSERT_ALWAYS_MSG(cond, msg)
-#endif  // NDEBUG
+#endif
+
+// Unlike TQT_ASSUME, standard assert does not evaluate its condition in Release.
+#if !TORQ_TILE_FREESTANDING
+#define TQT_DEBUG_ASSERT(cond) assert(cond)
+#elif defined(NDEBUG)
+#define TQT_DEBUG_ASSERT(cond) ((void)0)
+#else
+#define TQT_DEBUG_ASSERT(cond) TQT_ASSERT_ALWAYS(cond)
+#endif
 
 #define TQT_ASSERT_ALWAYS_MSG(cond, msg) \
     do {                                 \
@@ -152,13 +174,30 @@ static inline int csrr_vlenb(void)
     asm volatile("csrr %0, vlenb" : "=r"(a) : : "memory");
     return a;
 }
+
+#ifdef __cplusplus
+// Cache per translation unit in hosted code; read on demand in freestanding code.
+static inline size_t tqt_get_vlenb(void)
+{
+#if TORQ_TILE_FREESTANDING
+    return csrr_vlenb();
+#else
+    static const size_t value = csrr_vlenb();
+    return value;
+#endif
+}
+#endif
 #endif
 
 /// Return whether the caller requested floating-point output clamping.
 /// Evaluate the original public bounds before any narrowing conversion.
 static inline bool tqt_clamp_is_enabled(float clamp_min, float clamp_max)
 {
+#if TORQ_TILE_FREESTANDING
+    return clamp_min != -__builtin_inff() || clamp_max != __builtin_inff();
+#else
     return clamp_min != -INFINITY || clamp_max != INFINITY;
+#endif
 }
 
 #ifdef __cplusplus

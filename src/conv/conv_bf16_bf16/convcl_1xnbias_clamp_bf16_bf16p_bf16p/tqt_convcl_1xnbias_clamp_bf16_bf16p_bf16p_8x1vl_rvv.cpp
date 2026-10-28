@@ -10,7 +10,11 @@
 
 #include "tqt_convcl_1xnbias_clamp_bf16_bf16p_bf16p_8x1vl_rvv.h"
 
+#include "src/common/tqt_runtime.h"
+
+#if !TORQ_TILE_FREESTANDING
 #include <stdlib.h>
+#endif
 
 #include "src/gemm/gemm_bf16_bf16/gemm_1xnbias_clamp_bf16_bf16p_bf16p/tqt_gemm_1xnbias_clamp_bf16_bf16p_bf16p_8x1vl_rvv.h"
 

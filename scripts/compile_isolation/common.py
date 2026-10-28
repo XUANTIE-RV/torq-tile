@@ -21,7 +21,7 @@ import time
 
 
 HERE = Path(__file__).resolve().parent
-SUITES = ("compile-probes", "source-selection", "source-compile", "global-init", "cmake-config", "install-package", "install-incremental")
+SUITES = ("compile-probes", "source-selection", "source-compile", "global-init", "runtime-contract", "cmake-config", "install-package", "install-incremental")
 LICENSE = """//
 // SPDX-FileCopyrightText: Copyright 2024-2026 C-SKY Microsystems Co., Ltd.
 //
@@ -79,7 +79,16 @@ class Context:
     def configuration_key(self, flags):
         # Reuse only validated, fresh configurations in this invocation and source tree.
         return (str(self.root), self.cc, self.cxx, tuple(self.extra), tuple(self.c_extra),
-                tuple(self.cxx_extra), tuple(flags), tuple(self.args.cmake_arg))
+                tuple(self.cxx_extra), tuple(flags), tuple(self.args.cmake_arg),
+                self.args.build_type, self.args.freestanding)
+
+    def probe_options(self, language):
+        options = ["-O0", "-g"] if self.args.build_type == "Debug" else ["-O2", "-DNDEBUG"]
+        if self.args.freestanding == "ON":
+            options.append("-ffreestanding")
+            if language == "c++":
+                options += ["-fno-exceptions", "-fno-rtti"]
+        return options
 
 
     def record(self, case, status, detail, directory):
@@ -197,7 +206,7 @@ class Context:
         lang_flags = self.cxx_extra if language == "c++" else self.c_extra
         return self.command(directory, "compile", [compiler, *self.extra, *lang_flags, *flags,
                             "-std=c++17" if language == "c++" else "-std=gnu11",
-                            "-O2", "-fno-lto", *extra,
+                            *self.probe_options(language), "-fno-lto", *extra,
                             *(["-I", str(include)] if include else []),
                             "-c", str(source), "-o", str(directory / "probe.o")])
 
@@ -222,6 +231,7 @@ class Context:
             extra = self.c_extra if language == "c" else self.cxx_extra
             code, log = self.command(subdir, "macros", [compiler, *self.extra, *extra, *flags,
                                                        "-std=c++17" if language == "c++" else "-std=gnu11",
+                                                       *self.probe_options(language),
                                                        "-dM", "-E", str(source)])
             if code:
                 self.record(f"{name}/toolchain/{suffix}", "SKIP", "macro dump failed", subdir)
@@ -239,18 +249,22 @@ class Context:
         return macros["c++"]
 
 
-    def configure(self, directory, flags, options=(), c_flags=None, source_root=None):
+    def configure(self, directory, flags, options=(), c_flags=None, source_root=None,
+                  generator="Unix Makefiles"):
         directory.mkdir(parents=True, exist_ok=True)
         return self.command(directory, "configure", ["cmake", "-S", str(source_root or self.root),
-                            "-B", str(directory), "-G", "Unix Makefiles",
+                            "-B", str(directory), "-G", generator,
                             "-DCMAKE_SYSTEM_NAME=Linux", "-DCMAKE_SYSTEM_PROCESSOR=riscv64",
                             f"-DCMAKE_C_COMPILER={self.cc}", f"-DCMAKE_CXX_COMPILER={self.cxx}",
-                            "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+                            f"-DCMAKE_BUILD_TYPE={self.args.build_type}", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
                             "-DCMAKE_C_FLAGS=" + shlex.join(self.extra + self.c_extra +
                                                           (flags if c_flags is None else c_flags)),
                             "-DCMAKE_CXX_FLAGS=" + shlex.join(self.extra + self.cxx_extra + flags),
                             "-DCMAKE_C_FLAGS_RELEASE=-O2 -DNDEBUG",
                             "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -DNDEBUG",
+                            "-DCMAKE_C_FLAGS_DEBUG=-O0 -g", "-DCMAKE_CXX_FLAGS_DEBUG=-O0 -g",
+                            f"-DTORQ_TILE_FREESTANDING={self.args.freestanding}",
+                            "-DCMAKE_EXPORT_NO_PACKAGE_REGISTRY=ON",
                             "-DTORQ_TILE_BUILD_TEST=OFF", "-DTORQ_TILE_BUILD_BENCHMARK=OFF",
                             *self.args.cmake_arg, *options])
 

@@ -14,12 +14,6 @@
 #include "src/conv/igemm_f32_f32/tqt_kernel_igemm_f32_f32_8x3vl_rvv.h"
 #include "src/gemm/gemm_f32_f32/tqt_kernel_gemm_f32_f32_8x3vl_rvv.h"
 
-static inline size_t get_vlenb()
-{
-    static const size_t value = csrr_vlenb();
-    return value;
-}
-
 static inline size_t get_vlmax(size_t vlenb)
 {
     return vlenb / sizeof(float);
@@ -43,7 +37,7 @@ size_t tqt_get_m_step_igemmcl_1xnbias_clamp_f32_f32_f32t_8x3vl_rvv(void)
 
 size_t tqt_get_n_step_igemmcl_1xnbias_clamp_f32_f32_f32t_8x3vl_rvv(void)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = get_n_step(VLENB);
 
     return n_step;
@@ -52,7 +46,7 @@ size_t tqt_get_n_step_igemmcl_1xnbias_clamp_f32_f32_f32t_8x3vl_rvv(void)
 size_t tqt_get_b_offset_igemmcl_1xnbias_clamp_f32_f32_f32t_8x3vl_rvv(size_t n_idx, size_t k_idx,
                                                                      size_t ldb)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = get_n_step(VLENB);
 
     TQT_ASSUME(n_idx % n_step == 0);
@@ -62,7 +56,7 @@ size_t tqt_get_b_offset_igemmcl_1xnbias_clamp_f32_f32_f32t_8x3vl_rvv(size_t n_id
 size_t tqt_get_c_offset_igemmcl_1xnbias_clamp_f32_f32_f32t_8x3vl_rvv(size_t m_idx, size_t n_idx,
                                                                      size_t ldc)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = get_n_step(VLENB);
 
     TQT_ASSUME(n_idx % n_step == 0);
@@ -71,7 +65,7 @@ size_t tqt_get_c_offset_igemmcl_1xnbias_clamp_f32_f32_f32t_8x3vl_rvv(size_t m_id
 
 size_t tqt_get_bias_offset_igemmcl_1xnbias_clamp_f32_f32_f32t_8x3vl_rvv(size_t n_idx)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = get_n_step(VLENB);
 
     TQT_ASSUME(n_idx % n_step == 0);
@@ -81,7 +75,7 @@ size_t tqt_get_bias_offset_igemmcl_1xnbias_clamp_f32_f32_f32t_8x3vl_rvv(size_t n
 size_t tqt_get_d_offset_igemmcl_1xnbias_clamp_f32_f32_f32t_8x3vl_rvv(size_t m_idx, size_t n_idx,
                                                                      size_t ldd)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = get_n_step(VLENB);
 
     TQT_ASSUME(n_idx % n_step == 0);
@@ -241,7 +235,7 @@ void tqt_run_igemm_igemmcl_1xnbias_clamp_f32_f32_f32t_8x3vl_rvv(
     const void *B, size_t ldb, size_t k_idx_b, const void *C, size_t ldc, void *D, size_t ldd,
     const void *bias, float clamp_min, float clamp_max, const tqt_conv_params *params)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t vlmax = get_vlmax(VLENB);
     const size_t n_step = get_n_step(VLENB);
 

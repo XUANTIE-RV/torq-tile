@@ -15,12 +15,6 @@
 #include "src/gemm/gemm_i8_i8/tqt_kernel_gemm_i8_i8_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i8/tqt_utils_i8_i8.h"
 
-static inline size_t get_vlenb()
-{
-    static const size_t value = csrr_vlenb();
-    return value;
-}
-
 static const size_t m_step = 4;
 
 // ============================================================================
@@ -34,7 +28,7 @@ size_t tqt_get_m_step_gemm_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8p_4x1vl_rvv
 
 size_t tqt_get_n_step_gemm_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8p_4x1vl_rvv(void)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = VLENB;
 
     return n_step;
@@ -50,7 +44,7 @@ size_t tqt_get_a_packed_offset_gemm_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8p_
 size_t tqt_get_b_packed_offset_gemm_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8p_4x1vl_rvv(
     size_t n_idx, size_t k_idx, size_t ldb, size_t actual_n)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = VLENB;
 
     TQT_ASSUME(n_idx % n_step == 0);
@@ -61,7 +55,7 @@ size_t tqt_get_c_offset_gemm_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8p_4x1vl_r
                                                                                    size_t n_idx,
                                                                                    size_t ldc)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = VLENB;
 
     TQT_ASSUME(m_idx % m_step == 0);
@@ -79,7 +73,7 @@ size_t tqt_get_d_offset_gemm_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8p_4x1vl_r
                                                                                    size_t n_idx,
                                                                                    size_t ldd)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = VLENB;
 
     TQT_ASSUME(m_idx % m_step == 0);
@@ -194,7 +188,7 @@ void tqt_run_gemm_mx1bias_reqi32toi8_clamp_qai8_qsi8dxp_qai8p_4x1vl_rvv(
     size_t ldd, const void *bias, int8_t clamp_min, int8_t clamp_max,
     const struct tqt_qai8_qsi8dx_qai8_params *params)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = VLENB;
 
     if (!params) {

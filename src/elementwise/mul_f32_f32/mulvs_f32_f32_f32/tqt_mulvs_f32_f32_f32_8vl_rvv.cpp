@@ -12,12 +12,6 @@
 
 #include "src/common/tqt_common.h"
 
-static inline size_t get_vlenb()
-{
-    static const size_t value = csrr_vlenb();
-    return value;
-}
-
 static inline size_t get_vlmax(size_t vlenb)
 {
     return vlenb / sizeof(float);
@@ -30,7 +24,7 @@ static inline size_t get_n_step(size_t vlenb)
 
 size_t tqt_get_n_step_mulvs_f32_f32_f32_8vl_rvv(void)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = get_n_step(VLENB);
 
     return n_step;

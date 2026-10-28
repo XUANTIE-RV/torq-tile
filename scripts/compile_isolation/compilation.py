@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import shlex
 import shutil
+import runtime
 
 from common import HERE, LICENSE, lto_flags, source_path, write_json
 
@@ -236,4 +237,5 @@ def policy(ctx, name, flags, macros, base_entries, share_downgrade=False):
                     "requires a higher-ISA profile" if not meaningful and not code and actual == comparison else
                     f"compared with matching C++ flags: {len(actual - comparison)} extra, {len(comparison - actual)} missing",
                     directory)
+    runtime.configuration(ctx, name, flags, base_entries)
     return control_entries

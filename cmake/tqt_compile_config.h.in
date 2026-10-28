@@ -12,6 +12,9 @@
 // These values describe the matching library after a successful build, not the
 // consumer compiler's ISA/type support or the runtime CPU's capabilities.
 // Always test these 0/1 values with #if, not #ifdef.
+// Binary build fact; does not select the consumer's compilation environment.
+#cmakedefine01 TORQ_TILE_BUILT_FREESTANDING
+
 #cmakedefine01 TORQ_TILE_HAS_RVV
 #cmakedefine01 TORQ_TILE_HAS_RVV_F16
 #cmakedefine01 TORQ_TILE_HAS_RVV_BF16

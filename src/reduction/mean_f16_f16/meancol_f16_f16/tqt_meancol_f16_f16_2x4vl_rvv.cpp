@@ -12,12 +12,6 @@
 
 #include "src/common/tqt_common.h"
 
-static inline size_t get_vlenb()
-{
-    static const size_t value = csrr_vlenb();
-    return value;
-}
-
 static inline size_t get_vlmax(size_t vlenb)
 {
     return vlenb / sizeof(float);
@@ -41,7 +35,7 @@ size_t tqt_get_m_step_meancol_f16_f16_2x4vl_rvv(void)
 
 size_t tqt_get_n_step_meancol_f16_f16_2x4vl_rvv(void)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = get_n_step(VLENB);
 
     return n_step;
@@ -157,7 +151,7 @@ static constexpr meancol_kernel_fn_t kernel_table[2] = {
 void tqt_run_meancol_f16_f16_2x4vl_rvv(size_t m, size_t n, const void *a_ptr, size_t lda,
                                        void *c_ptr, const void *init_ptr)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t vlmax = get_vlmax(VLENB);
     const size_t n_step = get_n_step(VLENB);
 

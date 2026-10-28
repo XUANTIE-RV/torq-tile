@@ -7,7 +7,11 @@
 #pragma once
 
 #include <stddef.h>
+
+#include "src/common/tqt_runtime.h"
+#if !TORQ_TILE_FREESTANDING
 #include <string.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -184,11 +188,11 @@ static inline void tqt_im2col_cl(size_t group_idx, const void *activation, void 
                                     ((size_t)id_in * IH * IW + (size_t)ih_in * IW + (size_t)iw_in) *
                                         C_total +
                                     c_offset;
-                                memcpy(&col[col_row * K_col + col_col], src,
-                                       IC_per_group * sizeof(T));
+                                TQT_MEMCPY(&col[col_row * K_col + col_col], src,
+                                           IC_per_group * sizeof(T));
                             } else {
-                                memset(&col[col_row * K_col + col_col], 0,
-                                       IC_per_group * sizeof(T));
+                                TQT_MEMSET(&col[col_row * K_col + col_col], 0,
+                                           IC_per_group * sizeof(T));
                             }
                             col_col += IC_per_group;
                         }

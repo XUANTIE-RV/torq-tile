@@ -13,12 +13,6 @@
 #include "src/common/tqt_common.h"
 #include "src/gemm/gemm_f64_f64/tqt_kernel_dgemm_f64_f64_8x3vl_rvv.h"
 
-static inline size_t get_vlenb()
-{
-    static const size_t value = csrr_vlenb();
-    return value;
-}
-
 static inline size_t get_vlmax(size_t vlenb)
 {
     return vlenb / sizeof(double);
@@ -42,7 +36,7 @@ size_t tqt_get_m_step_dgemm_f64_f64t_f64t_8x3vl_rvv(void)
 
 size_t tqt_get_n_step_dgemm_f64_f64t_f64t_8x3vl_rvv(void)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = get_n_step(VLENB);
 
     return n_step;
@@ -56,7 +50,7 @@ size_t tqt_get_a_offset_dgemm_f64_f64t_f64t_8x3vl_rvv(size_t m_idx, size_t k_idx
 
 size_t tqt_get_b_offset_dgemm_f64_f64t_f64t_8x3vl_rvv(size_t n_idx, size_t k_idx, size_t ldb)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = get_n_step(VLENB);
 
     TQT_ASSUME(n_idx % n_step == 0);
@@ -65,7 +59,7 @@ size_t tqt_get_b_offset_dgemm_f64_f64t_f64t_8x3vl_rvv(size_t n_idx, size_t k_idx
 
 size_t tqt_get_c_offset_dgemm_f64_f64t_f64t_8x3vl_rvv(size_t m_idx, size_t n_idx, size_t ldc)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = get_n_step(VLENB);
 
     TQT_ASSUME(m_idx % m_step == 0);
@@ -75,7 +69,7 @@ size_t tqt_get_c_offset_dgemm_f64_f64t_f64t_8x3vl_rvv(size_t m_idx, size_t n_idx
 
 size_t tqt_get_d_offset_dgemm_f64_f64t_f64t_8x3vl_rvv(size_t m_idx, size_t n_idx, size_t ldd)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = get_n_step(VLENB);
 
     TQT_ASSUME(m_idx % m_step == 0);
@@ -195,7 +189,7 @@ void tqt_run_dgemm_f64_f64t_f64t_8x3vl_rvv(size_t m, size_t n, size_t k, const v
                                            size_t k_idx_b, const void *C, size_t ldc, void *D,
                                            size_t ldd, double alpha, double beta)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t vlmax = get_vlmax(VLENB);
     const size_t n_step = get_n_step(VLENB);
 

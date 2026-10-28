@@ -16,12 +16,6 @@
 #include "src/common/tqt_gemm_pack_rvv.h"
 #include "src/gemm/gemm_i8_u4/tqt_kernel_gemm_qsi8d256_qau4c32_4x1vl_rvv.h"
 
-static inline size_t get_vlenb()
-{
-    static const size_t value = csrr_vlenb();
-    return value;
-}
-
 static const size_t m_step = 4;
 
 size_t tqt_get_m_step_gemm_1xnbias_clamp_f32_qsi8d256p_qau4c32p_4x1vl_rvv(void)
@@ -31,7 +25,7 @@ size_t tqt_get_m_step_gemm_1xnbias_clamp_f32_qsi8d256p_qau4c32p_4x1vl_rvv(void)
 
 size_t tqt_get_n_step_gemm_1xnbias_clamp_f32_qsi8d256p_qau4c32p_4x1vl_rvv(void)
 {
-    const size_t n_step = get_vlenb();
+    const size_t n_step = tqt_get_vlenb();
 
     return n_step;
 }
@@ -49,7 +43,7 @@ size_t tqt_get_b_packed_offset_gemm_1xnbias_clamp_f32_qsi8d256p_qau4c32p_4x1vl_r
                                                                                    size_t ldb,
                                                                                    size_t actual_n)
 {
-    const size_t n_step = get_vlenb();
+    const size_t n_step = tqt_get_vlenb();
 
     return n_idx * (ldb / 2) + (k_idx / 2) * TQT_MIN(actual_n, n_step);
 }
@@ -133,7 +127,7 @@ void tqt_run_gemm_1xnbias_clamp_f32_qsi8d256p_qau4c32p_4x1vl_rvv(
     size_t ldd, const void *bias, float clamp_min, float clamp_max,
     const struct tqt_qsi8d256_qau4c32_params *params)
 {
-    const size_t n_step = get_vlenb();
+    const size_t n_step = tqt_get_vlenb();
 
     const bool apply_clamp = tqt_clamp_is_enabled((float)clamp_min, (float)clamp_max);
 

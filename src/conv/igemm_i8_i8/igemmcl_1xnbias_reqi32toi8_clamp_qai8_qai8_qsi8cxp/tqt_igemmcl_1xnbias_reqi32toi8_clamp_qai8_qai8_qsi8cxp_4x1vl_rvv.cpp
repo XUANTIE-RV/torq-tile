@@ -16,12 +16,6 @@
 #include "src/gemm/gemm_i8_i8/tqt_kernel_gemm_i8_i8_4x1vl_rvv.h"
 #include "src/gemm/gemm_i8_i8/tqt_utils_i8_i8.h"
 
-static inline size_t get_vlenb()
-{
-    static const size_t value = csrr_vlenb();
-    return value;
-}
-
 static const size_t m_step = 4;
 
 // ============================================================================
@@ -35,7 +29,7 @@ size_t tqt_get_m_step_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp_4x1vl_r
 
 size_t tqt_get_n_step_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp_4x1vl_rvv(void)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = VLENB;
 
     return n_step;
@@ -44,7 +38,7 @@ size_t tqt_get_n_step_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp_4x1vl_r
 size_t tqt_get_b_packed_offset_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp_4x1vl_rvv(
     size_t n_idx, size_t k_idx, size_t ldb, size_t actual_n)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = VLENB;
 
     TQT_ASSUME(n_idx % n_step == 0);
@@ -55,7 +49,7 @@ size_t tqt_get_c_offset_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp_4x1vl
                                                                                      size_t n_idx,
                                                                                      size_t ldc)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = VLENB;
 
     TQT_ASSUME(n_idx % n_step == 0);
@@ -65,7 +59,7 @@ size_t tqt_get_c_offset_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp_4x1vl
 size_t tqt_get_bias_offset_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp_4x1vl_rvv(
     size_t n_idx)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = VLENB;
 
     TQT_ASSUME(n_idx % n_step == 0);
@@ -76,7 +70,7 @@ size_t tqt_get_d_offset_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp_4x1vl
                                                                                      size_t n_idx,
                                                                                      size_t ldd)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = VLENB;
 
     TQT_ASSUME(n_idx % n_step == 0);
@@ -225,7 +219,7 @@ void tqt_run_igemm_igemmcl_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi8cxp_4x1vl_rvv(
     size_t ldd, const void *bias, int8_t clamp_min, int8_t clamp_max,
     const tqt_conv_params *conv_params, const struct tqt_qai8_qai8_qsi8cx_params *quant_params)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = VLENB;
 
     TQT_UNUSED(k_idx_a);

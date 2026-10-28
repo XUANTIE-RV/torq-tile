@@ -15,12 +15,6 @@
 #include "src/conv/igemm_f16_f16/tqt_kernel_igemm_f16_f16_8x3vl_rvv.h"
 #include "src/conv/igemm_f16_f16/tqt_kernel_igemmcf_f16_f16_3vlx8_rvv.h"
 
-static inline size_t get_vlenb()
-{
-    static const size_t value = csrr_vlenb();
-    return value;
-}
-
 static inline size_t get_vlmax(size_t vlenb)
 {
     return vlenb / sizeof(float16_t);
@@ -39,7 +33,7 @@ static const size_t n_step = 8;
 
 size_t tqt_get_m_step_igemmcf_mx1bias_clamp_f16_f16p_f16_3vlx8_rvv(void)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t m_step = get_m_step(VLENB);
 
     return m_step;
@@ -55,7 +49,7 @@ size_t tqt_get_a_packed_offset_igemmcf_mx1bias_clamp_f16_f16p_f16_3vlx8_rvv(size
                                                                             size_t lda,
                                                                             size_t actual_m)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t vlmax = get_vlmax(VLENB);
     const size_t m_step = get_m_step(VLENB);
 
@@ -66,7 +60,7 @@ size_t tqt_get_a_packed_offset_igemmcf_mx1bias_clamp_f16_f16p_f16_3vlx8_rvv(size
 size_t tqt_get_c_offset_igemmcf_mx1bias_clamp_f16_f16p_f16_3vlx8_rvv(size_t m_idx, size_t n_idx,
                                                                      size_t ldc)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t m_step = get_m_step(VLENB);
 
     TQT_ASSUME(m_idx % m_step == 0);
@@ -75,7 +69,7 @@ size_t tqt_get_c_offset_igemmcf_mx1bias_clamp_f16_f16p_f16_3vlx8_rvv(size_t m_id
 
 size_t tqt_get_bias_offset_igemmcf_mx1bias_clamp_f16_f16p_f16_3vlx8_rvv(size_t m_idx)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t m_step = get_m_step(VLENB);
 
     TQT_ASSUME(m_idx % m_step == 0);
@@ -85,7 +79,7 @@ size_t tqt_get_bias_offset_igemmcf_mx1bias_clamp_f16_f16p_f16_3vlx8_rvv(size_t m
 size_t tqt_get_d_offset_igemmcf_mx1bias_clamp_f16_f16p_f16_3vlx8_rvv(size_t m_idx, size_t n_idx,
                                                                      size_t ldd)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t m_step = get_m_step(VLENB);
 
     TQT_ASSUME(m_idx % m_step == 0);
@@ -273,7 +267,7 @@ void tqt_run_igemm_igemmcf_mx1bias_clamp_f16_f16p_f16_3vlx8_rvv(
     size_t ldd, const void *bias, float16_t clamp_min, float16_t clamp_max,
     const tqt_conv_params *params)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t vlmax = get_vlmax(VLENB);
     const size_t m_step = get_m_step(VLENB);
 

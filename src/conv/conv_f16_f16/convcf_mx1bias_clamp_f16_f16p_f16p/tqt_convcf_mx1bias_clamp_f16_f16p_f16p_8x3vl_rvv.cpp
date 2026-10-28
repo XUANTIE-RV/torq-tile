@@ -10,7 +10,11 @@
 
 #include "tqt_convcf_mx1bias_clamp_f16_f16p_f16p_8x3vl_rvv.h"
 
+#include "src/common/tqt_runtime.h"
+
+#if !TORQ_TILE_FREESTANDING
 #include <stdlib.h>
+#endif
 
 #include "src/common/tqt_gemm_pack_rvv.h"
 #include "src/gemm/gemm_f16_f16/gemm_mx1bias_clamp_f16_f16p_f16p/tqt_gemm_mx1bias_clamp_f16_f16p_f16p_8x3vl_rvv.h"
@@ -128,7 +132,7 @@ static void b_im2colpack_cf_fill(float16_t *dst, size_t sub_n, size_t col_start,
                         int ih_in = (int)(oh_v * SH + kh * DH) - (int)PH;
 
                         if (id_in < 0 || id_in >= (int)ID || ih_in < 0 || ih_in >= (int)IH) {
-                            memset(row_dst + wp, 0, cnt * sizeof(float16_t));
+                            TQT_MEMSET(row_dst + wp, 0, cnt * sizeof(float16_t));
                         } else {
                             // Contiguous vector copy when stride == 1
                             if (SW == 1) {
@@ -140,7 +144,7 @@ static void b_im2colpack_cf_fill(float16_t *dst, size_t sub_n, size_t col_start,
                                                 : 0;
                                 size_t vc = cnt - pl - pr;
                                 if (pl)
-                                    memset(row_dst + wp, 0, pl * sizeof(float16_t));
+                                    TQT_MEMSET(row_dst + wp, 0, pl * sizeof(float16_t));
                                 if (vc) {
                                     const float16_t *s =
                                         input_group + ic * ID * IH * IW + (size_t)id_in * IH * IW +
@@ -156,7 +160,7 @@ static void b_im2colpack_cf_fill(float16_t *dst, size_t sub_n, size_t col_start,
                                     }
                                 }
                                 if (pr)
-                                    memset(row_dst + wp + cnt - pr, 0, pr * sizeof(float16_t));
+                                    TQT_MEMSET(row_dst + wp + cnt - pr, 0, pr * sizeof(float16_t));
                             } else {
                                 // Non-unit stride: scalar fallback
                                 for (size_t i = 0; i < cnt; ++i) {

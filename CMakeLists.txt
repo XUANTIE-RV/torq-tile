@@ -18,6 +18,8 @@ project(torq-tile
 option(TORQ_TILE_BUILD_SHARED "Build shared library instead of static" OFF)
 option(TORQ_TILE_BUILD_TEST "Build tests" OFF)
 option(TORQ_TILE_BUILD_BENCHMARK "Build benchmarks" OFF)
+set(TORQ_TILE_FREESTANDING "AUTO" CACHE STRING "Core execution environment: AUTO, ON or OFF")
+set_property(CACHE TORQ_TILE_FREESTANDING PROPERTY STRINGS AUTO ON OFF)
 
 # ============================================================================
 # C/C++ Standards
@@ -34,6 +36,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Detect kernel ISA support with the actual C++ flags.
 include(cmake/torq_tile_isa.cmake)
+torq_tile_configure_runtime()
 set(TORQ_TILE_ISA_GROUPS "")
 
 # Detect RISC-V Vector support
@@ -388,7 +391,9 @@ target_include_directories(torq_tile
 )
 
 # Link libraries
-target_link_libraries(torq_tile PUBLIC m)
+if(NOT TORQ_TILE_BUILT_FREESTANDING)
+    target_link_libraries(torq_tile PUBLIC m)
+endif()
 
 # Set library properties
 set_target_properties(torq_tile PROPERTIES
@@ -401,7 +406,7 @@ if(TORQ_TILE_BUILD_SHARED)
     set_target_properties(torq_tile PROPERTIES POSITION_INDEPENDENT_CODE ON)
 endif()
 
-target_compile_options(torq_tile PRIVATE)
+target_compile_options(torq_tile PRIVATE ${TORQ_TILE_CORE_COMPILE_OPTIONS})
 
 # ============================================================================
 # Subdirectories (Test and Benchmark)
@@ -449,10 +454,12 @@ endif()
 # pthread functions live in libc (CMAKE_HAVE_LIBC_PTHREAD=TRUE), causing
 # Threads::Threads to omit -lpthread.  Force the check result so the explicit
 # library is always linked — harmless on toolchains where pthread IS in libc.
-if(CMAKE_CROSSCOMPILING)
-    set(CMAKE_HAVE_LIBC_PTHREAD FALSE CACHE BOOL "" FORCE)
+if(TORQ_TILE_BUILD_TEST OR TORQ_TILE_BUILD_BENCHMARK)
+    if(CMAKE_CROSSCOMPILING)
+        set(CMAKE_HAVE_LIBC_PTHREAD FALSE CACHE BOOL "" FORCE)
+    endif()
+    find_package(Threads REQUIRED)
 endif()
-find_package(Threads REQUIRED)
 
 # Add test subdirectory if enabled
 if(TORQ_TILE_BUILD_TEST)

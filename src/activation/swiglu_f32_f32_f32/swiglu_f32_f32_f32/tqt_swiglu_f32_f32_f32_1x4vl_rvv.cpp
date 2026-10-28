@@ -13,12 +13,6 @@
 #include "src/common/tqt_common.h"
 #include "src/common/tqt_math_rvv.h"
 
-static inline size_t get_vlenb()
-{
-    static const size_t value = csrr_vlenb();
-    return value;
-}
-
 static inline size_t get_vlmax(size_t vlenb)
 {
     return vlenb / sizeof(float);
@@ -42,7 +36,7 @@ size_t tqt_get_m_step_swiglu_f32_f32_f32_1x4vl_rvv(void)
 
 size_t tqt_get_n_step_swiglu_f32_f32_f32_1x4vl_rvv(void)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = get_n_step(VLENB);
 
     return n_step;

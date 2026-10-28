@@ -14,12 +14,6 @@
 #include "src/common/tqt_gemm_pack_rvv.h"
 #include "src/gemm/gemm_f16_i4/tqt_kernel_gemm_f16_i4_8x2vl_rvv.h"
 
-static inline size_t get_vlenb()
-{
-    static const size_t value = csrr_vlenb();
-    return value;
-}
-
 static inline size_t get_vlmax(size_t vlenb)
 {
     return vlenb / sizeof(float16_t);
@@ -43,7 +37,7 @@ size_t tqt_get_m_step_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv(void)
 
 size_t tqt_get_n_step_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv(void)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = get_n_step(VLENB);
 
     return n_step;
@@ -63,7 +57,7 @@ size_t tqt_get_b_packed_offset_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv(siz
                                                                              size_t ldb,
                                                                              size_t actual_n)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t vlmax = get_vlmax(VLENB);
     const size_t n_step = get_n_step(VLENB);
 
@@ -79,7 +73,7 @@ size_t tqt_get_scale_b_offset_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv(size
                                                                             size_t b_idx,
                                                                             size_t ldsb)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = get_n_step(VLENB);
 
     TQT_ASSUME(n_idx % n_step == 0);
@@ -89,7 +83,7 @@ size_t tqt_get_scale_b_offset_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv(size
 size_t tqt_get_c_offset_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv(size_t m_idx, size_t n_idx,
                                                                       size_t ldc)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = get_n_step(VLENB);
 
     TQT_ASSUME(m_idx % m_step == 0);
@@ -99,7 +93,7 @@ size_t tqt_get_c_offset_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv(size_t m_i
 
 size_t tqt_get_bias_offset_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv(size_t n_idx)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = get_n_step(VLENB);
 
     TQT_ASSUME(n_idx % n_step == 0);
@@ -109,7 +103,7 @@ size_t tqt_get_bias_offset_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv(size_t 
 size_t tqt_get_d_offset_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv(size_t m_idx, size_t n_idx,
                                                                       size_t ldd)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t n_step = get_n_step(VLENB);
 
     TQT_ASSUME(m_idx % m_step == 0);
@@ -268,7 +262,7 @@ void tqt_run_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv(
     const void *C, size_t ldc, void *D, size_t ldd, const void *bias, float16_t clamp_min,
     float16_t clamp_max)
 {
-    const size_t VLENB = get_vlenb();
+    const size_t VLENB = tqt_get_vlenb();
     const size_t vlmax = get_vlmax(VLENB);
     const size_t n_step = get_n_step(VLENB);
 

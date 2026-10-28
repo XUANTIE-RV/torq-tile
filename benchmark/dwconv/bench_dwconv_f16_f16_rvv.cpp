@@ -205,6 +205,11 @@ make_spec_weight_packed_dwconvcl3x3s1_f16_4x1x1vl_rvv()
 
 void register_dwconv_f16_f16_rvv_benchmarks()
 {
+    register_packed_full_tensor_dwconv<float16_t>(
+        "dwconvcf3x3s1_mx1bias_clamp_f16p_f16p_f16p_4x1x1vl_rvv/full_tensor",
+        make_spec_packed_dwconvcf3x3s1_f16p_4x1x1vl_rvv(),
+        tqt_run_unpack_output_dwconvcf3x3s1_mx1bias_clamp_f16p_f16p_f16p_4x1x1vl_rvv);
+
     register_nonpacked_dwconv_benchmark<float16_t, float16_t>(
         "tqt_dwconvcf_mx1bias_clamp_f16_f16_f16_1x1vl_rvv",
         make_nonpacked_dwconvcf_f16_1x1vl_rvv());
@@ -223,31 +228,31 @@ void register_dwconv_f16_f16_rvv_benchmarks()
 
     register_spec_packed_dwconv_benchmark<float16_t, float16_t>(
         "tqt_dwconvcf3x3s1_mx1bias_clamp_f16p_f16p_f16p_4x1x1vl_rvv",
-        make_spec_packed_dwconvcf3x3s1_f16p_4x1x1vl_rvv());
+        make_spec_packed_dwconvcf3x3s1_f16p_4x1x1vl_rvv(), 3, 3, 1, 1);
 
     register_spec_packed_dwconv_benchmark<float16_t, float16_t>(
         "tqt_dwconvcf3x3s2_mx1bias_clamp_f16p_f16p_f16p_2x1x1vl_rvv",
-        make_spec_packed_dwconvcf3x3s2_f16p_2x1x1vl_rvv());
+        make_spec_packed_dwconvcf3x3s2_f16p_2x1x1vl_rvv(), 3, 3, 2, 2);
 
     register_spec_packed_dwconv_benchmark<float16_t, float16_t>(
         "tqt_dwconvcf5x5s1_mx1bias_clamp_f16p_f16p_f16p_4x1x1vl_rvv",
-        make_spec_packed_dwconvcf5x5s1_f16p_4x1x1vl_rvv());
+        make_spec_packed_dwconvcf5x5s1_f16p_4x1x1vl_rvv(), 5, 5, 1, 1);
 
     register_spec_packed_dwconv_benchmark<float16_t, float16_t>(
         "tqt_dwconvcl3x3s1_1xnbias_clamp_f16p_f16p_f16p_4x1x1vl_rvv",
-        make_spec_packed_dwconvcl3x3s1_f16p_4x1x1vl_rvv());
+        make_spec_packed_dwconvcl3x3s1_f16p_4x1x1vl_rvv(), 3, 3, 1, 1);
 
     register_spec_packed_dwconv_benchmark<float16_t, float16_t>(
         "tqt_dwconvcl3x3s2_1xnbias_clamp_f16p_f16p_f16p_2x1x1vl_rvv",
-        make_spec_packed_dwconvcl3x3s2_f16p_2x1x1vl_rvv());
+        make_spec_packed_dwconvcl3x3s2_f16p_2x1x1vl_rvv(), 3, 3, 2, 2);
 
     register_spec_packed_dwconv_benchmark<float16_t, float16_t>(
         "tqt_dwconvcl5x5s1_1xnbias_clamp_f16p_f16p_f16p_4x1x1vl_rvv",
-        make_spec_packed_dwconvcl5x5s1_f16p_4x1x1vl_rvv());
+        make_spec_packed_dwconvcl5x5s1_f16p_4x1x1vl_rvv(), 5, 5, 1, 1);
 
     register_spec_weight_packed_dwconv_benchmark<float16_t, float16_t>(
         "tqt_dwconvcl3x3s1_1xnbias_clamp_f16_f16_f16p_4x1x1vl_rvv",
-        make_spec_weight_packed_dwconvcl3x3s1_f16_4x1x1vl_rvv());
+        make_spec_weight_packed_dwconvcl3x3s1_f16_4x1x1vl_rvv(), 3, 3, 1, 1);
 }
 
 }  // namespace benchmark

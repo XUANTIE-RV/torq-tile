@@ -59,6 +59,20 @@ void reference_sumrow_f16(size_t m, size_t n, const float16_t *a, size_t lda, fl
 void reference_sumcol_f16(size_t m, size_t n, const float16_t *a, size_t lda, float16_t *c,
                           const float16_t *init);
 
+/// Reference row-wise sum reduction (BF16 in / BF16 out, FP32 accumulation).
+///
+/// For each row m, computes: c[m] = (init ? init[m] : 0) + sum(a[m * lda + 0 .. n-1]).
+/// Accumulation is performed in FP32, then narrowed back to BF16 on store.
+void reference_sumrow_bf16(size_t m, size_t n, const bfloat16_t *a, size_t lda, bfloat16_t *c,
+                           const bfloat16_t *init);
+
+/// Reference column-wise sum reduction (BF16 in / BF16 out, FP32 accumulation).
+///
+/// For each column n, computes: c[n] = (init ? init[n] : 0) + sum(a[row * lda + n]) over all rows.
+/// Accumulation is performed in FP32, then narrowed back to BF16 on store.
+void reference_sumcol_bf16(size_t m, size_t n, const bfloat16_t *a, size_t lda, bfloat16_t *c,
+                           const bfloat16_t *init);
+
 // ============================================================================
 // Mean reductions
 //   Mean applies the 1/N scaling to the reduced sum only; init is added as an
@@ -82,6 +96,14 @@ void reference_meanrow_f16(size_t m, size_t n, const float16_t *a, size_t lda, f
 /// Reference column-wise mean reduction (FP16 in / FP16 out, FP32 accumulation).
 void reference_meancol_f16(size_t m, size_t n, const float16_t *a, size_t lda, float16_t *c,
                            const float16_t *init);
+
+/// Reference row-wise mean reduction (BF16 in / BF16 out, FP32 accumulation).
+void reference_meanrow_bf16(size_t m, size_t n, const bfloat16_t *a, size_t lda, bfloat16_t *c,
+                            const bfloat16_t *init);
+
+/// Reference column-wise mean reduction (BF16 in / BF16 out, FP32 accumulation).
+void reference_meancol_bf16(size_t m, size_t n, const bfloat16_t *a, size_t lda, bfloat16_t *c,
+                            const bfloat16_t *init);
 
 }  // namespace test
 }  // namespace torq_tile

@@ -205,6 +205,11 @@ make_spec_weight_packed_dwconvcl3x3s1_f32_4x1x1vl_rvv()
 
 void register_dwconv_f32_f32_rvv_benchmarks()
 {
+    register_packed_full_tensor_dwconv<float>(
+        "dwconvcf3x3s1_mx1bias_clamp_f32p_f32p_f32p_4x1x1vl_rvv/full_tensor",
+        make_spec_packed_dwconvcf3x3s1_f32p_4x1x1vl_rvv(),
+        tqt_run_unpack_output_dwconvcf3x3s1_mx1bias_clamp_f32p_f32p_f32p_4x1x1vl_rvv);
+
     register_nonpacked_dwconv_benchmark<float, float>(
         "tqt_dwconvcf_mx1bias_clamp_f32_f32_f32_1x1vl_rvv",
         make_nonpacked_dwconvcf_f32_1x1vl_rvv());
@@ -223,31 +228,31 @@ void register_dwconv_f32_f32_rvv_benchmarks()
 
     register_spec_packed_dwconv_benchmark<float, float>(
         "tqt_dwconvcf3x3s1_mx1bias_clamp_f32p_f32p_f32p_4x1x1vl_rvv",
-        make_spec_packed_dwconvcf3x3s1_f32p_4x1x1vl_rvv());
+        make_spec_packed_dwconvcf3x3s1_f32p_4x1x1vl_rvv(), 3, 3, 1, 1);
 
     register_spec_packed_dwconv_benchmark<float, float>(
         "tqt_dwconvcf3x3s2_mx1bias_clamp_f32p_f32p_f32p_2x1x1vl_rvv",
-        make_spec_packed_dwconvcf3x3s2_f32p_2x1x1vl_rvv());
+        make_spec_packed_dwconvcf3x3s2_f32p_2x1x1vl_rvv(), 3, 3, 2, 2);
 
     register_spec_packed_dwconv_benchmark<float, float>(
         "tqt_dwconvcf5x5s1_mx1bias_clamp_f32p_f32p_f32p_4x1x1vl_rvv",
-        make_spec_packed_dwconvcf5x5s1_f32p_4x1x1vl_rvv());
+        make_spec_packed_dwconvcf5x5s1_f32p_4x1x1vl_rvv(), 5, 5, 1, 1);
 
     register_spec_packed_dwconv_benchmark<float, float>(
         "tqt_dwconvcl3x3s1_1xnbias_clamp_f32p_f32p_f32p_4x1x1vl_rvv",
-        make_spec_packed_dwconvcl3x3s1_f32p_4x1x1vl_rvv());
+        make_spec_packed_dwconvcl3x3s1_f32p_4x1x1vl_rvv(), 3, 3, 1, 1);
 
     register_spec_packed_dwconv_benchmark<float, float>(
         "tqt_dwconvcl3x3s2_1xnbias_clamp_f32p_f32p_f32p_2x1x1vl_rvv",
-        make_spec_packed_dwconvcl3x3s2_f32p_2x1x1vl_rvv());
+        make_spec_packed_dwconvcl3x3s2_f32p_2x1x1vl_rvv(), 3, 3, 2, 2);
 
     register_spec_packed_dwconv_benchmark<float, float>(
         "tqt_dwconvcl5x5s1_1xnbias_clamp_f32p_f32p_f32p_4x1x1vl_rvv",
-        make_spec_packed_dwconvcl5x5s1_f32p_4x1x1vl_rvv());
+        make_spec_packed_dwconvcl5x5s1_f32p_4x1x1vl_rvv(), 5, 5, 1, 1);
 
     register_spec_weight_packed_dwconv_benchmark<float, float>(
         "tqt_dwconvcl3x3s1_1xnbias_clamp_f32_f32_f32p_4x1x1vl_rvv",
-        make_spec_weight_packed_dwconvcl3x3s1_f32_4x1x1vl_rvv());
+        make_spec_weight_packed_dwconvcl3x3s1_f32_4x1x1vl_rvv(), 3, 3, 1, 1);
 }
 
 }  // namespace benchmark

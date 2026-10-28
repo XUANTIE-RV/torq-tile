@@ -88,6 +88,7 @@ void reference_divvs(size_t n, const T *a, T b, T *c)
 
 TQT_INSTANTIATE_ELEMENTWISE(float);
 TQT_INSTANTIATE_ELEMENTWISE(float16_t);
+TQT_INSTANTIATE_ELEMENTWISE(bfloat16_t);
 
 #undef TQT_INSTANTIATE_ELEMENTWISE
 

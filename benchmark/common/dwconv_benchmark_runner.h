@@ -8,7 +8,9 @@
 
 #include <benchmark/benchmark.h>
 
+#include <algorithm>
 #include <cfloat>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -206,6 +208,14 @@ inline void run_spec_packed_dwconv_benchmark(::benchmark::State &state,
 // Registration helpers
 // ============================================================================
 
+// Register fixed-shape kernels only when the global shape satisfies their contract.
+inline bool matches_specialized_dwconv_shape(size_t kh, size_t kw, size_t stride_h, size_t stride_w)
+{
+    const auto &s = global_conv_shape();
+    return s.ic > 0 && s.kh == kh && s.kw == kw && s.stride_h == stride_h &&
+           s.stride_w == stride_w && s.ih + 2 * s.pad_h >= kh && s.iw + 2 * s.pad_w >= kw;
+}
+
 template <typename T, typename ClampT>
 inline void register_nonpacked_dwconv_benchmark(const char *name,
                                                 const NonPackedDwconvBenchFuncs<ClampT> &funcs)
@@ -236,8 +246,12 @@ inline void register_generic_packed_dwconv_benchmark(
 
 template <typename T, typename ClampT>
 inline void register_spec_packed_dwconv_benchmark(const char *name,
-                                                  const SpecPackedDwconvBenchFuncs<ClampT> &funcs)
+                                                  const SpecPackedDwconvBenchFuncs<ClampT> &funcs,
+                                                  size_t kh, size_t kw, size_t stride_h,
+                                                  size_t stride_w)
 {
+    if (!matches_specialized_dwconv_shape(kh, kw, stride_h, stride_w))
+        return;
     const auto &cs = global_conv_shape();
     ::benchmark::RegisterBenchmark(name,
                                    [funcs](::benchmark::State &state) {
@@ -303,8 +317,11 @@ inline void run_spec_weight_packed_dwconv_benchmark(
 
 template <typename T, typename ClampT>
 inline void register_spec_weight_packed_dwconv_benchmark(
-    const char *name, const SpecWeightPackedDwconvBenchFuncs<ClampT> &funcs)
+    const char *name, const SpecWeightPackedDwconvBenchFuncs<ClampT> &funcs, size_t kh, size_t kw,
+    size_t stride_h, size_t stride_w)
 {
+    if (!matches_specialized_dwconv_shape(kh, kw, stride_h, stride_w))
+        return;
     const auto &cs = global_conv_shape();
     ::benchmark::RegisterBenchmark(name,
                                    [funcs](::benchmark::State &state) {
@@ -314,6 +331,71 @@ inline void register_spec_weight_packed_dwconv_benchmark(
         ->Args({static_cast<int64_t>(cs.ic), static_cast<int64_t>(cs.ic),
                 static_cast<int64_t>(cs.ih), static_cast<int64_t>(cs.kh)})
         ->ArgNames({"IC", "OC", "HW", "K"});
+}
+
+template <typename T>
+void register_nonpacked_specialized_dwconv(const char *name,
+                                           const NonPackedDwconvBenchFuncs<T> &funcs, bool one_d)
+{
+    const auto &s = global_conv_shape();
+    if (!matches_specialized_dwconv_shape(one_d ? 1 : 3, one_d ? 4 : 3, 1, 1) ||
+        (one_d && (s.ih != 1 || s.pad_h != 0)))
+        return;
+    ::benchmark::RegisterBenchmark(name,
+                                   [funcs](::benchmark::State &state) {
+                                       run_nonpacked_dwconv_benchmark<T, T>(state, funcs);
+                                       auto shape = global_conv_shape();
+                                       shape.oc = shape.ic;
+                                       state.counters["GFLOPS"] = ::benchmark::Counter(
+                                           dwconv_flops(shape),
+                                           ::benchmark::Counter::kIsIterationInvariantRate,
+                                           ::benchmark::Counter::OneK::kIs1000);
+                                   })
+        ->Args({int64_t(s.ic), int64_t(s.ih), int64_t(s.iw), int64_t(s.kh), int64_t(s.kw),
+                int64_t(s.pad_h), int64_t(s.pad_w)})
+        ->ArgNames({"IC", "IH", "IW", "KH", "KW", "PH", "PW"});
+}
+
+// CF input -> pack -> OH-sliced compute -> unpack -> CF output, every iteration.
+// Weight packing is outside the timing loop; existing compute-only benchmarks are unchanged.
+template <typename T>
+void register_packed_full_tensor_dwconv(const char *name, const SpecPackedDwconvBenchFuncs<T> &f,
+                                        void (*unpack)(const void *, void *,
+                                                       const tqt_conv_params *))
+{
+    if (!matches_specialized_dwconv_shape(3, 3, 1, 1))
+        return;
+    const auto &s = global_conv_shape();
+    ::benchmark::RegisterBenchmark(
+        name,
+        [f, unpack](::benchmark::State &state) {
+            const tqt_conv_params p = build_dwconv_params(global_conv_shape());
+            const size_t ni = p.input_channel * p.input_shape[1] * p.input_shape[2];
+            const size_t no = p.output_channel * p.output_shape[1] * p.output_shape[2];
+            std::vector<T> input(ni, T(1)), weight(p.output_channel * 9, T(0.5));
+            std::vector<T> bias(p.output_channel, T(0)), output(no);
+            std::vector<uint8_t> pi(f.get_packed_input_size(&p)), pw(f.get_packed_weight_size(&p));
+            std::vector<uint8_t> po(f.get_output_size(&p));
+            f.run_pack_weight(weight.data(), pw.data(), &p);
+            const size_t step = f.get_oh_step();
+            for (auto _ : state) {
+                f.run_pack_input(input.data(), pi.data(), &p);
+                for (size_t h = 0; h < p.output_shape[1]; h += step) {
+                    const size_t end = std::min(h + step, p.output_shape[1]);
+                    f.run_dwconv(h, end, pi.data(), pw.data(), bias.data(), po.data(), &p,
+                                 T(-INFINITY), T(INFINITY));
+                }
+                unpack(po.data(), output.data(), &p);
+                ::benchmark::DoNotOptimize(output.data());
+            }
+            auto shape = global_conv_shape();
+            shape.oc = shape.ic;
+            state.counters["GFLOPS"] = ::benchmark::Counter(
+                dwconv_flops(shape), ::benchmark::Counter::kIsIterationInvariantRate,
+                ::benchmark::Counter::OneK::kIs1000);
+        })
+        ->Args({int64_t(s.ic), int64_t(s.ih), int64_t(s.iw)})
+        ->ArgNames({"IC", "IH", "IW"});
 }
 
 }  // namespace benchmark

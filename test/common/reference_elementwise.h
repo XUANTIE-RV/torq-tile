@@ -16,8 +16,9 @@ namespace test
 {
 
 // Element-wise reference kernels. All arithmetic is performed in the float
-// domain and cast back to T, so the same definition serves both float and
-// float16_t. Explicit instantiations for {float, float16_t} live in the .cpp.
+// domain and cast back to T, so the same definition serves float, float16_t
+// and bfloat16_t. Explicit instantiations for {float, float16_t, bfloat16_t}
+// live in the .cpp.
 
 /// Reference element-wise vector-vector add: c[i] = a[i] + b[i], i in [0, n).
 template <typename T>

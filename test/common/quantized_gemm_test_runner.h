@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <type_traits>
 #include <vector>
@@ -4269,6 +4270,159 @@ void run_packed_qsi8_kblock_gemm_equivalence_test(
     check_qsi8_block_quantized_gemm_result(compact_output, expanded_output);
 }
 
+template <typename QParams>
+void run_packed_qsi8_kblock_gemm_zero_k_test(const PackedQsi8KBlockGemmTestFuncs<QParams> &funcs)
+{
+    const size_t m = 5, n = funcs.get_n_step() + 1, ld = n + 3;
+    const auto data = make_qsi8_kblock_gemm_test_data(m, n, 256, funcs.asymmetric);
+    const auto params = funcs.make_params(data);
+    const int8_t a = 0;
+    const uint8_t b = 0;
+    std::vector<float> output(m * ld, 0.25f);
+    const float inf = std::numeric_limits<float>::infinity();
+    funcs.run_gemm(m, n, 0, &a, 0, 0, &b, 0, 0, output.data(), ld, output.data(), ld,
+                   data.bias.data(), -inf, inf, &params);
+    for (size_t r = 0; r < m; ++r) {
+        for (size_t j = 0; j < n; ++j)
+            EXPECT_EQ(output[r * ld + j], 0.25f + data.bias[j]);
+        for (size_t j = n; j < ld; ++j)
+            EXPECT_EQ(output[r * ld + j], 0.25f);
+    }
+}
+
+// Compute from scalar, unpacked codes. Do not use either packed decoder or the
+// implementation's narrowed accumulator in the oracle.
+template <typename QParams>
+void run_packed_qsi8_kblock_gemm_extreme_test(size_t m, size_t n, size_t k,
+                                              const PackedQsi8KBlockGemmTestFuncs<QParams> &funcs)
+{
+    const bool q2 = funcs.asymmetric;
+    const size_t groups = k / 16;
+    const size_t blocks = k / 256;
+    const size_t ldq = groups + 3;
+    const size_t lds = blocks + 2;
+    const size_t ldsum = groups + 5;
+    const size_t ldd = n + 7;
+    auto data = make_qsi8_kblock_gemm_test_data(m, n, k, q2);
+    for (size_t r = 0; r < m; ++r) {
+        for (size_t z = 0; z < k; ++z) {
+            const int8_t values[] = {-128, 127, -1, 0, 1};
+            data.a[r * k + z] = values[(r + z / 16) % 5];
+        }
+    }
+    for (size_t j = 0; j < n; ++j) {
+        for (size_t z = 0; z < k; ++z)
+            data.b[j * k + z] = q2 ? (j + z / 16) % 4 : int((j + z / 16) % 8) - 4;
+    }
+    std::vector<float> sa(m * lds, 0), ss(n * lds, 0), sm(n * lds, 0);
+    std::vector<int16_t> sums(m * ldsum, 0);
+    std::vector<int8_t> qs(n * ldq, 0);
+    std::vector<uint8_t> qm(n * ldq, 0);
+    const uint8_t uq[] = {0, 15, 127, 128, 255};
+    const int8_t sq[] = {-128, -127, -1, 0, 1, 127};
+    for (size_t r = 0; r < m; ++r) {
+        for (size_t b = 0; b < blocks; ++b)
+            sa[r * lds + b] = (b % 2 ? -1.0f : 1.0f) / 256.0f;
+        for (size_t g = 0; g < groups; ++g) {
+            int64_t sum = 0;
+            for (size_t z = 0; z < 16; ++z)
+                sum += data.a[r * k + g * 16 + z];
+            sums[r * ldsum + g] = static_cast<int16_t>(sum);
+        }
+    }
+    for (size_t j = 0; j < n; ++j) {
+        for (size_t b = 0; b < blocks; ++b) {
+            ss[j * lds + b] = 1.0f / 256.0f;
+            sm[j * lds + b] = 1.0f / 512.0f;
+        }
+        for (size_t g = 0; g < groups; ++g) {
+            if (q2) {
+                const uint8_t value = uq[(j + g) % 5];
+                std::memcpy(&qs[j * ldq + g], &value, 1);
+            } else {
+                qs[j * ldq + g] = sq[(j + g) % 6];
+            }
+            qm[j * ldq + g] = uq[(j + g + 2) % 5];
+        }
+    }
+    QParams params = funcs.make_params(data);
+    params.scale_a = sa.data();
+    params.ldsa = lds;
+    params.qscale_b = reinterpret_cast<decltype(params.qscale_b)>(qs.data());
+    params.ldqb = ldq;
+    params.super_scale_b = ss.data();
+    params.ldssb = lds;
+    if constexpr (std::is_same_v<decltype(params.qscale_b), const uint8_t *>) {
+        params.bsums_a = sums.data();
+        params.ldbsuma = ldsum;
+        params.qmin_b = qm.data();
+        params.super_min_b = sm.data();
+    }
+    const auto source = make_qsi8_kblock_weight_source(data, funcs.weight_encoding);
+    std::vector<uint8_t> ap(funcs.get_a_packed_size(m, k));
+    std::vector<uint8_t> bp(funcs.get_b_packed_size(n, k));
+    funcs.run_a_pack(m, k, k, k, 0, data.a.data(), ap.data());
+    funcs.run_bt_pack(n, k, k, k, 0, source.data(), bp.data());
+    const float inf = std::numeric_limits<float>::infinity();
+    for (bool split : {false, true}) {
+        std::vector<float> output(m * ldd, 123456.0f);
+        std::vector<float> expected(output);
+        const size_t step = split ? 256 : k;
+        for (size_t start = 0; start < k; start += step) {
+            const size_t count = std::min(step, k - start);
+            const bool last = start + count == k;
+            for (size_t r = 0; r < m; ++r) {
+                for (size_t j = 0; j < n; ++j) {
+                    float result = 0;
+                    double accurate = 0;
+                    double magnitude = 0;
+                    for (size_t b = start / 256; b < (start + count) / 256; ++b) {
+                        int64_t dot = 0, correction = 0;
+                        for (size_t g = b * 16; g < (b + 1) * 16; ++g) {
+                            int64_t group_dot = 0, group_sum = 0;
+                            for (size_t z = 0; z < 16; ++z) {
+                                const int av = data.a[r * k + g * 16 + z];
+                                group_dot += av * int(data.b[j * k + g * 16 + z]);
+                                group_sum += av;
+                            }
+                            const int scale =
+                                q2 ? static_cast<uint8_t>(qs[j * ldq + g]) : qs[j * ldq + g];
+                            dot += group_dot * scale;
+                            if (q2)
+                                correction += group_sum * qm[j * ldq + g];
+                        }
+                        const float ad = float(dot) * sa[r * lds + b];
+                        result = std::fma(ad, ss[j * lds + b], result);
+                        if (q2) {
+                            const float am = float(correction) * sa[r * lds + b];
+                            result = std::fma(-am, sm[j * lds + b], result);
+                        }
+                        const double d = double(dot) * sa[r * lds + b] * ss[j * lds + b];
+                        const double v = double(correction) * sa[r * lds + b] * sm[j * lds + b];
+                        accurate += d - v;
+                        magnitude += std::abs(d) + std::abs(v);
+                    }
+                    EXPECT_NEAR(double(result), accurate,
+                                8 * std::numeric_limits<float>::epsilon() * (1 + magnitude));
+                    if (start)
+                        result += expected[r * ldd + j];
+                    if (last)
+                        result += data.bias[j];
+                    expected[r * ldd + j] = result;
+                }
+            }
+            funcs.run_gemm(m, n, count, ap.data() + funcs.get_a_packed_offset(0, start, k, m), k,
+                           start, bp.data() + funcs.get_b_packed_offset(0, start, k, n), k, start,
+                           start ? output.data() : nullptr, ldd, output.data(), ldd,
+                           last ? data.bias.data() : nullptr, -inf, inf, &params);
+            for (size_t i = 0; i < output.size(); ++i) {
+                ASSERT_EQ(std::memcmp(&output[i], &expected[i], sizeof(float)), 0)
+                    << "index=" << i << " split=" << split << " k_offset=" << start;
+            }
+        }
+    }
+}
+
 // ============================================================================
 // Q8_0 activation x Q1_0/Q2_0/Q4_0/Q5_0 source-aware execution tests
 // ============================================================================
@@ -4602,6 +4756,82 @@ void run_packed_qsi8_qx0_source_test(size_t m, size_t n, size_t k,
     if (check_single_tail_tile) {
         SCOPED_TRACE("single M/N tail tile");
         run_packed_qsi8_qx0_source_test(1, 1, k, funcs, false);
+    }
+}
+
+// Exercise the complete i8 range and long runs of extreme weights.
+// Exact power-of-two scales make every expected result exactly representable.
+template <typename Params>
+void run_packed_qsi8_block_extreme_test(const PackedQsi8BlockQuantizedGemmTestFuncs<Params> &funcs,
+                                        int low, int high)
+{
+    for (size_t m : {1u, 2u, 3u, 5u}) {
+        const size_t n = funcs.get_n_step() + 1;
+        constexpr size_t k = 512;
+        for (int pattern = 0; pattern < 4; ++pattern) {
+            auto data = make_qsi8_block_quantized_gemm_test_data(n, k, funcs.activation_block_size,
+                                                                 funcs.weight_block_size,
+                                                                 funcs.asymmetric, high, m);
+            for (size_t i = 0; i < data.a.size(); ++i)
+                data.a[i] = pattern == 0   ? -128
+                            : pattern == 1 ? 127
+                            : pattern == 2 ? -128
+                                           : int(i * 29 % 256) - 128;
+            for (size_t i = 0; i < data.b.size(); ++i)
+                data.b[i] = pattern < 2    ? high
+                            : pattern == 2 ? low
+                                           : low + int(i * 13 % (high - low + 1));
+            std::fill(data.scale_a.begin(), data.scale_a.end(), 0.5f);
+            std::fill(data.scale_b.begin(), data.scale_b.end(), 0.125f);
+            std::fill(data.real_zero_b.begin(), data.real_zero_b.end(), 0.25f);
+            for (size_t row = 0; row < m; ++row) {
+                for (size_t group = 0; group < k / 16; ++group) {
+                    int sum = 0;
+                    for (size_t j = 0; j < 16; ++j)
+                        sum += data.a[row * k + group * 16 + j];
+                    data.bsums_a[row * (k / 16) + group] = sum;
+                }
+            }
+            const auto src = make_qsi8_block_weight_source(data, funcs.weight_encoding);
+            std::vector<uint8_t> ap(funcs.get_a_packed_size(m, k));
+            std::vector<uint8_t> bp(funcs.get_b_packed_size(n, k));
+            funcs.run_a_pack(m, k, k, k, 0, data.a.data(), ap.data());
+            funcs.run_bt_pack(n, k, k, k, 0, src.data(), bp.data());
+            const auto params = funcs.make_params(
+                data.scale_a.data(), k / funcs.activation_block_size, data.bsums_a.data(), k / 16,
+                data.scale_b.data(), data.real_zero_b.data(), k / funcs.weight_block_size);
+            const size_t ldd = n + 3;
+            for (bool split : {false, true}) {
+                std::vector<float> d(m * ldd, 12345.0f);
+                if (split) {
+                    funcs.run_gemm(m, n, 256, ap.data(), k, 0, bp.data(), k, 0, nullptr, ldd,
+                                   d.data(), ldd, nullptr, -INFINITY, INFINITY, &params);
+                    funcs.run_gemm(m, n, 256, ap.data() + funcs.get_a_packed_offset(0, 256, k, m),
+                                   k, 256, bp.data() + funcs.get_b_packed_offset(0, 256, k, n), k,
+                                   256, d.data(), ldd, d.data(), ldd, nullptr, -INFINITY, INFINITY,
+                                   &params);
+                } else {
+                    funcs.run_gemm(m, n, k, ap.data(), k, 0, bp.data(), k, 0, nullptr, ldd,
+                                   d.data(), ldd, nullptr, -INFINITY, INFINITY, &params);
+                }
+                for (size_t row = 0; row < m; ++row) {
+                    for (size_t col = 0; col < n; ++col) {
+                        int dot = 0, sum = 0;
+                        for (size_t j = 0; j < k; ++j) {
+                            dot += int(data.a[row * k + j]) * int(data.b[col * k + j]);
+                            sum += data.a[row * k + j];
+                        }
+                        const float expected =
+                            dot * 0.0625f - (funcs.asymmetric ? sum * 0.125f : 0.0f);
+                        EXPECT_EQ(d[row * ldd + col], expected)
+                            << "pattern=" << pattern << " m=" << m << " col=" << col
+                            << " split=" << split;
+                    }
+                    for (size_t col = n; col < ldd; ++col)
+                        EXPECT_EQ(d[row * ldd + col], 12345.0f);
+                }
+            }
+        }
     }
 }
 

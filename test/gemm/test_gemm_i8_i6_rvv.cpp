@@ -115,3 +115,8 @@ TEST(GemmI8I6Rvv, ClampSpecialValues_Qsi8d256Qsi6c16)
         }
     }
 }
+
+TEST(GemmI8I6Rvv, NarrowAccumulationExtremes)
+{
+    run_packed_qsi8_block_extreme_test(make_qsi8d256_qsi6c16_test_funcs(), -32, 31);
+}

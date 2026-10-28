@@ -33,6 +33,7 @@ static inline void tqt_qsi8d256_qau4c32_init_i32(size_t vl)
         : "v20", "v21", "v22", "v23");
 }
 
+// Two i8*u4 products fit in i16: [-3840, 3810].
 static inline void tqt_qsi8d256_qau4c32_dot_u4_pair(size_t vl, const uint8_t *b, int8_t a_lo,
                                                     int8_t a_hi)
 {
@@ -42,10 +43,9 @@ static inline void tqt_qsi8d256_qau4c32_dot_u4_pair(size_t vl, const uint8_t *b,
         "vand.vi v0, v2, 0xf\n\t"
         "vsrl.vi v1, v2, 4\n\t"
         "vwmul.vx v8, v0, %2\n\t"
-        "vwmul.vx v10, v1, %3\n\t"
+        "vwmacc.vx v8, %3, v1\n\t"
         "vsetvli zero, %0, e16, m2, ta, ma\n\t"
         "vwadd.wv v20, v20, v8\n\t"
-        "vwadd.wv v20, v20, v10"
         :
         : "r"(vl), "r"(b), "r"((intptr_t)a_lo), "r"((intptr_t)a_hi)
         : "v0", "v1", "v2", "v8", "v9", "v10", "v11", "v20", "v21", "v22", "v23", "memory");

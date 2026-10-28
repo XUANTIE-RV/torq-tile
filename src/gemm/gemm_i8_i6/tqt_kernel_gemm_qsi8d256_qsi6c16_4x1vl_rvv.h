@@ -65,6 +65,8 @@ static inline void tqt_qsi6c16_load_high(size_t vl, const uint8_t *high)
         : "v3", "memory");
 }
 
+// Two i8*u6 products fit in i16: [-16128, 16002].
+// The original per-group signed-weight correction remains unchanged.
 template <bool HasSecond>
 static inline void tqt_qsi6c16_dot_low_pair(size_t vl, const uint8_t *low, size_t high_shift,
                                             int8_t a0_lo, int8_t a0_hi, int8_t a1_lo, int8_t a1_hi)
@@ -85,15 +87,12 @@ static inline void tqt_qsi6c16_dot_low_pair(size_t vl, const uint8_t *low, size_
             "vor.vv v2, v2, v4\n\t"
             "vwmul.vx v4, v1, %3\n\t"
             "vwmul.vx v6, v1, %5\n\t"
+            "vwmacc.vx v4, %4, v2\n\t"
+            "vwmacc.vx v6, %6, v2\n\t"
             "vsetvli zero, %0, e16, m2, ta, ma\n\t"
             "vwadd.wv v24, v24, v4\n\t"
             "vwadd.wv v28, v28, v6\n\t"
-            "vsetvli zero, %0, e8, m1, ta, ma\n\t"
-            "vwmul.vx v4, v2, %4\n\t"
-            "vwmul.vx v6, v2, %6\n\t"
-            "vsetvli zero, %0, e16, m2, ta, ma\n\t"
-            "vwadd.wv v24, v24, v4\n\t"
-            "vwadd.wv v28, v28, v6"
+
             :
             : "r"(vl), "r"(low), "r"(high_shift), "r"((intptr_t)a0_lo), "r"((intptr_t)a0_hi),
               "r"((intptr_t)a1_lo), "r"((intptr_t)a1_hi)
@@ -114,12 +113,10 @@ static inline void tqt_qsi6c16_dot_low_pair(size_t vl, const uint8_t *low, size_
             "vsll.vi v4, v4, 4\n\t"
             "vor.vv v2, v2, v4\n\t"
             "vwmul.vx v4, v1, %3\n\t"
+            "vwmacc.vx v4, %4, v2\n\t"
             "vsetvli zero, %0, e16, m2, ta, ma\n\t"
             "vwadd.wv v24, v24, v4\n\t"
-            "vsetvli zero, %0, e8, m1, ta, ma\n\t"
-            "vwmul.vx v4, v2, %4\n\t"
-            "vsetvli zero, %0, e16, m2, ta, ma\n\t"
-            "vwadd.wv v24, v24, v4"
+
             :
             : "r"(vl), "r"(low), "r"(high_shift), "r"((intptr_t)a0_lo), "r"((intptr_t)a0_hi)
             : "v1", "v2", "v3", "v4", "v5", "v24", "v25", "v26", "v27", "memory");

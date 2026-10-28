@@ -24,13 +24,11 @@
     "\n\t"                                                 \
     "vand.vi v3, v3, 1\n\t"                                \
     "vsll.vi v3, v3, 4\n\t"                                \
-    "vor.vv v1, v1, v3\n\t"                                \
-    "vsll.vi v1, v1, 3\n\t"                                \
-    "vsra.vi v1, v1, 3\n\t"                                \
-    "vsetvli zero, %[vl], e16, m2, ta, ma\n\t"             \
-    "vsext.vf2 v8, v1\n\t"                                 \
-    "vwmacc.vx v20, %[activation], v8\n\t"
+    "vsub.vv v1, v1, v3\n\t"                               \
+    "vwmacc.vx v8, %[activation], v1\n\t"
 
+// Eight i8*i5 products fit in i16: [-16256, 16384].
+// Widen each octet before combining the original 32-element scale block.
 template <size_t Octet>
 static inline void tqt_qsi8d32_qsi5c32_dot_octet_rvv(size_t vl, const uint8_t *group, size_t nr,
                                                      const int8_t *activations,
@@ -41,37 +39,34 @@ static inline void tqt_qsi8d32_qsi5c32_dot_octet_rvv(size_t vl, const uint8_t *g
     const uint8_t *sign = group + (16 + Octet) * nr;
     intptr_t activation;
     asm volatile(
+        "vsetvli zero, %[vl], e16, m2, ta, ma\n\t"
+        "vmv.v.i v8, 0\n\t"
         "vsetvli zero, %[vl], e8, m1, ta, ma\n\t"
         "vle8.v v2, (%[sign])\n\t"
         "vle8.v v0, (%[low])\n\t"
         TQT_QSI8D32_QSI5C32_DOT_RAW(0, 0)
         "add %[activations], %[activations], %[activation_stride]\n\t"
-        "vsetvli zero, %[vl], e8, m1, ta, ma\n\t"
         TQT_QSI8D32_QSI5C32_DOT_RAW(4, 1)
         "add %[activations], %[activations], %[activation_stride]\n\t"
         "add %[low], %[low], %[nr]\n\t"
-        "vsetvli zero, %[vl], e8, m1, ta, ma\n\t"
         "vle8.v v0, (%[low])\n\t"
         TQT_QSI8D32_QSI5C32_DOT_RAW(0, 2)
         "add %[activations], %[activations], %[activation_stride]\n\t"
-        "vsetvli zero, %[vl], e8, m1, ta, ma\n\t"
         TQT_QSI8D32_QSI5C32_DOT_RAW(4, 3)
         "add %[activations], %[activations], %[activation_stride]\n\t"
         "add %[low], %[low], %[nr]\n\t"
-        "vsetvli zero, %[vl], e8, m1, ta, ma\n\t"
         "vle8.v v0, (%[low])\n\t"
         TQT_QSI8D32_QSI5C32_DOT_RAW(0, 4)
         "add %[activations], %[activations], %[activation_stride]\n\t"
-        "vsetvli zero, %[vl], e8, m1, ta, ma\n\t"
         TQT_QSI8D32_QSI5C32_DOT_RAW(4, 5)
         "add %[activations], %[activations], %[activation_stride]\n\t"
         "add %[low], %[low], %[nr]\n\t"
-        "vsetvli zero, %[vl], e8, m1, ta, ma\n\t"
         "vle8.v v0, (%[low])\n\t"
         TQT_QSI8D32_QSI5C32_DOT_RAW(0, 6)
         "add %[activations], %[activations], %[activation_stride]\n\t"
-        "vsetvli zero, %[vl], e8, m1, ta, ma\n\t"
         TQT_QSI8D32_QSI5C32_DOT_RAW(4, 7)
+        "vsetvli zero, %[vl], e16, m2, ta, ma\n\t"
+        "vwadd.wv v20, v20, v8\n\t"
         : [activation] "=&r"(activation), [activations] "+&r"(activations), [low] "+&r"(low)
         : [vl] "r"(vl), [sign] "r"(sign), [nr] "r"(nr),
           [activation_stride] "r"(activation_stride)

@@ -88,3 +88,22 @@ TEST(GemmI8I3Rvv, ClampSpecialValues_CompactExpandedTailsAndSplitK)
         }
     }
 }
+
+TEST(GemmI8I3Rvv, FullParameterRangeStridesAndInPlaceSplitK)
+{
+    const auto funcs = make_qsi3c16_funcs();
+    const size_t nr = funcs.get_n_step();
+    for (size_t m : {1u, 2u, 3u, 4u, 5u, 8u, 128u}) {
+        for (size_t n : {size_t{1}, nr - 1, nr, nr + 1, 2 * nr + 3}) {
+            for (size_t k : {256u, 512u, 768u, 1024u}) {
+                SCOPED_TRACE(::testing::Message() << "m=" << m << " n=" << n << " k=" << k);
+                run_packed_qsi8_kblock_gemm_extreme_test(m, n, k, funcs);
+            }
+        }
+    }
+}
+
+TEST(GemmI8I3Rvv, ZeroKPreservesBiasAndInPlaceC)
+{
+    run_packed_qsi8_kblock_gemm_zero_k_test(make_qsi3c16_funcs());
+}

@@ -199,7 +199,8 @@ static inline void tqt_load_scale_kernel_gemm_f16_i4_8x2vl_rvv(size_t vl,
 template <size_t NR>
 static inline void tqt_dequant_bt_kernel_gemm_f16_i4_8x2vl_rvv(size_t vl, const uint8_t *b_col0,
                                                                const uint8_t *b_col1,
-                                                               size_t b_byte_stride)
+                                                               size_t b_byte_stride,
+                                                               const float16_t *lut)
 {
     static_assert(NR >= 1 && NR <= 2, "NR must be in range [1, 2]");
 
@@ -218,18 +219,33 @@ static inline void tqt_dequant_bt_kernel_gemm_f16_i4_8x2vl_rvv(size_t vl, const 
 
         // Widen to u16, subtract ZP, convert to f16, multiply scale
         asm volatile("vsetvli zero, %0, e16, m1, ta, ma" : : "r"(vl) :);
-        asm volatile(
-            "vzext.vf2 v0, v5\n\t"  // u8 → u16
-            "vzext.vf2 v1, v6\n\t"
-            "vadd.vi v0, v0, -8\n\t"  // unsigned → signed (ZP=8)
-            "vadd.vi v1, v1, -8\n\t"
-            "vfcvt.f.x.v v0, v0\n\t"  // i16 → f16
-            "vfcvt.f.x.v v1, v1\n\t"
-            "vfmul.vv v0, v0, v8\n\t"  // × scale col 0
-            "vfmul.vv v1, v1, v8\n\t"
-            :
-            :
-            : "v0", "v1");
+        if (lut) {
+            asm volatile(
+                "vzext.vf2 v10, v5\n\t"
+                "vzext.vf2 v11, v6\n\t"
+                "vsll.vi v10, v10, 1\n\t"
+                "vsll.vi v11, v11, 1\n\t"
+                "vluxei16.v v0, (%0), v10\n\t"
+                "vluxei16.v v1, (%0), v11\n\t"
+                "vfmul.vv v0, v0, v8\n\t"
+                "vfmul.vv v1, v1, v8\n\t"
+                :
+                : "r"(lut)
+                : "v0", "v1", "v10", "v11", "memory");
+        } else {
+            asm volatile(
+                "vzext.vf2 v0, v5\n\t"  // u8 → u16
+                "vzext.vf2 v1, v6\n\t"
+                "vadd.vi v0, v0, -8\n\t"  // unsigned → signed (ZP=8)
+                "vadd.vi v1, v1, -8\n\t"
+                "vfcvt.f.x.v v0, v0\n\t"  // i16 → f16
+                "vfcvt.f.x.v v1, v1\n\t"
+                "vfmul.vv v0, v0, v8\n\t"  // × scale col 0
+                "vfmul.vv v1, v1, v8\n\t"
+                :
+                :
+                : "v0", "v1");
+        }
     }
 
     // --- Col 1 ---
@@ -244,18 +260,33 @@ static inline void tqt_dequant_bt_kernel_gemm_f16_i4_8x2vl_rvv(size_t vl, const 
             : "v5", "v6");
 
         asm volatile("vsetvli zero, %0, e16, m1, ta, ma" : : "r"(vl) :);
-        asm volatile(
-            "vzext.vf2 v2, v5\n\t"
-            "vzext.vf2 v3, v6\n\t"
-            "vadd.vi v2, v2, -8\n\t"
-            "vadd.vi v3, v3, -8\n\t"
-            "vfcvt.f.x.v v2, v2\n\t"
-            "vfcvt.f.x.v v3, v3\n\t"
-            "vfmul.vv v2, v2, v9\n\t"  // × scale col 1
-            "vfmul.vv v3, v3, v9\n\t"
-            :
-            :
-            : "v2", "v3");
+        if (lut) {
+            asm volatile(
+                "vzext.vf2 v10, v5\n\t"
+                "vzext.vf2 v11, v6\n\t"
+                "vsll.vi v10, v10, 1\n\t"
+                "vsll.vi v11, v11, 1\n\t"
+                "vluxei16.v v2, (%0), v10\n\t"
+                "vluxei16.v v3, (%0), v11\n\t"
+                "vfmul.vv v2, v2, v9\n\t"
+                "vfmul.vv v3, v3, v9\n\t"
+                :
+                : "r"(lut)
+                : "v2", "v3", "v10", "v11", "memory");
+        } else {
+            asm volatile(
+                "vzext.vf2 v2, v5\n\t"
+                "vzext.vf2 v3, v6\n\t"
+                "vadd.vi v2, v2, -8\n\t"
+                "vadd.vi v3, v3, -8\n\t"
+                "vfcvt.f.x.v v2, v2\n\t"
+                "vfcvt.f.x.v v3, v3\n\t"
+                "vfmul.vv v2, v2, v9\n\t"  // × scale col 1
+                "vfmul.vv v3, v3, v9\n\t"
+                :
+                :
+                : "v2", "v3");
+        }
     }
 }
 
@@ -269,7 +300,8 @@ static inline void tqt_dequant_bt_kernel_gemm_f16_i4_8x2vl_rvv(size_t vl, const 
 
 template <size_t NR>
 static inline void tqt_dequant_b_kernel_gemm_f16_i4_8x2vl_rvv(size_t vl, const uint8_t *b_col0,
-                                                              const uint8_t *b_col1)
+                                                              const uint8_t *b_col1,
+                                                              const float16_t *lut)
 {
     static_assert(NR >= 1 && NR <= 2, "NR must be in range [1, 2]");
 
@@ -288,18 +320,33 @@ static inline void tqt_dequant_b_kernel_gemm_f16_i4_8x2vl_rvv(size_t vl, const u
 
         // Widen to u16, subtract ZP, convert to f16, multiply scale
         asm volatile("vsetvli zero, %0, e16, m1, ta, ma" : : "r"(vl) :);
-        asm volatile(
-            "vzext.vf2 v0, v5\n\t"  // u8 → u16
-            "vzext.vf2 v1, v6\n\t"
-            "vadd.vi v0, v0, -8\n\t"  // unsigned → signed (ZP=8)
-            "vadd.vi v1, v1, -8\n\t"
-            "vfcvt.f.x.v v0, v0\n\t"  // i16 → f16
-            "vfcvt.f.x.v v1, v1\n\t"
-            "vfmul.vv v0, v0, v8\n\t"  // × scale col 0
-            "vfmul.vv v1, v1, v8\n\t"
-            :
-            :
-            : "v0", "v1");
+        if (lut) {
+            asm volatile(
+                "vzext.vf2 v10, v5\n\t"
+                "vzext.vf2 v11, v6\n\t"
+                "vsll.vi v10, v10, 1\n\t"
+                "vsll.vi v11, v11, 1\n\t"
+                "vluxei16.v v0, (%0), v10\n\t"
+                "vluxei16.v v1, (%0), v11\n\t"
+                "vfmul.vv v0, v0, v8\n\t"
+                "vfmul.vv v1, v1, v8\n\t"
+                :
+                : "r"(lut)
+                : "v0", "v1", "v10", "v11", "memory");
+        } else {
+            asm volatile(
+                "vzext.vf2 v0, v5\n\t"  // u8 → u16
+                "vzext.vf2 v1, v6\n\t"
+                "vadd.vi v0, v0, -8\n\t"  // unsigned → signed (ZP=8)
+                "vadd.vi v1, v1, -8\n\t"
+                "vfcvt.f.x.v v0, v0\n\t"  // i16 → f16
+                "vfcvt.f.x.v v1, v1\n\t"
+                "vfmul.vv v0, v0, v8\n\t"  // × scale col 0
+                "vfmul.vv v1, v1, v8\n\t"
+                :
+                :
+                : "v0", "v1");
+        }
     }
 
     // --- Col 1 ---
@@ -314,18 +361,33 @@ static inline void tqt_dequant_b_kernel_gemm_f16_i4_8x2vl_rvv(size_t vl, const u
             : "v5", "v6");
 
         asm volatile("vsetvli zero, %0, e16, m1, ta, ma" : : "r"(vl) :);
-        asm volatile(
-            "vzext.vf2 v2, v5\n\t"
-            "vzext.vf2 v3, v6\n\t"
-            "vadd.vi v2, v2, -8\n\t"
-            "vadd.vi v3, v3, -8\n\t"
-            "vfcvt.f.x.v v2, v2\n\t"
-            "vfcvt.f.x.v v3, v3\n\t"
-            "vfmul.vv v2, v2, v9\n\t"  // × scale col 1
-            "vfmul.vv v3, v3, v9\n\t"
-            :
-            :
-            : "v2", "v3");
+        if (lut) {
+            asm volatile(
+                "vzext.vf2 v10, v5\n\t"
+                "vzext.vf2 v11, v6\n\t"
+                "vsll.vi v10, v10, 1\n\t"
+                "vsll.vi v11, v11, 1\n\t"
+                "vluxei16.v v2, (%0), v10\n\t"
+                "vluxei16.v v3, (%0), v11\n\t"
+                "vfmul.vv v2, v2, v9\n\t"
+                "vfmul.vv v3, v3, v9\n\t"
+                :
+                : "r"(lut)
+                : "v2", "v3", "v10", "v11", "memory");
+        } else {
+            asm volatile(
+                "vzext.vf2 v2, v5\n\t"
+                "vzext.vf2 v3, v6\n\t"
+                "vadd.vi v2, v2, -8\n\t"
+                "vadd.vi v3, v3, -8\n\t"
+                "vfcvt.f.x.v v2, v2\n\t"
+                "vfcvt.f.x.v v3, v3\n\t"
+                "vfmul.vv v2, v2, v9\n\t"  // × scale col 1
+                "vfmul.vv v3, v3, v9\n\t"
+                :
+                :
+                : "v2", "v3");
+        }
     }
 }
 

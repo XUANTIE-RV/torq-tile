@@ -189,7 +189,9 @@ set(TORQ_TILE_RVV_SOURCES
     src/gemm/gemm_i8_i4/gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp/tqt_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8dxp_qsi4cxp_4x1vl_rvv.cpp
     # W2A8 RVV
     src/gemm/gemm_i8_i2/gemm_1xnbias_clamp_f32_qai8dx_qsi2cxt/tqt_gemm_1xnbias_clamp_f32_qai8dx_qsi2cxt_4x1vl_rvv.cpp
+    src/gemm/gemm_i8_i2/gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi2cxt/tqt_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi2cxt_4x1vl_rvv.cpp
     src/gemm/gemm_i8_i2/gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp/tqt_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_4x1vl_rvv.cpp
+    src/gemm/gemm_i8_i2/gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi2cxp/tqt_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi2cxp_4x1vl_rvv.cpp
 )
 
 # RVV FP16 (RISC-V Vector + Zfh + Zvfh) kernel files
@@ -213,7 +215,11 @@ set(TORQ_TILE_RVV_F16_SOURCES
     src/gemm/gemm_f16_i4/gemm_1xnbias_clamp_f16_f16_qsi4c2t/tqt_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv.cpp
     src/gemm/gemm_f16_i4/gemm_1xnbias_clamp_f16_f16p_qsi4c2p/tqt_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv.cpp
     src/gemm/gemm_f16_i4/gemm_1xnbias_clamp_f32_f16_qsi4c2t/tqt_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv.cpp
+    src/gemm/gemm_f16_i4/gemm_1xnbias_clamp_f32_f16_qai4c2t/tqt_gemm_1xnbias_clamp_f32_f16_qai4c2t_8x1vl_rvv.cpp
+    src/gemm/gemm_f16_i4/gemm_1xnbias_clamp_f32_f16_qsi4c2t/tqt_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x1vl_rvv.cpp
     src/gemm/gemm_f16_i4/gemm_1xnbias_clamp_f32_f16p_qsi4c2p/tqt_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv.cpp
+    src/gemm/gemm_f16_i4/gemm_1xnbias_clamp_f32_f16p_qai4c2p/tqt_gemm_1xnbias_clamp_f32_f16p_qai4c2p_8x1vl_rvv.cpp
+    src/gemm/gemm_f16_i4/gemm_1xnbias_clamp_f32_f16p_qsi4c2p/tqt_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x1vl_rvv.cpp
     src/gemm/gemm_i8_i8/gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt/tqt_gemm_1xnbias_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv.cpp
     src/gemm/gemm_i8_i8/gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt/tqt_gemm_1xnbiasf32_clamp_f16_qai8dx_qsi8cxt_4x1vl_rvv.cpp
     src/gemm/gemm_i8_i8/gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp/tqt_gemm_1xnbias_clamp_f16_qai8dxp_qsi8cxp_4x1vl_rvv.cpp

@@ -49,7 +49,7 @@ typedef void (*tqt_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_run_gemm_func_t)(
     size_t m, size_t n, size_t k, size_t bl, const void *A_packed, size_t lda, size_t k_idx_a,
     const void *B_packed, size_t ldb, size_t k_idx_b, const void *scale_b, size_t ldsb,
     const void *C, size_t ldc, void *D, size_t ldd, const void *bias, float clamp_min,
-    float clamp_max);
+    float clamp_max, const float16_t *lut);
 
 /// Micro-kernel interface
 struct tqt_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_ukernel

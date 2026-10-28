@@ -13,7 +13,7 @@
 extern "C" {
 #endif
 
-/// Default LUT for qsi2 -> int8 dequantization (matches KleidiAI semantics).
+/// Default LUT for qsi2 -> int8 dequantization.
 /// u2 ∈ {0, 1, 2, 3}  ->  i8 ∈ {-2, -1, 0, 1}.  Equivalent to `u2 - 2`.
 static const int8_t tqt_qsi2_default_lut[4] = {-2, -1, 0, 1};
 
@@ -52,6 +52,18 @@ static inline void tqt_compute_sum_b(const uint8_t *B, size_t n, size_t k, size_
     for (size_t i = 0; i < n; ++i) {
         sum_b[i] = tqt_compute_sum_b_row(B + i * ldb_bytes, k);
     }
+}
+
+/// Sum the decoded values of a K window using the same LUT as the dot product.
+/// byte_stride is one for a transposed row, or the packed panel width for Bp.
+static inline int32_t tqt_compute_sum_b_row_lut(const uint8_t *row, size_t k, size_t byte_stride,
+                                                const int8_t *lut)
+{
+    const int8_t *values = lut ? lut : tqt_qsi2_default_lut;
+    int32_t sum = 0;
+    for (size_t i = 0; i < k; ++i)
+        sum += values[(row[(i / 4) * byte_stride] >> (2 * (i % 4))) & 3];
+    return sum;
 }
 
 #ifdef __cplusplus

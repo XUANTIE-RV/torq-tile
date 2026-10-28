@@ -1153,7 +1153,8 @@ struct QuantizedWeightGemmFuncs
     using RunGemmFunc = void (*)(size_t m, size_t n, size_t k, size_t bl, const void *A, size_t lda,
                                  size_t k_idx_a, const void *B, size_t ldb, size_t k_idx_b,
                                  const void *scale_b, size_t ldsb, const void *C, size_t ldc,
-                                 void *D, size_t ldd, const void *bias, TD clamp_min, TD clamp_max);
+                                 void *D, size_t ldd, const void *bias, TD clamp_min, TD clamp_max,
+                                 const TA *lut);
 
     GetMStepFunc get_m_step;
     GetNStepFunc get_n_step;
@@ -1237,7 +1238,7 @@ void run_quantized_weight_gemm_test(const GemmTestParams &params,
 
     funcs.run_gemm(m, n, k, bl, A.data(), lda, 0, B.data(), ldb, 0, scale_b.data(), ldsb,
                    params.has_c ? C_data.data() : nullptr, ldc, act_D.data(), ldd,
-                   params.has_bias ? bias_data.data() : nullptr, clamp_min, clamp_max);
+                   params.has_bias ? bias_data.data() : nullptr, clamp_min, clamp_max, nullptr);
 
     // Verify (use TA's tolerance because internal accumulation is in TA precision).
     auto result =
@@ -1268,10 +1269,10 @@ void run_quantized_weight_gemm_test(const GemmTestParams &params,
             reinterpret_cast<const uint8_t *>(scale_b.data()) + scale_b_offset);
         funcs.run_gemm(m, n, window, bl, A_window.data(), window, 0, B_window.data(), window, 0,
                        scale_b_window, ldsb, nullptr, n, zero_origin.data(), n, nullptr,
-                       to_target_type<TD>(-FLT_MAX), to_target_type<TD>(FLT_MAX));
+                       to_target_type<TD>(-FLT_MAX), to_target_type<TD>(FLT_MAX), nullptr);
         funcs.run_gemm(m, n, window, bl, A.data() + k_origin, k, k_origin, B.data() + k_origin / 2,
                        k, k_origin, scale_b_window, ldsb, nullptr, n, nonzero_origin.data(), n,
-                       nullptr, to_target_type<TD>(-FLT_MAX), to_target_type<TD>(FLT_MAX));
+                       nullptr, to_target_type<TD>(-FLT_MAX), to_target_type<TD>(FLT_MAX), nullptr);
 
         SCOPED_TRACE("nonzero quantized-weight K origin");
         auto origin_result = verify_gemm_result<TD>(zero_origin.data(), nonzero_origin.data(),
@@ -1283,11 +1284,11 @@ void run_quantized_weight_gemm_test(const GemmTestParams &params,
             std::vector<TD> partial(m * n), combined(m * n);
             funcs.run_gemm(m, n, k_origin, bl, A.data(), k, 0, B.data(), k, 0, scale_b.data(), ldsb,
                            nullptr, n, partial.data(), n, nullptr, to_target_type<TD>(-INFINITY),
-                           to_target_type<TD>(INFINITY));
+                           to_target_type<TD>(INFINITY), nullptr);
             funcs.run_gemm(m, n, window, bl, A.data() + k_origin, k, k_origin,
                            B.data() + k_origin / 2, k, k_origin, scale_b_window, ldsb,
                            partial.data(), n, combined.data(), n, nullptr,
-                           to_target_type<TD>(-INFINITY), to_target_type<TD>(INFINITY));
+                           to_target_type<TD>(-INFINITY), to_target_type<TD>(INFINITY), nullptr);
         }
     }
 }
@@ -1321,7 +1322,7 @@ struct PackedQuantizedWeightGemmFuncs
                                  size_t lda, size_t k_idx_a, const void *B_packed, size_t ldb,
                                  size_t k_idx_b, const void *scale_b, size_t ldsb, const void *C,
                                  size_t ldc, void *D, size_t ldd, const void *bias, TD clamp_min,
-                                 TD clamp_max);
+                                 TD clamp_max, const TA *lut);
 
     GetMStepFunc get_m_step;
     GetNStepFunc get_n_step;
@@ -1412,7 +1413,7 @@ void run_packed_quantized_weight_gemm_test(const GemmTestParams &params,
     std::vector<TD> act_D(m * n, to_target_type<TD>(0.0f));
     funcs.run_gemm(m, n, k, bl, A_packed.data(), lda, 0, B_packed.data(), ldb, 0, scale_b.data(),
                    ldsb, params.has_c ? C_data.data() : nullptr, ldc, act_D.data(), ldd,
-                   params.has_bias ? bias_data.data() : nullptr, clamp_min, clamp_max);
+                   params.has_bias ? bias_data.data() : nullptr, clamp_min, clamp_max, nullptr);
 
     // Verify (use TA's tolerance — internal accumulation is in TA precision).
     auto result =
@@ -1495,11 +1496,11 @@ void run_packed_quantized_weight_gemm_test(const GemmTestParams &params,
             to_target_type<TD>(-FLT_MAX), to_target_type<TD>(FLT_MAX));
         funcs.run_gemm(m, n, window, bl, A_window_packed.data(), window, 0, B_window_packed.data(),
                        window, 0, scale_b_window, ldsb, nullptr, n, zero_origin_packed.data(), n,
-                       nullptr, to_target_type<TD>(-FLT_MAX), to_target_type<TD>(FLT_MAX));
+                       nullptr, to_target_type<TD>(-FLT_MAX), to_target_type<TD>(FLT_MAX), nullptr);
         funcs.run_gemm(m, n, window, bl, A_packed.data() + a_offset, k, k_origin,
                        B_packed.data() + b_offset, k, k_origin, scale_b_window, ldsb, nullptr, n,
                        nonzero_origin.data(), n, nullptr, to_target_type<TD>(-FLT_MAX),
-                       to_target_type<TD>(FLT_MAX));
+                       to_target_type<TD>(FLT_MAX), nullptr);
 
         SCOPED_TRACE("nonzero packed quantized-weight K origin");
         auto origin_result = verify_gemm_result<TD>(zero_origin.data(), nonzero_origin.data(),
@@ -1517,11 +1518,11 @@ void run_packed_quantized_weight_gemm_test(const GemmTestParams &params,
             std::vector<TD> partial(m * n), combined(m * n);
             funcs.run_gemm(m, n, k_origin, bl, A_packed.data(), k, 0, B_packed.data(), k, 0,
                            scale_b.data(), ldsb, nullptr, n, partial.data(), n, nullptr,
-                           to_target_type<TD>(-INFINITY), to_target_type<TD>(INFINITY));
+                           to_target_type<TD>(-INFINITY), to_target_type<TD>(INFINITY), nullptr);
             funcs.run_gemm(m, n, window, bl, A_packed.data() + a_offset, k, k_origin,
                            B_packed.data() + b_offset, k, k_origin, scale_b_window, ldsb,
                            partial.data(), n, combined.data(), n, nullptr,
-                           to_target_type<TD>(-INFINITY), to_target_type<TD>(INFINITY));
+                           to_target_type<TD>(-INFINITY), to_target_type<TD>(INFINITY), nullptr);
         }
     }
 }

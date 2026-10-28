@@ -315,3 +315,115 @@ static inline void tqt_store_f32_kernel_gemm_i8_i2_4x1vl_rvv(size_t vl, float *D
     if constexpr (MR >= 4)
         asm volatile("vse32.v v28, (%0)" : : "r"(D + 3 * stride_row) : "memory");
 }
+
+template <size_t MR, bool USE_DEFAULT_LUT>
+static inline void tqt_dot_bt_kernel_gemm_i8_i2_4x1vl_rvv(size_t K, const int8_t *A, size_t lda,
+                                                          const uint8_t *B, size_t ldb_bytes,
+                                                          size_t vl)
+{
+    const int8_t *a_ptr = A;
+    const uint8_t *b_ptr = B;
+    const int8_t *a_ptrs[MR];
+
+    const size_t k_bytes = K / 4;
+
+    for (size_t kb = 0; kb < k_bytes; ++kb) {
+        // Strided byte load: vl rows of B, each contributes 1 byte at the same K-byte position.
+        tqt_load_bt_byte_kernel_gemm_i8_i2_4x1vl_rvv(vl, b_ptr, ldb_bytes);
+
+        // Slot 0
+        if constexpr (USE_DEFAULT_LUT) {
+            tqt_decode_b_default_lut_kernel_gemm_i8_i2_4x1vl_rvv<0, false>(vl);
+        } else {
+            tqt_decode_b_custom_lut_kernel_gemm_i8_i2_4x1vl_rvv<0, false>(vl);
+        }
+        tqt_get_a_ptr_gemm_i8_i2_4x1vl_rvv<MR>(a_ptr + 0, lda, a_ptrs);
+        tqt_vmacc_kernel_gemm_i8_i2_4x1vl_rvv<MR>(vl, a_ptrs);
+
+        // Slot 1
+        if constexpr (USE_DEFAULT_LUT) {
+            tqt_decode_b_default_lut_kernel_gemm_i8_i2_4x1vl_rvv<1>(vl);
+        } else {
+            tqt_decode_b_custom_lut_kernel_gemm_i8_i2_4x1vl_rvv<1>(vl);
+        }
+        tqt_get_a_ptr_gemm_i8_i2_4x1vl_rvv<MR>(a_ptr + 1, lda, a_ptrs);
+        tqt_vmacc_kernel_gemm_i8_i2_4x1vl_rvv<MR>(vl, a_ptrs);
+
+        // Slot 2
+        if constexpr (USE_DEFAULT_LUT) {
+            tqt_decode_b_default_lut_kernel_gemm_i8_i2_4x1vl_rvv<2>(vl);
+        } else {
+            tqt_decode_b_custom_lut_kernel_gemm_i8_i2_4x1vl_rvv<2>(vl);
+        }
+        tqt_get_a_ptr_gemm_i8_i2_4x1vl_rvv<MR>(a_ptr + 2, lda, a_ptrs);
+        tqt_vmacc_kernel_gemm_i8_i2_4x1vl_rvv<MR>(vl, a_ptrs);
+
+        // Slot 3
+        if constexpr (USE_DEFAULT_LUT) {
+            tqt_decode_b_default_lut_kernel_gemm_i8_i2_4x1vl_rvv<3>(vl);
+        } else {
+            tqt_decode_b_custom_lut_kernel_gemm_i8_i2_4x1vl_rvv<3>(vl);
+        }
+        tqt_get_a_ptr_gemm_i8_i2_4x1vl_rvv<MR>(a_ptr + 3, lda, a_ptrs);
+        tqt_vmacc_kernel_gemm_i8_i2_4x1vl_rvv<MR>(vl, a_ptrs);
+
+        a_ptr += 4;  // 4 K elements per byte (each B byte covers 4 K positions)
+        b_ptr += 1;  // 1 packed byte per K-byte
+    }
+}
+
+template <size_t MR, bool USE_DEFAULT_LUT>
+static inline void tqt_dot_packed_kernel_gemm_i8_i2_4x1vl_rvv(size_t K, const int8_t *A,
+                                                              const uint8_t *B, size_t vl)
+{
+    const int8_t *a_ptr = A;
+    const uint8_t *b_ptr = B;
+    const int8_t *a_ptrs[MR];
+
+    // K must be a multiple of 4. Each B byte covers 4 K elements (slots 0..3).
+    const size_t k_bytes = K / 4;
+
+    for (size_t kb = 0; kb < k_bytes; ++kb) {
+        // Load one byte per N column into v0 (e8 m1).
+        tqt_load_b_byte_kernel_gemm_i8_i2_4x1vl_rvv(vl, b_ptr);
+
+        // Slot 0
+        if constexpr (USE_DEFAULT_LUT) {
+            tqt_decode_b_default_lut_kernel_gemm_i8_i2_4x1vl_rvv<0, false>(vl);
+        } else {
+            tqt_decode_b_custom_lut_kernel_gemm_i8_i2_4x1vl_rvv<0, false>(vl);
+        }
+        tqt_get_a_ptr_gemm_i8_i2_4x1vl_rvv<MR>(a_ptr + 0 * MR, 1, a_ptrs);
+        tqt_vmacc_kernel_gemm_i8_i2_4x1vl_rvv<MR>(vl, a_ptrs);
+
+        // Slot 1
+        if constexpr (USE_DEFAULT_LUT) {
+            tqt_decode_b_default_lut_kernel_gemm_i8_i2_4x1vl_rvv<1>(vl);
+        } else {
+            tqt_decode_b_custom_lut_kernel_gemm_i8_i2_4x1vl_rvv<1>(vl);
+        }
+        tqt_get_a_ptr_gemm_i8_i2_4x1vl_rvv<MR>(a_ptr + 1 * MR, 1, a_ptrs);
+        tqt_vmacc_kernel_gemm_i8_i2_4x1vl_rvv<MR>(vl, a_ptrs);
+
+        // Slot 2
+        if constexpr (USE_DEFAULT_LUT) {
+            tqt_decode_b_default_lut_kernel_gemm_i8_i2_4x1vl_rvv<2>(vl);
+        } else {
+            tqt_decode_b_custom_lut_kernel_gemm_i8_i2_4x1vl_rvv<2>(vl);
+        }
+        tqt_get_a_ptr_gemm_i8_i2_4x1vl_rvv<MR>(a_ptr + 2 * MR, 1, a_ptrs);
+        tqt_vmacc_kernel_gemm_i8_i2_4x1vl_rvv<MR>(vl, a_ptrs);
+
+        // Slot 3
+        if constexpr (USE_DEFAULT_LUT) {
+            tqt_decode_b_default_lut_kernel_gemm_i8_i2_4x1vl_rvv<3>(vl);
+        } else {
+            tqt_decode_b_custom_lut_kernel_gemm_i8_i2_4x1vl_rvv<3>(vl);
+        }
+        tqt_get_a_ptr_gemm_i8_i2_4x1vl_rvv<MR>(a_ptr + 3 * MR, 1, a_ptrs);
+        tqt_vmacc_kernel_gemm_i8_i2_4x1vl_rvv<MR>(vl, a_ptrs);
+
+        a_ptr += 4 * MR;  // 4 K steps × MR bytes per step (interleaved layout)
+        b_ptr += vl;      // packed B layout has `actual_n` bytes per K-byte for this N-tile
+    }
+}

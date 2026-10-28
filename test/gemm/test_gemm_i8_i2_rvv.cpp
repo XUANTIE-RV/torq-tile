@@ -18,6 +18,7 @@
 #include "src/gemm/gemm_i8_i2/tqt_params_i8_i2.h"
 #include "src/gemm/gemm_i8_i2/tqt_utils_i8_i2.h"
 #include "test/common/gemm_clamp_test_utils.h"
+#include "test/common/quantized_gemm_test_runner.h"
 
 namespace
 {
@@ -108,8 +109,8 @@ static void quantize_a_qai8dx(size_t m, size_t k, const float *A_fp32, int8_t *A
 // output channel.
 //
 // Symmetric int2 range used: {-2, -1, 0, 1}. We pick scale_b = max_abs / 2 so that the
-// largest magnitude maps near -2 (the saturating endpoint). This matches KleidiAI's
-// rhs_zero_point=2 (= u2 - 2) convention.
+// largest magnitude maps near -2 (the saturating endpoint). Stored u2 codes decode
+// as u2 - 2.
 static void quantize_b_qsi2cx(size_t n, size_t k, const float *B_fp32, uint8_t *B_u2,
                               float *scale_b, int32_t *sum_b)
 {
@@ -588,3 +589,212 @@ INSTANTIATE_TEST_SUITE_P(GemmTests, Test_gemm_1xnbias_clamp_f32_qai8dxp_qsi2cxp_
                          common_test_values(), GemmI8I2ParamName());
 
 }  // namespace
+
+#include "src/gemm/gemm_i8_i2/gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi2cxt/tqt_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi2cxt_4x1vl_rvv.h"
+#include "src/gemm/gemm_i8_i2/gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi2cxp/tqt_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi2cxp_4x1vl_rvv.h"
+
+TEST(RequantizedI2Contract, gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi2cxt_4x1vl_rvv)
+{
+    const size_t ms = tqt_get_m_step_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi2cxt_4x1vl_rvv();
+    const size_t ns = tqt_get_n_step_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi2cxt_4x1vl_rvv();
+    const size_t m = 2 * ms + 1, n = 2 * ns + 1, k = 40;
+    const size_t lda = k + 4, ldb = k + 8, ldd = n + 7;
+    std::vector<int8_t> a(m * lda);
+    std::vector<uint8_t> b(n * (ldb / 4));
+    std::vector<int32_t> bias(n);
+    std::vector<float> scale(n);
+    for (size_t i = 0; i < a.size(); ++i)
+        a[i] = (int8_t)((int)(i * 29 % 256) - 128);
+    for (size_t i = 0; i < b.size(); ++i)
+        b[i] = (uint8_t)(i * 83 + 29);
+    for (size_t i = 0; i < n; ++i) {
+        bias[i] = (int32_t)(i % 11) - 5;
+        scale[i] = i % 3 == 0 ? 0.5f : i % 3 == 1 ? 1.0f : 2.0f;
+    }
+    const int8_t custom_lut[4] = {-127, 13, 0, 113};
+    const int8_t linear_lut[4] = {-2, -1, 0, 1};
+    for (bool custom : {false, true}) {
+        const int8_t *lut = custom ? custom_lut : nullptr;
+        const int8_t *decoded = custom ? custom_lut : linear_lut;
+        for (bool window : {false, true}) {
+            const size_t mi = window ? ms : 0, ni = window ? ns : 0;
+            const size_t ki = window ? 4 : 0, count = window ? 32 : k;
+            for (bool with_bias : {false, true}) {
+                for (unsigned long mode : {0UL, 1UL, 2UL, 3UL}) {
+                    std::vector<int8_t> d(m * ldd + 16, 93);
+                    tqt_qai8_qai8_qsi2cx_params params{1.0f, 37, scale.data() + ni, 1.0f, -7};
+                    const auto *a_ptr =
+                        a.data() +
+                        tqt_get_a_offset_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi2cxt_4x1vl_rvv(
+                            mi, ki, lda);
+                    const auto *b_ptr =
+                        b.data() +
+                        tqt_get_b_offset_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi2cxt_4x1vl_rvv(
+                            ni, ki, ldb);
+                    unsigned long saved;
+                    asm volatile("csrrw %0, frm, %1" : "=r"(saved) : "r"(mode) : "memory");
+                    tqt_run_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi2cxt_4x1vl_rvv(
+                        m - mi, n - ni, count, a_ptr, lda, ki, b_ptr, ldb, ki,
+                        d.data() + mi * ldd + ni, ldd, with_bias ? bias.data() + ni : nullptr, -53,
+                        79, lut, &params);
+                    unsigned long after;
+                    asm volatile("csrr %0, frm\n\tcsrw frm, %1"
+                                 : "=&r"(after)
+                                 : "r"(saved)
+                                 : "memory");
+                    ASSERT_EQ(after, mode);
+                    for (size_t row = 0; row < m; ++row) {
+                        for (size_t col = 0; col < ldd; ++col) {
+                            if (row < mi || col < ni || col >= n) {
+                                ASSERT_EQ(d[row * ldd + col], 93);
+                                continue;
+                            }
+                            int64_t dot = with_bias ? bias[col] : 0;
+                            for (size_t j = ki; j < ki + count; ++j) {
+                                const int code = (b[col * (ldb / 4) + j / 4] >> (2 * (j % 4))) & 3;
+                                dot += (int64_t)(a[row * lda + j] - 37) * decoded[code];
+                            }
+                            ASSERT_EQ(d[row * ldd + col], torq_tile::test::reference_requantized_i8(
+                                                              dot, scale[col], -7, -53, 79))
+                                << "row=" << row << " col=" << col << " custom=" << custom
+                                << " window=" << window << " mode=" << mode;
+                        }
+                    }
+                    for (size_t i = m * ldd; i < d.size(); ++i)
+                        ASSERT_EQ(d[i], 93);
+                }
+            }
+        }
+    }
+    EXPECT_EQ(tqt_get_bias_offset_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi2cxt_4x1vl_rvv(ns),
+              ns * sizeof(int32_t));
+    EXPECT_EQ(tqt_get_d_size_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi2cxt_4x1vl_rvv(m, n),
+              m * n);
+}
+
+TEST(RequantizedI2Contract, gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi2cxp_4x1vl_rvv)
+{
+    const size_t ms = tqt_get_m_step_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi2cxp_4x1vl_rvv();
+    const size_t ns = tqt_get_n_step_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi2cxp_4x1vl_rvv();
+    const size_t m = 2 * ms + 1, n = 2 * ns + 1, k = 40;
+    const size_t lda = k + 4, ldb = k + 8, ldd = n + 7;
+    std::vector<int8_t> a(m * lda);
+    std::vector<uint8_t> b(n * (ldb / 4));
+    std::vector<int32_t> bias(n);
+    std::vector<float> scale(n);
+    for (size_t i = 0; i < a.size(); ++i)
+        a[i] = (int8_t)((int)(i * 29 % 256) - 128);
+    for (size_t i = 0; i < b.size(); ++i)
+        b[i] = (uint8_t)(i * 83 + 29);
+    for (size_t i = 0; i < n; ++i) {
+        bias[i] = (int32_t)(i % 11) - 5;
+        scale[i] = i % 3 == 0 ? 0.5f : i % 3 == 1 ? 1.0f : 2.0f;
+    }
+    const int8_t custom_lut[4] = {-127, 13, 0, 113};
+    const int8_t linear_lut[4] = {-2, -1, 0, 1};
+    for (bool custom : {false, true}) {
+        const int8_t *lut = custom ? custom_lut : nullptr;
+        const int8_t *decoded = custom ? custom_lut : linear_lut;
+        for (bool window : {false, true}) {
+            const size_t mi = window ? ms : 0, ni = window ? ns : 0;
+            const size_t ki = window ? 4 : 0, count = window ? 32 : k;
+            for (bool with_bias : {false, true}) {
+                for (unsigned long mode : {0UL, 1UL, 2UL, 3UL}) {
+                    std::vector<int8_t> d(m * ldd + 16, 93);
+                    tqt_qai8_qai8_qsi2cx_params params{1.0f, 37, scale.data() + ni, 1.0f, -7};
+                    std::vector<int8_t> ap(
+                        tqt_get_a_packed_size_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi2cxp_4x1vl_rvv(
+                            m, k));
+                    std::vector<uint8_t> bp(
+                        tqt_get_b_packed_size_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi2cxp_4x1vl_rvv(
+                            n, k));
+                    tqt_run_a_pack_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi2cxp_4x1vl_rvv(
+                        m, k, lda, k, 0, a.data(), ap.data());
+                    tqt_run_bt_pack_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi2cxp_4x1vl_rvv(
+                        n, k, ldb, k, 0, b.data(), bp.data());
+                    const auto *a_ptr =
+                        ap.data() +
+                        tqt_get_a_packed_offset_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi2cxp_4x1vl_rvv(
+                            mi, ki, k, m - mi);
+                    const auto *b_ptr =
+                        bp.data() +
+                        tqt_get_b_packed_offset_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi2cxp_4x1vl_rvv(
+                            ni, ki, k, n - ni);
+                    unsigned long saved;
+                    asm volatile("csrrw %0, frm, %1" : "=r"(saved) : "r"(mode) : "memory");
+                    tqt_run_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi2cxp_4x1vl_rvv(
+                        m - mi, n - ni, count, a_ptr, k, ki, b_ptr, k, ki, d.data() + mi * ldd + ni,
+                        ldd, with_bias ? bias.data() + ni : nullptr, -53, 79, lut, &params);
+                    unsigned long after;
+                    asm volatile("csrr %0, frm\n\tcsrw frm, %1"
+                                 : "=&r"(after)
+                                 : "r"(saved)
+                                 : "memory");
+                    ASSERT_EQ(after, mode);
+                    for (size_t row = 0; row < m; ++row) {
+                        for (size_t col = 0; col < ldd; ++col) {
+                            if (row < mi || col < ni || col >= n) {
+                                ASSERT_EQ(d[row * ldd + col], 93);
+                                continue;
+                            }
+                            int64_t dot = with_bias ? bias[col] : 0;
+                            for (size_t j = ki; j < ki + count; ++j) {
+                                const int code = (b[col * (ldb / 4) + j / 4] >> (2 * (j % 4))) & 3;
+                                dot += (int64_t)(a[row * lda + j] - 37) * decoded[code];
+                            }
+                            ASSERT_EQ(d[row * ldd + col], torq_tile::test::reference_requantized_i8(
+                                                              dot, scale[col], -7, -53, 79))
+                                << "row=" << row << " col=" << col << " custom=" << custom
+                                << " window=" << window << " mode=" << mode;
+                        }
+                    }
+                    for (size_t i = m * ldd; i < d.size(); ++i)
+                        ASSERT_EQ(d[i], 93);
+                }
+            }
+        }
+    }
+    EXPECT_EQ(tqt_get_bias_offset_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi2cxp_4x1vl_rvv(ns),
+              ns * sizeof(int32_t));
+    EXPECT_EQ(tqt_get_d_size_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi2cxp_4x1vl_rvv(m, n),
+              m * n);
+}
+
+TEST(LowbitOutputScale, gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi2cxt_4x1vl_rvv)
+{
+    torq_tile::test::check_lowbit_output_scales(
+        tqt_get_n_step_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi2cxt_4x1vl_rvv(),
+        [&](size_t m, size_t n, float sa, float sd, const int32_t *bias, int8_t *d, size_t ldd) {
+            const size_t k = 4;
+            std::vector<int8_t> a(m * k, 0);
+            std::vector<uint8_t> b(n * k / 4, 0);
+            std::vector<float> sb(n, 1.0f);
+            tqt_qai8_qai8_qsi2cx_params params{sa, 0, sb.data(), sd, 7};
+            tqt_run_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8_qsi2cxt_4x1vl_rvv(
+                m, n, k, a.data(), k, 0, b.data(), k, 0, d, ldd, bias, -53, 79, nullptr, &params);
+        });
+}
+
+TEST(LowbitOutputScale, gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi2cxp_4x1vl_rvv)
+{
+    torq_tile::test::check_lowbit_output_scales(
+        tqt_get_n_step_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi2cxp_4x1vl_rvv(),
+        [&](size_t m, size_t n, float sa, float sd, const int32_t *bias, int8_t *d, size_t ldd) {
+            const size_t k = 4;
+            std::vector<int8_t> a(m * k, 0);
+            std::vector<uint8_t> b(n * k / 4, 0);
+            std::vector<float> sb(n, 1.0f);
+            std::vector<uint8_t> ap(
+                tqt_get_a_packed_size_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi2cxp_4x1vl_rvv(
+                    m, k)),
+                bp(tqt_get_b_packed_size_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi2cxp_4x1vl_rvv(
+                    n, k));
+            tqt_run_a_pack_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi2cxp_4x1vl_rvv(
+                m, k, k, k, 0, a.data(), ap.data());
+            tqt_run_bt_pack_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi2cxp_4x1vl_rvv(
+                n, k, k, k, 0, b.data(), bp.data());
+            tqt_qai8_qai8_qsi2cx_params params{sa, 0, sb.data(), sd, 7};
+            tqt_run_gemm_1xnbias_reqi32toi8_clamp_qai8_qai8p_qsi2cxp_4x1vl_rvv(
+                m, n, k, ap.data(), k, 0, bp.data(), k, 0, d, ldd, bias, -53, 79, nullptr, &params);
+        });
+}

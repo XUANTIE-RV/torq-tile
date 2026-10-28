@@ -232,7 +232,7 @@ int main()
             uint8_t *d_ptr = (uint8_t *)D + ukernel.get_d_offset(m_idx, n_idx, N);
 
             ukernel.run_gemm(actual_m, actual_n, K, BL, a_ptr, K, 0, b_ptr, K, 0, scale_ptr, ldsb,
-                             c_ptr, ldc, d_ptr, ldd, bias_ptr, clamp_min, clamp_max);
+                             c_ptr, ldc, d_ptr, ldd, bias_ptr, clamp_min, clamp_max, nullptr);
         }
     }
 

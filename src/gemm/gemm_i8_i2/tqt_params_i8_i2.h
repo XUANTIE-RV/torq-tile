@@ -29,6 +29,17 @@ struct tqt_qai8dx_qsi2cx_f32_params
     const int32_t *sum_b;         // [N] precomputed row-sum of dequantized int2 weights
 };
 
+/// Parameters for per-tensor asymmetric I8 A and per-channel LUT-decoded I2 B.
+/// Raw I32 bias is added to the centered dot before scale_a * scale_b / scale_d.
+struct tqt_qai8_qai8_qsi2cx_params
+{
+    float scale_a;
+    int32_t zero_point_a;
+    const float *scale_b;  // [N]
+    float scale_d;
+    int32_t zero_point_d;
+};
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

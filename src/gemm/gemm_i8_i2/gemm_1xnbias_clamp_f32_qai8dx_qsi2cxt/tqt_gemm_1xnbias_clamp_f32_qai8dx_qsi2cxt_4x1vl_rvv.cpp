@@ -83,61 +83,6 @@ size_t tqt_get_d_size_gemm_1xnbias_clamp_f32_qai8dx_qsi2cxt_4x1vl_rvv(size_t m, 
 // ===========================================================================
 
 template <size_t MR, bool USE_DEFAULT_LUT>
-static inline void gemm_kernel_kloop(size_t K, const int8_t *A, size_t lda, const uint8_t *B,
-                                     size_t ldb_bytes, size_t vl)
-{
-    const int8_t *a_ptr = A;
-    const uint8_t *b_ptr = B;
-    const int8_t *a_ptrs[MR];
-
-    const size_t k_bytes = K / 4;
-
-    for (size_t kb = 0; kb < k_bytes; ++kb) {
-        // Strided byte load: vl rows of B, each contributes 1 byte at the same K-byte position.
-        tqt_load_bt_byte_kernel_gemm_i8_i2_4x1vl_rvv(vl, b_ptr, ldb_bytes);
-
-        // Slot 0
-        if constexpr (USE_DEFAULT_LUT) {
-            tqt_decode_b_default_lut_kernel_gemm_i8_i2_4x1vl_rvv<0, false>(vl);
-        } else {
-            tqt_decode_b_custom_lut_kernel_gemm_i8_i2_4x1vl_rvv<0, false>(vl);
-        }
-        tqt_get_a_ptr_gemm_i8_i2_4x1vl_rvv<MR>(a_ptr + 0, lda, a_ptrs);
-        tqt_vmacc_kernel_gemm_i8_i2_4x1vl_rvv<MR>(vl, a_ptrs);
-
-        // Slot 1
-        if constexpr (USE_DEFAULT_LUT) {
-            tqt_decode_b_default_lut_kernel_gemm_i8_i2_4x1vl_rvv<1>(vl);
-        } else {
-            tqt_decode_b_custom_lut_kernel_gemm_i8_i2_4x1vl_rvv<1>(vl);
-        }
-        tqt_get_a_ptr_gemm_i8_i2_4x1vl_rvv<MR>(a_ptr + 1, lda, a_ptrs);
-        tqt_vmacc_kernel_gemm_i8_i2_4x1vl_rvv<MR>(vl, a_ptrs);
-
-        // Slot 2
-        if constexpr (USE_DEFAULT_LUT) {
-            tqt_decode_b_default_lut_kernel_gemm_i8_i2_4x1vl_rvv<2>(vl);
-        } else {
-            tqt_decode_b_custom_lut_kernel_gemm_i8_i2_4x1vl_rvv<2>(vl);
-        }
-        tqt_get_a_ptr_gemm_i8_i2_4x1vl_rvv<MR>(a_ptr + 2, lda, a_ptrs);
-        tqt_vmacc_kernel_gemm_i8_i2_4x1vl_rvv<MR>(vl, a_ptrs);
-
-        // Slot 3
-        if constexpr (USE_DEFAULT_LUT) {
-            tqt_decode_b_default_lut_kernel_gemm_i8_i2_4x1vl_rvv<3>(vl);
-        } else {
-            tqt_decode_b_custom_lut_kernel_gemm_i8_i2_4x1vl_rvv<3>(vl);
-        }
-        tqt_get_a_ptr_gemm_i8_i2_4x1vl_rvv<MR>(a_ptr + 3, lda, a_ptrs);
-        tqt_vmacc_kernel_gemm_i8_i2_4x1vl_rvv<MR>(vl, a_ptrs);
-
-        a_ptr += 4;  // 4 K elements per byte (each B byte covers 4 K positions)
-        b_ptr += 1;  // 1 packed byte per K-byte
-    }
-}
-
-template <size_t MR, bool USE_DEFAULT_LUT>
 static void gemm_kernel(size_t K, float *D, const int8_t *A, size_t lda, const uint8_t *B,
                         size_t ldb_bytes, const float *bias, size_t ldd, float clamp_min,
                         float clamp_max, bool apply_clamp, size_t actual_n, const int32_t *neg_zp_a,
@@ -154,7 +99,7 @@ static void gemm_kernel(size_t K, float *D, const int8_t *A, size_t lda, const u
 
     tqt_init_zero_kernel_gemm_i8_i2_4x1vl_rvv<MR>(actual_n);
 
-    gemm_kernel_kloop<MR, USE_DEFAULT_LUT>(K, A, lda, B, ldb_bytes, actual_n);
+    tqt_dot_bt_kernel_gemm_i8_i2_4x1vl_rvv<MR, USE_DEFAULT_LUT>(K, A, lda, B, ldb_bytes, actual_n);
 
     tqt_apply_zp_correction_kernel_gemm_i8_i2_4x1vl_rvv<MR>(actual_n, sum_b, neg_zp_a);
     tqt_dequant_to_f32_kernel_gemm_i8_i2_4x1vl_rvv<MR>(actual_n, scale_a, scale_b);

@@ -475,7 +475,8 @@ struct QuantizedWeightGemmFuncs
     using RunGemmFunc = void (*)(size_t m, size_t n, size_t k, size_t bl, const void *A, size_t lda,
                                  size_t k_idx_a, const void *B, size_t ldb, size_t k_idx_b,
                                  const void *scale_b, size_t ldsb, const void *C, size_t ldc,
-                                 void *D, size_t ldd, const void *bias, TD clamp_min, TD clamp_max);
+                                 void *D, size_t ldd, const void *bias, TD clamp_min, TD clamp_max,
+                                 const TA *lut);
 
     GetMStepFunc get_m_step;
     GetNStepFunc get_n_step;
@@ -521,7 +522,7 @@ void run_quantized_weight_gemm_benchmark(::benchmark::State &state,
 
     for (auto _ : state) {
         funcs.run_gemm(m, n, k, bl, A.data(), lda, 0, B.data(), ldb, 0, scale_b.data(), ldsb,
-                       nullptr, ldd, D.data(), ldd, nullptr, clamp_min, clamp_max);
+                       nullptr, ldd, D.data(), ldd, nullptr, clamp_min, clamp_max, nullptr);
         ::benchmark::DoNotOptimize(D.data());
     }
 
@@ -571,7 +572,7 @@ struct PackedQuantizedWeightGemmFuncs
                                  size_t lda, size_t k_idx_a, const void *B_packed, size_t ldb,
                                  size_t k_idx_b, const void *scale_b, size_t ldsb, const void *C,
                                  size_t ldc, void *D, size_t ldd, const void *bias, TD clamp_min,
-                                 TD clamp_max);
+                                 TD clamp_max, const TA *lut);
 
     GetMStepFunc get_m_step;
     GetNStepFunc get_n_step;
@@ -634,7 +635,7 @@ void run_packed_quantized_weight_gemm_benchmark(::benchmark::State &state,
     for (auto _ : state) {
         funcs.run_gemm(m, n, k, bl, A_packed.data(), lda, 0, B_packed.data(), ldb, 0,
                        scale_b.data(), ldsb, nullptr, ldd, D.data(), ldd, nullptr, clamp_min,
-                       clamp_max);
+                       clamp_max, nullptr);
         ::benchmark::DoNotOptimize(D.data());
     }
 
@@ -661,6 +662,56 @@ inline void register_packed_quantized_weight_gemm_benchmark(
         ->Args({static_cast<int64_t>(shape.m), static_cast<int64_t>(shape.n),
                 static_cast<int64_t>(shape.k), 32})
         ->ArgNames({"m", "n", "k", "bl"});
+}
+
+// ============================================================================
+// Packed block-quantized byte-weight GEMM benchmark runner
+// ============================================================================
+
+template <typename InputType, typename OutputType, typename QParamType, typename QParamsPack,
+          typename RunGemm>
+void run_packed_block_quantized_byte_gemm_benchmark(
+    ::benchmark::State &state, size_t block_size, bool asymmetric,
+    size_t (*get_a_packed_size)(size_t, size_t), size_t (*get_b_packed_size)(size_t, size_t),
+    size_t (*get_qparams_packed_size)(size_t, size_t),
+    void (*run_a_pack)(size_t, size_t, size_t, size_t, size_t, const void *, void *),
+    void (*run_bt_pack)(size_t, size_t, size_t, size_t, size_t, const void *, void *),
+    QParamsPack run_qparams_pack, RunGemm run_gemm)
+{
+    const size_t m = (size_t)state.range(0);
+    const size_t n = (size_t)state.range(1);
+    const size_t k = (size_t)state.range(2);
+    const size_t blocks = (k + block_size - 1) / block_size;
+    std::vector<InputType> A(m * k, (InputType)0.125f);
+    std::vector<int8_t> B(n * k);
+    std::vector<QParamType> scale(n * blocks, (QParamType)0.03125f);
+    std::vector<QParamType> real_zero(n * blocks, (QParamType)0.25f);
+    for (size_t i = 0; i < B.size(); ++i) {
+        if (asymmetric) {
+            B[i] = (int8_t)((i * 5 + 3) & 31);
+        } else if (block_size == 16) {
+            B[i] = (int8_t)((int)(i * 5 + 3) % 64 - 32);
+        } else {
+            B[i] = (int8_t)((int)(i * 7 + 5) % 256 - 128);
+        }
+    }
+
+    std::vector<uint8_t> A_packed(get_a_packed_size(m, k));
+    std::vector<uint8_t> B_packed(get_b_packed_size(n, k));
+    std::vector<uint8_t> qparams_packed(get_qparams_packed_size(n, k));
+    std::vector<OutputType> D(m * n);
+    run_a_pack(m, k, k, k, 0, A.data(), A_packed.data());
+    run_bt_pack(n, k, k, k, 0, B.data(), B_packed.data());
+    run_qparams_pack(n, k, blocks, k, 0, scale.data(), asymmetric ? real_zero.data() : nullptr,
+                     qparams_packed.data());
+
+    for (auto _ : state) {
+        run_gemm(m, n, k, A_packed.data(), B_packed.data(), D.data(), qparams_packed.data());
+        ::benchmark::DoNotOptimize(D.data());
+    }
+    state.counters["GFLOPS"] =
+        ::benchmark::Counter(gemm_flops(m, n, k), ::benchmark::Counter::kIsIterationInvariantRate,
+                             ::benchmark::Counter::OneK::kIs1000);
 }
 
 // ============================================================================

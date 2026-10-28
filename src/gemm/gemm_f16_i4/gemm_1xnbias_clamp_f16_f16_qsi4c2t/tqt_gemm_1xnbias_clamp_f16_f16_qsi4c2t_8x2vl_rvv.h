@@ -49,6 +49,8 @@ size_t tqt_get_d_offset_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv(size_t m_id
 
 size_t tqt_get_d_size_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv(size_t m, size_t n);
 
+/// Metadata pointers already denote the requested K-block origin. Select them
+/// using the metadata getters; run_gemm does not add k_idx_b / bl again.
 /// Runs the W4A16 GEMM microkernel.
 ///
 /// Computes: D = clamp(C + A * dequant(B, scale_b) + bias, clamp_min, clamp_max)
@@ -72,13 +74,15 @@ size_t tqt_get_d_size_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv(size_t m, siz
 /// @param[in]  bias      Bias vector [1, n] f16 (optional, can be nullptr).
 /// @param[in]  clamp_min Minimum clamp value.
 /// @param[in]  clamp_max Maximum clamp value.
+/// @param[in]  lut       Optional 16-entry FP16 decode table; null uses nibble - 8.
 /// @note If clamp_min is negative infinity and clamp_max is positive infinity,
 ///       clamping is skipped. All other bounds retain the existing clamp behavior.
 ///       This does not guarantee preservation of NaN payloads or exception flags.
 void tqt_run_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv(
     size_t m, size_t n, size_t k, size_t bl, const void *A, size_t lda, size_t k_idx_a,
     const void *B, size_t ldb, size_t k_idx_b, const void *scale_b, size_t ldsb, const void *C,
-    size_t ldc, void *D, size_t ldd, const void *bias, float16_t clamp_min, float16_t clamp_max);
+    size_t ldc, void *D, size_t ldd, const void *bias, float16_t clamp_min, float16_t clamp_max,
+    const float16_t *lut);
 
 #ifdef __cplusplus
 }  // extern "C"

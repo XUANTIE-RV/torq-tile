@@ -118,7 +118,8 @@ template <size_t MR, size_t NR>
 static void gemm_kernel(size_t K, size_t bl, float *D, const float16_t *A, const uint8_t *B,
                         const float16_t *scale_b, const float *C, const float *bias, size_t ldd,
                         size_t lda, size_t ldb, size_t ldsb, size_t ldc, float clamp_min,
-                        float clamp_max, bool apply_clamp, size_t vl, size_t VLENB)
+                        float clamp_max, bool apply_clamp, size_t vl, size_t VLENB,
+                        const float16_t *lut)
 {
     const size_t vlmax = get_vlmax(VLENB);
 
@@ -150,7 +151,7 @@ static void gemm_kernel(size_t K, size_t bl, float *D, const float16_t *A, const
         for (size_t ki = k_start; ki < k_end; ki += 2) {
             const uint8_t *b_col0 = B + 0 * vl * b_byte_stride + ki / 2;
             const uint8_t *b_col1 = (NR >= 2) ? B + 1 * vl * b_byte_stride + ki / 2 : nullptr;
-            tqt_dequant_bt_kernel_gemm_f16_i4_8x2vl_rvv<NR>(vl, b_col0, b_col1, b_byte_stride);
+            tqt_dequant_bt_kernel_gemm_f16_i4_8x2vl_rvv<NR>(vl, b_col0, b_col1, b_byte_stride, lut);
 
             // FMA for ki+0 (lo nibble)
             tqt_load_a_kernel_gemm_f16_i4_8x2vl_rvv<MR>(A + ki, a_stride_row);
@@ -180,7 +181,7 @@ using gemm_kernel_fn_t = void (*)(size_t K, size_t bl, float *D, const float16_t
                                   const uint8_t *B, const float16_t *scale_b, const float *C,
                                   const float *bias, size_t ldd, size_t lda, size_t ldb,
                                   size_t ldsb, size_t ldc, float clamp_min, float clamp_max,
-                                  bool apply_clamp, size_t vl, size_t VLENB);
+                                  bool apply_clamp, size_t vl, size_t VLENB, const float16_t *lut);
 
 static constexpr gemm_kernel_fn_t kernel_table[8][2] = {
     {gemm_kernel<1, 1>, gemm_kernel<1, 2>}, {gemm_kernel<2, 1>, gemm_kernel<2, 2>},
@@ -193,7 +194,7 @@ static void gemm_mrxnr_rvv(size_t M, size_t N, size_t K, size_t bl, float *D, co
                            const uint8_t *B, const float16_t *scale_b, const float *C,
                            const float *bias, size_t ldd, size_t lda, size_t ldb, size_t ldsb,
                            size_t ldc, float clamp_min, float clamp_max, bool apply_clamp,
-                           size_t vl, size_t VLENB)
+                           size_t vl, size_t VLENB, const float16_t *lut)
 {
     const size_t vlmax = get_vlmax(VLENB);
 
@@ -205,7 +206,7 @@ static void gemm_mrxnr_rvv(size_t M, size_t N, size_t K, size_t bl, float *D, co
     size_t nr_idx = (N + vlmax - 1) / vlmax - 1;
 
     kernel_table[mr_idx][nr_idx](K, bl, D, A, B, scale_b, C, bias, ldd, lda, ldb, ldsb, ldc,
-                                 clamp_min, clamp_max, apply_clamp, vl, VLENB);
+                                 clamp_min, clamp_max, apply_clamp, vl, VLENB, lut);
 }
 
 // ============================================================================
@@ -215,7 +216,8 @@ static void gemm_mrxnr_rvv(size_t M, size_t N, size_t K, size_t bl, float *D, co
 void tqt_run_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv(
     size_t m, size_t n, size_t k, size_t bl, const void *A, size_t lda, size_t k_idx_a,
     const void *B, size_t ldb, size_t k_idx_b, const void *scale_b, size_t ldsb, const void *C,
-    size_t ldc, void *D, size_t ldd, const void *bias, float clamp_min, float clamp_max)
+    size_t ldc, void *D, size_t ldd, const void *bias, float clamp_min, float clamp_max,
+    const float16_t *lut)
 {
     const size_t VLENB = tqt_get_vlenb();
     const size_t vlmax = get_vlmax(VLENB);
@@ -250,7 +252,7 @@ void tqt_run_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv(
                 }
                 gemm_mrxnr_rvv(actual_m, size_n, k, bl, d_ptr, a_ptr, b_ptr, scale_ptr, c_ptr,
                                bias_ptr, ldd, lda, ldb, ldsb, ldc, clamp_min, clamp_max,
-                               apply_clamp, vlmax, VLENB);
+                               apply_clamp, vlmax, VLENB, lut);
             }
             size_t remain_n = actual_n - size_n;
             if (remain_n > 0) {
@@ -263,7 +265,7 @@ void tqt_run_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv(
                 d_ptr += size_n;
                 gemm_mrxnr_rvv(actual_m, remain_n, k, bl, d_ptr, a_ptr, b_ptr, scale_ptr, c_ptr,
                                bias_ptr, ldd, lda, ldb, ldsb, ldc, clamp_min, clamp_max,
-                               apply_clamp, remain_n, VLENB);
+                               apply_clamp, remain_n, VLENB, lut);
             }
         }
     }

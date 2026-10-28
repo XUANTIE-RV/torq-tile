@@ -21,6 +21,7 @@ include_directories(
 
 set(TORQ_TILE_SOURCES
     ${TORQ_TILE_PATH}/src/gemm/gemm_f16_i4/gemm_1xnbias_clamp_f32_f16_qsi4c2t/tqt_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv.cpp
+    ${TORQ_TILE_PATH}/src/gemm/gemm_f16_i4/gemm_1xnbias_clamp_f32_f16_qsi4c2t/tqt_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x1vl_rvv.cpp
 )
 
 add_executable(

@@ -15,8 +15,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 
 #include "src/common/tqt_common.h"
+#include "tqt_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x1vl_rvv.h"
 
 // Include micro-kernel variants
 #include "tqt_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv.h"
@@ -154,6 +156,36 @@ float calculate_cosine_similarity(size_t size, const float *ref, const float *ac
 
 }  // namespace
 
+// Exercise the F32 accumulation variant with its own packers and a nonlinear LUT.
+static bool run_f32acc_lut_example()
+{
+    const size_t m = 9, n = tqt_get_n_step_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x1vl_rvv() + 1,
+                 k = 64, bl = 32;
+    std::vector<float16_t> a(m * k, (float16_t)0.5f), scale(n * 2, (float16_t)0.125f);
+    std::vector<uint8_t> b(n * k / 2, 0xe3);
+    std::vector<float> bias(n, 0.25f), d(m * n);
+    float16_t lut[16];
+    for (int i = 0; i < 16; ++i)
+        lut[i] = (float16_t)(i % 2 ? -i : i);
+    tqt_run_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x1vl_rvv(m, n, k, bl, a.data(), k, 0, b.data(), k,
+                                                         0, scale.data(), 2, nullptr, n, d.data(),
+                                                         n, bias.data(), -100.0f, 100.0f, lut);
+    for (size_t i = 0; i < m; ++i) {
+        for (size_t j = 0; j < n; ++j) {
+            double expected = bias[j];
+            for (size_t q = 0; q < k; ++q) {
+                const unsigned code = (b[j * k / 2 + q / 2] >> (4 * (q & 1))) & 15;
+                expected +=
+                    (double)a[i * k + q] * (double)lut[code] * (double)scale[j * 2 + q / bl];
+            }
+            if (std::fabs(d[i * n + j] - expected) > 1e-5)
+                return false;
+        }
+    }
+    std::puts("gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x1vl_rvv LUT: PASS");
+    return true;
+}
+
 int main()
 {
     // Matrix dimensions
@@ -218,7 +250,7 @@ int main()
             uint8_t *d_ptr = (uint8_t *)D + ukernel.get_d_offset(m_idx, n_idx, N);
 
             ukernel.run_gemm(actual_m, actual_n, K, BL, a_ptr, K, 0, b_ptr, K, 0, scale_ptr, ldsb,
-                             c_ptr, ldc, d_ptr, ldd, bias_ptr, clamp_min, clamp_max);
+                             c_ptr, ldc, d_ptr, ldd, bias_ptr, clamp_min, clamp_max, nullptr);
         }
     }
 
@@ -245,7 +277,6 @@ int main()
     printf("TEST[gemm_1xnbias_clamp_f32_f16_qsi4c2t]\n");
     printf("- ukernel: gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv\n");
     printf("- Cosine Similarity: %f\n", cosine_sim);
-    printf("- Status: %s\n", passed ? "PASSED" : "FAILED");
 
     free(A);
     free(B_fp16);
@@ -256,5 +287,7 @@ int main()
     free(D_ref);
     free(D);
 
-    return passed ? 0 : 1;
+    const bool all_passed = passed && run_f32acc_lut_example();
+    printf("- Status: %s\n", all_passed ? "PASSED" : "FAILED");
+    return all_passed ? 0 : 1;
 }

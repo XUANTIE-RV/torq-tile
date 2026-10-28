@@ -909,3 +909,20 @@ static void tqt_gemm_pack_nxk_2x1vl_e4mf2_rvv(size_t n, size_t k, size_t ldb, si
 {
     tqt_gemm_pack_nxk_1x2vl_e8mf2_rvv(n, k / 2, ldb / 2, ldb_packed / 2, k_idx / 2, B, B_packed);
 }
+
+/// Pack int4 B with one VLENB/2-column subgroup per tile.
+static inline void tqt_gemm_pack_nxk_1x1vl_e4mf2_rvv(size_t n, size_t k, size_t ldb,
+                                                     size_t ldb_packed, size_t k_idx, const void *B,
+                                                     void *B_packed)
+{
+    const size_t n_step = csrr_vlenb() / 2;
+    for (size_t ni = 0; ni < n; ni += n_step) {
+        const size_t nr = TQT_MIN(n - ni, n_step);
+        const uint8_t *src = (const uint8_t *)B + ni * (ldb / 2);
+        uint8_t *dst = (uint8_t *)B_packed + ni * (ldb_packed / 2);
+        if (ni != 0 && k_idx != 0) {
+            dst -= (k_idx / 2) * (n_step - nr);
+        }
+        tqt_gemm_pack_nxk_e8mf2_kernel<1>(nr, k / 2, src, ldb / 2, dst, nr);
+    }
+}

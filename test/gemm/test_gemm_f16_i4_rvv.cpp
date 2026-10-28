@@ -9,6 +9,7 @@
 #include "src/gemm/gemm_f16_i4/gemm_1xnbias_clamp_f32_f16_qsi4c2t/tqt_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv.h"
 #include "src/gemm/gemm_f16_i4/gemm_1xnbias_clamp_f32_f16p_qsi4c2p/tqt_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv.h"
 #include "test/common/gemm_clamp_test_utils.h"
+#include "test/common/gemm_test_runner.h"
 #include "test/common/quantized_gemm_test_runner.h"
 
 using namespace torq_tile::test;
@@ -253,3 +254,379 @@ INSTANTIATE_TEST_SUITE_P(
                           tqt_get_n_step_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv(), 2, true,
                           false),
     GemmTestParamNameGenerator());
+
+TEST(W4Contract, gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv)
+{
+    check_w4_contract<float16_t, float16_t, false, false, false>(
+        tqt_get_m_step_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv(),
+        tqt_get_n_step_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv(), 0.125f,
+        [&](size_t m, size_t n, size_t k, size_t bl, size_t fm, size_t fn, size_t fk, size_t mi,
+            size_t ni, size_t ki, size_t ld, size_t lds, const auto &a, const auto &b,
+            const auto &sa, const auto &za, const auto &sb, const auto &ob, const float *bias,
+            const float16_t *c, float16_t *d, size_t ldd, float lo, float hi,
+            const float16_t *lut16, const int8_t *lut8) {
+            const void *aw =
+                (const uint8_t *)a.data() +
+                tqt_get_a_offset_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv(mi, ki, ld, bl);
+            const void *bw =
+                b.data() +
+                tqt_get_b_offset_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv(ni, ki, ld, bl);
+            std::vector<float16_t> halfbias(fn);
+            if (bias)
+                for (size_t j = 0; j < fn; ++j)
+                    halfbias[j] = (float16_t)bias[j];
+            const float16_t *biasw = bias ? halfbias.data() + ni : nullptr;
+            std::vector<float16_t> scales(sb.size());
+            for (size_t j = 0; j < sb.size(); ++j)
+                scales[j] = (float16_t)sb[j];
+            tqt_run_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv(
+                m, n, k, bl, aw, ld, ki, bw, ld, ki,
+                scales.data() + tqt_get_scale_b_offset_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv(
+                                    ni, ki / bl, lds) /
+                                    sizeof(float16_t),
+                lds, c, ldd, d, ldd, biasw, (float16_t)lo, (float16_t)hi, lut16);
+        });
+}
+
+TEST(W4Contract, gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv)
+{
+    check_w4_contract<float16_t, float16_t, false, false, false>(
+        tqt_get_m_step_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv(),
+        tqt_get_n_step_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv(), 0.125f,
+        [&](size_t m, size_t n, size_t k, size_t bl, size_t fm, size_t fn, size_t fk, size_t mi,
+            size_t ni, size_t ki, size_t ld, size_t lds, const auto &a, const auto &b,
+            const auto &sa, const auto &za, const auto &sb, const auto &ob, const float *bias,
+            const float16_t *c, float16_t *d, size_t ldd, float lo, float hi,
+            const float16_t *lut16, const int8_t *lut8) {
+            std::vector<uint8_t> ap(
+                tqt_get_a_packed_size_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv(fm, fk)),
+                bp(tqt_get_b_packed_size_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv(fn, fk));
+            tqt_run_a_pack_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv(fm, fk, ld, fk, 0,
+                                                                         a.data(), ap.data());
+            tqt_run_bt_pack_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv(fn, fk, ld, fk, 0,
+                                                                          b.data(), bp.data());
+            const void *aw =
+                ap.data() + tqt_get_a_packed_offset_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv(
+                                mi, ki, fk, m);
+            const void *bw =
+                bp.data() + tqt_get_b_packed_offset_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv(
+                                ni, ki, fk, n);
+            std::vector<float16_t> halfbias(fn);
+            if (bias)
+                for (size_t j = 0; j < fn; ++j)
+                    halfbias[j] = (float16_t)bias[j];
+            const float16_t *biasw = bias ? halfbias.data() + ni : nullptr;
+            std::vector<float16_t> scales(sb.size());
+            for (size_t j = 0; j < sb.size(); ++j)
+                scales[j] = (float16_t)sb[j];
+            tqt_run_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv(
+                m, n, k, bl, aw, fk, ki, bw, fk, ki,
+                scales.data() +
+                    tqt_get_scale_b_offset_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv(
+                        ni, ki / bl, lds) /
+                        sizeof(float16_t),
+                lds, c, ldd, d, ldd, biasw, (float16_t)lo, (float16_t)hi, lut16);
+        });
+}
+
+TEST(W4Contract, gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv)
+{
+    check_w4_contract<float16_t, float, false, false, false>(
+        tqt_get_m_step_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv(),
+        tqt_get_n_step_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv(), 0.125f,
+        [&](size_t m, size_t n, size_t k, size_t bl, size_t fm, size_t fn, size_t fk, size_t mi,
+            size_t ni, size_t ki, size_t ld, size_t lds, const auto &a, const auto &b,
+            const auto &sa, const auto &za, const auto &sb, const auto &ob, const float *bias,
+            const float *c, float *d, size_t ldd, float lo, float hi, const float16_t *lut16,
+            const int8_t *lut8) {
+            const void *aw =
+                (const uint8_t *)a.data() +
+                tqt_get_a_offset_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv(mi, ki, ld, bl);
+            const void *bw =
+                b.data() +
+                tqt_get_b_offset_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv(ni, ki, ld, bl);
+            const float *biasw =
+                bias ? bias + tqt_get_bias_offset_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv(ni) /
+                                  sizeof(float)
+                     : nullptr;
+            std::vector<float16_t> scales(sb.size());
+            for (size_t j = 0; j < sb.size(); ++j)
+                scales[j] = (float16_t)sb[j];
+            tqt_run_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv(
+                m, n, k, bl, aw, ld, ki, bw, ld, ki,
+                scales.data() + tqt_get_scale_b_offset_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv(
+                                    ni, ki / bl, lds) /
+                                    sizeof(float16_t),
+                lds, c, ldd, d, ldd, biasw, (float)lo, (float)hi, lut16);
+        });
+}
+#include "src/gemm/gemm_f16_i4/gemm_1xnbias_clamp_f32_f16_qsi4c2t/tqt_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x1vl_rvv.h"
+
+TEST(W4Contract, gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x1vl_rvv)
+{
+    check_w4_contract<float16_t, float, false, false, false>(
+        tqt_get_m_step_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x1vl_rvv(),
+        tqt_get_n_step_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x1vl_rvv(), 0.00001f,
+        [&](size_t m, size_t n, size_t k, size_t bl, size_t fm, size_t fn, size_t fk, size_t mi,
+            size_t ni, size_t ki, size_t ld, size_t lds, const auto &a, const auto &b,
+            const auto &sa, const auto &za, const auto &sb, const auto &ob, const float *bias,
+            const float *c, float *d, size_t ldd, float lo, float hi, const float16_t *lut16,
+            const int8_t *lut8) {
+            const void *aw =
+                (const uint8_t *)a.data() +
+                tqt_get_a_offset_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x1vl_rvv(mi, ki, ld, bl);
+            const void *bw =
+                b.data() +
+                tqt_get_b_offset_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x1vl_rvv(ni, ki, ld, bl);
+            const float *biasw =
+                bias ? bias + tqt_get_bias_offset_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x1vl_rvv(ni) /
+                                  sizeof(float)
+                     : nullptr;
+            std::vector<float16_t> scales(sb.size());
+            for (size_t j = 0; j < sb.size(); ++j)
+                scales[j] = (float16_t)sb[j];
+            tqt_run_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x1vl_rvv(
+                m, n, k, bl, aw, ld, ki, bw, ld, ki,
+                scales.data() + tqt_get_scale_b_offset_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x1vl_rvv(
+                                    ni, ki / bl, lds) /
+                                    sizeof(float16_t),
+                lds, c, ldd, d, ldd, biasw, (float)lo, (float)hi, lut16);
+        });
+}
+
+TEST(W4Contract, gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv)
+{
+    check_w4_contract<float16_t, float, false, false, false>(
+        tqt_get_m_step_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv(),
+        tqt_get_n_step_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv(), 0.125f,
+        [&](size_t m, size_t n, size_t k, size_t bl, size_t fm, size_t fn, size_t fk, size_t mi,
+            size_t ni, size_t ki, size_t ld, size_t lds, const auto &a, const auto &b,
+            const auto &sa, const auto &za, const auto &sb, const auto &ob, const float *bias,
+            const float *c, float *d, size_t ldd, float lo, float hi, const float16_t *lut16,
+            const int8_t *lut8) {
+            std::vector<uint8_t> ap(
+                tqt_get_a_packed_size_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv(fm, fk)),
+                bp(tqt_get_b_packed_size_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv(fn, fk));
+            tqt_run_a_pack_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv(fm, fk, ld, fk, 0,
+                                                                         a.data(), ap.data());
+            tqt_run_bt_pack_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv(fn, fk, ld, fk, 0,
+                                                                          b.data(), bp.data());
+            const void *aw =
+                ap.data() + tqt_get_a_packed_offset_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv(
+                                mi, ki, fk, m);
+            const void *bw =
+                bp.data() + tqt_get_b_packed_offset_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv(
+                                ni, ki, fk, n);
+            const float *biasw =
+                bias
+                    ? bias + tqt_get_bias_offset_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv(ni) /
+                                 sizeof(float)
+                    : nullptr;
+            std::vector<float16_t> scales(sb.size());
+            for (size_t j = 0; j < sb.size(); ++j)
+                scales[j] = (float16_t)sb[j];
+            tqt_run_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv(
+                m, n, k, bl, aw, fk, ki, bw, fk, ki,
+                scales.data() +
+                    tqt_get_scale_b_offset_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x2vl_rvv(
+                        ni, ki / bl, lds) /
+                        sizeof(float16_t),
+                lds, c, ldd, d, ldd, biasw, (float)lo, (float)hi, lut16);
+        });
+}
+#include "src/gemm/gemm_f16_i4/gemm_1xnbias_clamp_f32_f16p_qsi4c2p/tqt_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x1vl_rvv.h"
+
+TEST(W4Contract, gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x1vl_rvv)
+{
+    check_w4_contract<float16_t, float, false, false, false>(
+        tqt_get_m_step_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x1vl_rvv(),
+        tqt_get_n_step_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x1vl_rvv(), 0.00001f,
+        [&](size_t m, size_t n, size_t k, size_t bl, size_t fm, size_t fn, size_t fk, size_t mi,
+            size_t ni, size_t ki, size_t ld, size_t lds, const auto &a, const auto &b,
+            const auto &sa, const auto &za, const auto &sb, const auto &ob, const float *bias,
+            const float *c, float *d, size_t ldd, float lo, float hi, const float16_t *lut16,
+            const int8_t *lut8) {
+            std::vector<uint8_t> ap(
+                tqt_get_a_packed_size_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x1vl_rvv(fm, fk)),
+                bp(tqt_get_b_packed_size_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x1vl_rvv(fn, fk));
+            tqt_run_a_pack_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x1vl_rvv(fm, fk, ld, fk, 0,
+                                                                         a.data(), ap.data());
+            tqt_run_bt_pack_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x1vl_rvv(fn, fk, ld, fk, 0,
+                                                                          b.data(), bp.data());
+            const void *aw =
+                ap.data() + tqt_get_a_packed_offset_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x1vl_rvv(
+                                mi, ki, fk, m);
+            const void *bw =
+                bp.data() + tqt_get_b_packed_offset_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x1vl_rvv(
+                                ni, ki, fk, n);
+            const float *biasw =
+                bias
+                    ? bias + tqt_get_bias_offset_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x1vl_rvv(ni) /
+                                 sizeof(float)
+                    : nullptr;
+            std::vector<float16_t> scales(sb.size());
+            for (size_t j = 0; j < sb.size(); ++j)
+                scales[j] = (float16_t)sb[j];
+            tqt_run_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x1vl_rvv(
+                m, n, k, bl, aw, fk, ki, bw, fk, ki,
+                scales.data() +
+                    tqt_get_scale_b_offset_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x1vl_rvv(
+                        ni, ki / bl, lds) /
+                        sizeof(float16_t),
+                lds, c, ldd, d, ldd, biasw, (float)lo, (float)hi, lut16);
+        });
+}
+#include "src/gemm/gemm_f16_i4/gemm_1xnbias_clamp_f32_f16_qai4c2t/tqt_gemm_1xnbias_clamp_f32_f16_qai4c2t_8x1vl_rvv.h"
+
+TEST(W4Contract, gemm_1xnbias_clamp_f32_f16_qai4c2t_8x1vl_rvv)
+{
+    check_w4_contract<float16_t, float, true, false, false>(
+        tqt_get_m_step_gemm_1xnbias_clamp_f32_f16_qai4c2t_8x1vl_rvv(),
+        tqt_get_n_step_gemm_1xnbias_clamp_f32_f16_qai4c2t_8x1vl_rvv(), 0.00001f,
+        [&](size_t m, size_t n, size_t k, size_t bl, size_t fm, size_t fn, size_t fk, size_t mi,
+            size_t ni, size_t ki, size_t ld, size_t lds, const auto &a, const auto &b,
+            const auto &sa, const auto &za, const auto &sb, const auto &ob, const float *bias,
+            const float *c, float *d, size_t ldd, float lo, float hi, const float16_t *lut16,
+            const int8_t *lut8) {
+            const void *aw =
+                (const uint8_t *)a.data() +
+                tqt_get_a_offset_gemm_1xnbias_clamp_f32_f16_qai4c2t_8x1vl_rvv(mi, ki, ld, bl);
+            const void *bw =
+                b.data() +
+                tqt_get_b_offset_gemm_1xnbias_clamp_f32_f16_qai4c2t_8x1vl_rvv(ni, ki, ld, bl);
+            const float *biasw =
+                bias ? bias + tqt_get_bias_offset_gemm_1xnbias_clamp_f32_f16_qai4c2t_8x1vl_rvv(ni) /
+                                  sizeof(float)
+                     : nullptr;
+            tqt_run_gemm_1xnbias_clamp_f32_f16_qai4c2t_8x1vl_rvv(
+                m, n, k, bl, aw, ld, ki, bw, ld, ki,
+                sb.data() + tqt_get_scale_b_offset_gemm_1xnbias_clamp_f32_f16_qai4c2t_8x1vl_rvv(
+                                ni, ki / bl, lds) /
+                                sizeof(float),
+                lds,
+                ob.data() + tqt_get_offset_b_offset_gemm_1xnbias_clamp_f32_f16_qai4c2t_8x1vl_rvv(
+                                ni, ki / bl, lds) /
+                                sizeof(float),
+                lds, c, ldd, d, ldd, biasw, lo, hi);
+        });
+}
+#include "src/gemm/gemm_f16_i4/gemm_1xnbias_clamp_f32_f16p_qai4c2p/tqt_gemm_1xnbias_clamp_f32_f16p_qai4c2p_8x1vl_rvv.h"
+
+TEST(W4Contract, gemm_1xnbias_clamp_f32_f16p_qai4c2p_8x1vl_rvv)
+{
+    check_w4_contract<float16_t, float, true, false, false>(
+        tqt_get_m_step_gemm_1xnbias_clamp_f32_f16p_qai4c2p_8x1vl_rvv(),
+        tqt_get_n_step_gemm_1xnbias_clamp_f32_f16p_qai4c2p_8x1vl_rvv(), 0.00001f,
+        [&](size_t m, size_t n, size_t k, size_t bl, size_t fm, size_t fn, size_t fk, size_t mi,
+            size_t ni, size_t ki, size_t ld, size_t lds, const auto &a, const auto &b,
+            const auto &sa, const auto &za, const auto &sb, const auto &ob, const float *bias,
+            const float *c, float *d, size_t ldd, float lo, float hi, const float16_t *lut16,
+            const int8_t *lut8) {
+            std::vector<uint8_t> ap(
+                tqt_get_a_packed_size_gemm_1xnbias_clamp_f32_f16p_qai4c2p_8x1vl_rvv(fm, fk)),
+                bp(tqt_get_b_packed_size_gemm_1xnbias_clamp_f32_f16p_qai4c2p_8x1vl_rvv(fn, fk));
+            tqt_run_a_pack_gemm_1xnbias_clamp_f32_f16p_qai4c2p_8x1vl_rvv(fm, fk, ld, fk, 0,
+                                                                         a.data(), ap.data());
+            tqt_run_bt_pack_gemm_1xnbias_clamp_f32_f16p_qai4c2p_8x1vl_rvv(fn, fk, ld, fk, 0,
+                                                                          b.data(), bp.data());
+            const void *aw =
+                ap.data() + tqt_get_a_packed_offset_gemm_1xnbias_clamp_f32_f16p_qai4c2p_8x1vl_rvv(
+                                mi, ki, fk, m);
+            const void *bw =
+                bp.data() + tqt_get_b_packed_offset_gemm_1xnbias_clamp_f32_f16p_qai4c2p_8x1vl_rvv(
+                                ni, ki, fk, n);
+            const float *biasw =
+                bias
+                    ? bias + tqt_get_bias_offset_gemm_1xnbias_clamp_f32_f16p_qai4c2p_8x1vl_rvv(ni) /
+                                 sizeof(float)
+                    : nullptr;
+            tqt_run_gemm_1xnbias_clamp_f32_f16p_qai4c2p_8x1vl_rvv(
+                m, n, k, bl, aw, fk, ki, bw, fk, ki,
+                sb.data() + tqt_get_scale_b_offset_gemm_1xnbias_clamp_f32_f16p_qai4c2p_8x1vl_rvv(
+                                ni, ki / bl, lds) /
+                                sizeof(float),
+                lds,
+                ob.data() + tqt_get_offset_b_offset_gemm_1xnbias_clamp_f32_f16p_qai4c2p_8x1vl_rvv(
+                                ni, ki / bl, lds) /
+                                sizeof(float),
+                lds, c, ldd, d, ldd, biasw, lo, hi);
+        });
+}
+
+TEST(F32BiasContract, gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x1vl_rvv)
+{
+    const size_t m = 9, n = tqt_get_n_step_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x1vl_rvv() + 1,
+                 k = 32, bl = 32;
+    std::vector<float16_t> a(m * k, (float16_t)64), hs(n, (float16_t)8);
+    std::vector<uint8_t> b(n * k / 2, 0xff);
+    std::vector<float> scale(n, 8), offset(n, -64);
+    check_f32_bias_epilogue<float>(
+        m, n, 114688.0f, true,
+        [&](const float *c, size_t stride, const float *bias, float *d, float lo, float hi) {
+            tqt_run_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x1vl_rvv(
+                m, n, k, bl, a.data(), k, 0, b.data(), k, 0, hs.data(), 1, c, stride, d, stride,
+                bias, lo, hi, nullptr);
+        });
+}
+
+TEST(F32BiasContract, gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x1vl_rvv)
+{
+    const size_t m = 9, n = tqt_get_n_step_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x1vl_rvv() + 1,
+                 k = 32, bl = 32;
+    std::vector<float16_t> a(m * k, (float16_t)64), hs(n, (float16_t)8);
+    std::vector<uint8_t> b(n * k / 2, 0xff);
+    std::vector<float> scale(n, 8), offset(n, -64);
+    std::vector<uint8_t> ap(
+        tqt_get_a_packed_size_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x1vl_rvv(m, k)),
+        bp(tqt_get_b_packed_size_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x1vl_rvv(n, k));
+    tqt_run_a_pack_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x1vl_rvv(m, k, k, k, 0, a.data(),
+                                                                 ap.data());
+    tqt_run_bt_pack_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x1vl_rvv(n, k, k, k, 0, b.data(),
+                                                                  bp.data());
+    check_f32_bias_epilogue<float>(
+        m, n, 114688.0f, true,
+        [&](const float *c, size_t stride, const float *bias, float *d, float lo, float hi) {
+            tqt_run_gemm_1xnbias_clamp_f32_f16p_qsi4c2p_8x1vl_rvv(
+                m, n, k, bl, ap.data(), k, 0, bp.data(), k, 0, hs.data(), 1, c, stride, d, stride,
+                bias, lo, hi, nullptr);
+        });
+}
+
+TEST(F32BiasContract, gemm_1xnbias_clamp_f32_f16_qai4c2t_8x1vl_rvv)
+{
+    const size_t m = 9, n = tqt_get_n_step_gemm_1xnbias_clamp_f32_f16_qai4c2t_8x1vl_rvv() + 1,
+                 k = 32, bl = 32;
+    std::vector<float16_t> a(m * k, (float16_t)64), hs(n, (float16_t)8);
+    std::vector<uint8_t> b(n * k / 2, 0xff);
+    std::vector<float> scale(n, 8), offset(n, -64);
+    check_f32_bias_epilogue<float>(
+        m, n, 114688.0f, true,
+        [&](const float *c, size_t stride, const float *bias, float *d, float lo, float hi) {
+            tqt_run_gemm_1xnbias_clamp_f32_f16_qai4c2t_8x1vl_rvv(
+                m, n, k, bl, a.data(), k, 0, b.data(), k, 0, scale.data(), 1, offset.data(), 1, c,
+                stride, d, stride, bias, lo, hi);
+        });
+}
+
+TEST(F32BiasContract, gemm_1xnbias_clamp_f32_f16p_qai4c2p_8x1vl_rvv)
+{
+    const size_t m = 9, n = tqt_get_n_step_gemm_1xnbias_clamp_f32_f16p_qai4c2p_8x1vl_rvv() + 1,
+                 k = 32, bl = 32;
+    std::vector<float16_t> a(m * k, (float16_t)64), hs(n, (float16_t)8);
+    std::vector<uint8_t> b(n * k / 2, 0xff);
+    std::vector<float> scale(n, 8), offset(n, -64);
+    std::vector<uint8_t> ap(
+        tqt_get_a_packed_size_gemm_1xnbias_clamp_f32_f16p_qai4c2p_8x1vl_rvv(m, k)),
+        bp(tqt_get_b_packed_size_gemm_1xnbias_clamp_f32_f16p_qai4c2p_8x1vl_rvv(n, k));
+    tqt_run_a_pack_gemm_1xnbias_clamp_f32_f16p_qai4c2p_8x1vl_rvv(m, k, k, k, 0, a.data(),
+                                                                 ap.data());
+    tqt_run_bt_pack_gemm_1xnbias_clamp_f32_f16p_qai4c2p_8x1vl_rvv(n, k, k, k, 0, b.data(),
+                                                                  bp.data());
+    check_f32_bias_epilogue<float>(
+        m, n, 114688.0f, true,
+        [&](const float *c, size_t stride, const float *bias, float *d, float lo, float hi) {
+            tqt_run_gemm_1xnbias_clamp_f32_f16p_qai4c2p_8x1vl_rvv(
+                m, n, k, bl, ap.data(), k, 0, bp.data(), k, 0, scale.data(), 1, offset.data(), 1, c,
+                stride, d, stride, bias, lo, hi);
+        });
+}

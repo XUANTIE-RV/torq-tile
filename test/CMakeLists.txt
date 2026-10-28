@@ -216,7 +216,13 @@ if(TORQ_TILE_HAS_ZTT_GEMM_BF16)
     torq_tile_add_test(test_gemm_bf16_bf16_ztt gemm/test_gemm_bf16_bf16_ztt.cpp)
 endif()
 
+if(TORQ_TILE_HAS_ZTT_GEMM_BLOCK_INT_U4)
+    torq_tile_add_test(test_gemm_i8_u4_ztt gemm/test_gemm_i8_u4_ztt.cpp)
+endif()
 
+if(TORQ_TILE_HAS_ZTT_GEMM_BLOCK_INT_I8)
+    torq_tile_add_test(test_gemm_i8_i8_ztt gemm/test_gemm_i8_i8_ztt.cpp)
+endif()
 
 if(TORQ_TILE_HAS_ZTT_GEMM_F32)
     torq_tile_add_test(test_gemm_f32_f32_ztt gemm/test_gemm_f32_f32_ztt.cpp)

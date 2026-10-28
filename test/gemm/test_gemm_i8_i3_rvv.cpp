@@ -27,6 +27,7 @@ static PackedQsi8KBlockGemmTestFuncs<tqt_qsi8d256_qsi3c16_params> make_qsi3c16_f
 {
     return {false,
             Qsi8KBlockWeightEncoding::Qsi3,
+            Qsi8BlockPackedLayout::NInterleaved,
             tqt_get_n_step_gemm_1xnbias_clamp_f32_qsi8d256p_qsi3c16p_4x1vl_rvv,
             tqt_get_a_packed_size_gemm_1xnbias_clamp_f32_qsi8d256p_qsi3c16p_4x1vl_rvv,
             tqt_get_b_packed_size_gemm_1xnbias_clamp_f32_qsi8d256p_qsi3c16p_4x1vl_rvv,
@@ -43,6 +44,7 @@ static PackedQsi8KBlockGemmTestFuncs<tqt_qsi8d256_qsi4c16_params> make_qsi4c16_r
 {
     return {false,
             Qsi8KBlockWeightEncoding::Qsi4,
+            Qsi8BlockPackedLayout::NInterleaved,
             tqt_get_n_step_gemm_1xnbias_clamp_f32_qsi8d256p_qsi4c16p_4x1vl_rvv,
             tqt_get_a_packed_size_gemm_1xnbias_clamp_f32_qsi8d256p_qsi4c16p_4x1vl_rvv,
             tqt_get_b_packed_size_gemm_1xnbias_clamp_f32_qsi8d256p_qsi4c16p_4x1vl_rvv,

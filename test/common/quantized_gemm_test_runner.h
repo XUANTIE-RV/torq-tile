@@ -1554,18 +1554,51 @@ void run_packed_block_quantized_byte_gemm_test(
         {m_step - 1, n_step - 1},
         {m_step + 1, n_step + 1},
     };
-    const size_t k = 2 * block_size + 1;
-    const size_t blocks = (k + block_size - 1) / block_size;
+    // Probe how many quantization blocks share one metadata matrix register: the packed
+    // metadata size only grows when a new batch starts, so the public size getter reveals
+    // the batch factor without reaching into the internal layout helpers. A per-block
+    // layout reports 1, in which case the multi-batch case below is skipped.
+    const size_t one_batch_bytes = get_qparams_packed_size(1, block_size);
+    size_t blocks_per_batch = 1;
+    while (blocks_per_batch < 4096 &&
+           get_qparams_packed_size(1, (blocks_per_batch + 1) * block_size) == one_batch_bytes) {
+        ++blocks_per_batch;
+    }
 
-    for (const auto &shape : shapes) {
-        const size_t m = shape[0];
-        const size_t n = shape[1];
+    // Guards against a silent regression to a per-block metadata layout: RLENB is at
+    // least 16 and a block's metadata is at most 4 bytes wide, so at least two blocks
+    // always share a register.
+    ASSERT_GE(blocks_per_batch, 2U);
+
+    // Packed buffers are poisoned rather than zero-initialized: 0xFF is a NaN in both f16
+    // and bf16, so any element a kernel reads that the packers never wrote surfaces as a
+    // hard mismatch. A zero-filled buffer would hide such a gap.
+    constexpr uint8_t poison = 0xFF;
+
+    // `sparse_a` keeps one non-zero activation per quantization block and zeroes the rest.
+    // The batch-coverage case below needs a K that grows with blocks_per_batch, which at
+    // RLENB 128 reaches a few thousand; a dense activation would then accumulate thousands
+    // of terms and bf16 rounding alone would blow past the fixed tolerance, so a layout
+    // regression could no longer be told apart from ordinary drift. With one term per block
+    // the accumulation length is set by the block count instead of by K, while every block's
+    // scale still reaches the result -- which is exactly what the metadata layout must get
+    // right. The non-zero value is drawn from a range that excludes zero so that no block
+    // can be silently skipped.
+    auto run_case = [&](size_t m, size_t n, size_t k, const std::vector<size_t> &split_points,
+                        bool sparse_a) {
+        const size_t blocks = (k + block_size - 1) / block_size;
         std::vector<InputType> A(m * k);
         std::vector<OutputType> bias(n);
         std::vector<int8_t> B(n * k);
         std::vector<QParamType> scale(n * blocks), real_zero(n * blocks);
-        for (size_t i = 0; i < A.size(); ++i)
-            A[i] = (InputType)(((int)(i % 9) - 4) / 32.0f);
+        for (size_t i = 0; i < A.size(); ++i) {
+            if (sparse_a) {
+                A[i] = (i % k) % block_size == 0 ? (InputType)(((int)(i % 7) + 1) / 32.0f)
+                                                 : (InputType)0.0f;
+            } else {
+                A[i] = (InputType)(((int)(i % 9) - 4) / 32.0f);
+            }
+        }
         for (size_t i = 0; i < n; ++i)
             bias[i] = (OutputType)(((int)(i % 5) - 2) / 64.0f);
         for (size_t i = 0; i < B.size(); ++i) {
@@ -1618,9 +1651,9 @@ void run_packed_block_quantized_byte_gemm_test(
             }
         }
 
-        std::vector<uint8_t> A_packed(get_a_packed_size(m, k));
-        std::vector<uint8_t> B_packed(get_b_packed_size(n, k));
-        std::vector<uint8_t> qparams_packed(get_qparams_packed_size(n, k));
+        std::vector<uint8_t> A_packed(get_a_packed_size(m, k), poison);
+        std::vector<uint8_t> B_packed(get_b_packed_size(n, k), poison);
+        std::vector<uint8_t> qparams_packed(get_qparams_packed_size(n, k), poison);
         run_a_pack(m, k, k, k, 0, A.data(), A_packed.data());
         run_bt_pack(n, k, k, k, 0, B.data(), B_packed.data());
         run_qparams_pack(n, k, blocks, k, 0, scale.data(), asymmetric ? real_zero.data() : nullptr,
@@ -1634,19 +1667,90 @@ void run_packed_block_quantized_byte_gemm_test(
                 << "index=" << i << " m=" << m << " n=" << n;
         }
 
-        std::vector<OutputType> partial(m * n);
-        run_gemm(m, n, block_size, A_packed.data(), k, 0, B_packed.data(), k, 0, nullptr, n,
-                 partial.data(), n, nullptr, qparams_packed.data());
-        const size_t a_offset = get_a_packed_offset(0, block_size, k, m);
-        const size_t b_offset = get_b_packed_offset(0, block_size, k, n);
-        const size_t qparams_offset = get_qparams_packed_offset(0, block_size, k, n);
-        run_gemm(m, n, k - block_size, A_packed.data() + a_offset, k, block_size,
-                 B_packed.data() + b_offset, k, block_size, partial.data(), n, D.data(), n,
-                 bias.data(), qparams_packed.data() + qparams_offset);
-        for (size_t i = 0; i < D.size(); ++i) {
-            EXPECT_NEAR((float)D[i], reference[i], tolerance)
-                << "split index=" << i << " m=" << m << " n=" << n;
+        // Split-K execution. Each split also pins the in-batch metadata index: when
+        // several blocks share a register the offset getter only reaches the batch start,
+        // so the kernel has to derive the slot from k_idx on its own.
+        for (const size_t split : split_points) {
+            std::vector<OutputType> partial(m * n);
+            run_gemm(m, n, split, A_packed.data(), k, 0, B_packed.data(), k, 0, nullptr, n,
+                     partial.data(), n, nullptr, qparams_packed.data());
+            const size_t a_offset = get_a_packed_offset(0, split, k, m);
+            const size_t b_offset = get_b_packed_offset(0, split, k, n);
+            const size_t qparams_offset = get_qparams_packed_offset(0, split, k, n);
+            run_gemm(m, n, k - split, A_packed.data() + a_offset, k, split,
+                     B_packed.data() + b_offset, k, split, partial.data(), n, D.data(), n,
+                     bias.data(), qparams_packed.data() + qparams_offset);
+            for (size_t i = 0; i < D.size(); ++i) {
+                EXPECT_NEAR((float)D[i], reference[i], tolerance)
+                    << "split=" << split << " index=" << i << " m=" << m << " n=" << n;
+            }
         }
+
+        // Split-K packing of A. Only the k_idx == 0 call clears padding, so it must
+        // already cover the K padding of the whole logical K and not just of its own
+        // window. The poisoned buffer is what makes a missed region observable.
+        if (!split_points.empty()) {
+            const size_t split = split_points.front();
+            std::vector<uint8_t> A_split_packed(get_a_packed_size(m, k), poison);
+            run_a_pack(m, split, k, k, 0, A.data(), A_split_packed.data());
+            run_a_pack(m, k - split, k, k, split, A.data(), A_split_packed.data());
+            run_gemm(m, n, k, A_split_packed.data(), k, 0, B_packed.data(), k, 0, nullptr, n,
+                     D.data(), n, bias.data(), qparams_packed.data());
+            for (size_t i = 0; i < D.size(); ++i) {
+                EXPECT_NEAR((float)D[i], reference[i], tolerance)
+                    << "split-pack index=" << i << " m=" << m << " n=" << n;
+            }
+        }
+
+        // Split-K packing of the metadata, compared byte-for-byte against packing it in
+        // one call. Several blocks share a register, so a k_idx > 0 call writes into a
+        // packet that an earlier call already populated: it must touch only its own
+        // columns, and only the k_idx == 0 call may clear. A byte comparison catches a
+        // clobbered neighbour that a GEMM could still average away, and it covers every
+        // split point, including the ones landing on a batch boundary and inside a
+        // non-zero batch.
+        for (const size_t split : split_points) {
+            std::vector<uint8_t> qparams_split(get_qparams_packed_size(n, k), poison);
+            run_qparams_pack(n, split, blocks, k, 0, scale.data(),
+                             asymmetric ? real_zero.data() : nullptr, qparams_split.data());
+            run_qparams_pack(n, k - split, blocks, k, split, scale.data(),
+                             asymmetric ? real_zero.data() : nullptr, qparams_split.data());
+            ASSERT_EQ(qparams_split.size(), qparams_packed.size());
+            size_t first_diff = qparams_split.size();
+            for (size_t i = 0; i < qparams_split.size(); ++i) {
+                if (qparams_split[i] != qparams_packed[i]) {
+                    first_diff = i;
+                    break;
+                }
+            }
+            EXPECT_EQ(first_diff, qparams_split.size())
+                << "split-pack qparams diverges at byte " << first_diff << " split=" << split
+                << " m=" << m << " n=" << n;
+
+            run_gemm(m, n, k, A_packed.data(), k, 0, B_packed.data(), k, 0, nullptr, n, D.data(), n,
+                     bias.data(), qparams_split.data());
+            for (size_t i = 0; i < D.size(); ++i) {
+                EXPECT_NEAR((float)D[i], reference[i], tolerance)
+                    << "split-pack qparams split=" << split << " index=" << i << " m=" << m
+                    << " n=" << n;
+            }
+        }
+    };
+
+    for (const auto &shape : shapes) {
+        run_case(shape[0], shape[1], 2 * block_size + 1, {block_size}, /*sparse_a=*/false);
+    }
+
+    // Cross two batch boundaries so that both the (batch - first_batch) pointer
+    // arithmetic and the in-batch metadata index get exercised. The last split point is
+    // the one the smaller shapes above cannot reach: it starts mid-batch inside a
+    // non-zero batch, where a first_batch computed from the wrong divisor still looks
+    // plausible. Kept to a single small shape because k grows with blocks_per_batch, and
+    // sparse so that the long K does not turn into an accumulation-precision test.
+    if (blocks_per_batch > 1) {
+        run_case(3, n_step + 1, (2 * blocks_per_batch + 1) * block_size + 1,
+                 {block_size, blocks_per_batch * block_size, (blocks_per_batch + 1) * block_size},
+                 /*sparse_a=*/true);
     }
 }
 
@@ -1654,7 +1758,7 @@ void run_packed_block_quantized_byte_gemm_test(
 // Function pointer types for fp-output non-packed / packed variants
 //   gemm_1xnbias_clamp_<T_D>_qai8dx_qsi8cxt   (NonPacked, a_bt)
 //   gemm_1xnbias_clamp_<T_D>_qai8dxp_qsi8cxp  (Packed, ap_bp)
-// where T_D is float or float16_t. Bias is the same type as T_D.
+// where T_D is float or float16_t. Bias is always F32.
 // ============================================================================
 
 template <typename T_D>
@@ -4523,6 +4627,7 @@ struct PackedQsi8KBlockGemmTestFuncs
 
     bool asymmetric;
     Qsi8KBlockWeightEncoding weight_encoding;
+    Qsi8BlockPackedLayout packed_layout;
     GetNStepFunc get_n_step;
     GetPackedSizeFunc get_a_packed_size;
     GetPackedSizeFunc get_b_packed_size;
@@ -5177,6 +5282,9 @@ void run_packed_qsi8_block_extreme_test(const PackedQsi8BlockQuantizedGemmTestFu
     }
 }
 
+// These exact F32 scales put Q31 parameter generation on a rounding boundary.
+// With RNE, bias * 2139094784 / 2^62 rounds to the listed integer outputs.
+// A dynamic-rounding double division instead changes the multiplier under RUP.
 template <bool PerRow, typename Run>
 void check_requantized_i8_rounding_modes(size_t m_step, size_t n_step, Run run)
 {

@@ -99,7 +99,13 @@ if(TORQ_TILE_HAS_ZTT_GEMM_BF16)
     list(APPEND TORQ_TILE_BENCHMARK_SOURCES gemm/bench_gemm_bf16_bf16_ztt.cpp)
 endif()
 
+if(TORQ_TILE_HAS_ZTT_GEMM_BLOCK_INT_U4)
+    list(APPEND TORQ_TILE_BENCHMARK_SOURCES gemm/bench_gemm_i8_u4_ztt.cpp)
+endif()
 
+if(TORQ_TILE_HAS_ZTT_GEMM_BLOCK_INT_I8)
+    list(APPEND TORQ_TILE_BENCHMARK_SOURCES gemm/bench_gemm_i8_i8_ztt.cpp)
+endif()
 
 if(TORQ_TILE_HAS_ZTT_GEMM_F32)
     list(APPEND TORQ_TILE_BENCHMARK_SOURCES gemm/bench_gemm_f32_f32_ztt.cpp)

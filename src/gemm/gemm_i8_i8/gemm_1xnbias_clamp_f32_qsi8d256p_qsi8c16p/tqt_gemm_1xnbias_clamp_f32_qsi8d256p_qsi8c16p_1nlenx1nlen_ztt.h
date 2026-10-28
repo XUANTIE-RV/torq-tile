@@ -1,0 +1,61 @@
+//
+// SPDX-FileCopyrightText: Copyright 2024-2026 C-SKY Microsystems Co., Ltd.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+
+#pragma once
+
+#include <stddef.h>
+
+#include "src/gemm/gemm_i8_i8/tqt_params_i8_i8.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/// Ztt qsi8d256p x byte-expanded Q6_K-derived qsi8c16p GEMM with fp32 output.
+/// Both steps equal amenlen (power of two, 1..128). Packing is specific to this
+/// variant, UDS and amenlen; use the size getters for padded buffers. A/B code
+/// pointers are advanced by their offset getters for Split-K, while metadata
+/// retains its K=0 base. K and K origins must be multiples of 256.
+/// Consumes adapter-produced execution tensors; it does not parse raw GGUF blocks.
+
+size_t tqt_get_m_step_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_1nlenx1nlen_ztt(void);
+size_t tqt_get_n_step_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_1nlenx1nlen_ztt(void);
+size_t tqt_get_a_packed_offset_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_1nlenx1nlen_ztt(
+    size_t m_idx, size_t k_idx, size_t lda, size_t actual_m);
+size_t tqt_get_b_packed_offset_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_1nlenx1nlen_ztt(
+    size_t n_idx, size_t k_idx, size_t ldb, size_t actual_n);
+size_t tqt_get_scale_a_offset_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_1nlenx1nlen_ztt(
+    size_t m_idx, size_t block_idx, size_t ldsa);
+size_t tqt_get_scale_b_offset_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_1nlenx1nlen_ztt(
+    size_t n_idx, size_t block_idx, size_t ldsb);
+size_t tqt_get_c_offset_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_1nlenx1nlen_ztt(size_t m_idx,
+                                                                                  size_t n_idx,
+                                                                                  size_t ldc);
+size_t tqt_get_bias_offset_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_1nlenx1nlen_ztt(size_t n_idx);
+size_t tqt_get_d_offset_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_1nlenx1nlen_ztt(size_t m_idx,
+                                                                                  size_t n_idx,
+                                                                                  size_t ldd);
+size_t tqt_get_d_size_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_1nlenx1nlen_ztt(size_t m, size_t n);
+size_t tqt_get_a_packed_size_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_1nlenx1nlen_ztt(size_t m,
+                                                                                       size_t k);
+size_t tqt_get_b_packed_size_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_1nlenx1nlen_ztt(size_t n,
+                                                                                       size_t k);
+void tqt_run_a_pack_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_1nlenx1nlen_ztt(
+    size_t m, size_t k, size_t lda, size_t lda_packed, size_t k_idx, const void *A, void *A_packed);
+void tqt_run_bt_pack_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_1nlenx1nlen_ztt(
+    size_t n, size_t k, size_t ldb, size_t ldb_packed, size_t k_idx, const void *B, void *B_packed);
+/// @note If clamp_min is negative infinity and clamp_max is positive infinity,
+///       clamping is skipped. All other bounds retain the existing clamp behavior.
+///       This does not guarantee preservation of NaN payloads or exception flags.
+void tqt_run_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_1nlenx1nlen_ztt(
+    size_t m, size_t n, size_t k, const void *A_packed, size_t lda, size_t k_idx_a,
+    const void *B_packed, size_t ldb, size_t k_idx_b, const void *C, size_t ldc, void *D,
+    size_t ldd, const void *bias, float clamp_min, float clamp_max,
+    const struct tqt_qsi8d256_qsi8c16_params *params);
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif

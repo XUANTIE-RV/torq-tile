@@ -17,6 +17,8 @@
     "capabilities": {
       "ZTT": 1,
       "ZTT_GEMM_F32": 1,
+      "ZTT_GEMM_BLOCK_INT_U4": 1,
+      "ZTT_GEMM_BLOCK_INT_I8": 1,
       "ZTT_GEMM_F16": 1,
       "ZTT_GEMM_BF16": 1,
       "RVV": 0
@@ -40,6 +42,8 @@
     "capabilities": {
       "ZTT": 1,
       "ZTT_GEMM_F32": 1,
+      "ZTT_GEMM_BLOCK_INT_U4": 1,
+      "ZTT_GEMM_BLOCK_INT_I8": 1,
       "ZTT_GEMM_F16": 1,
       "ZTT_GEMM_BF16": 1,
       "RVV": 0
@@ -63,6 +67,8 @@
     "capabilities": {
       "ZTT": 1,
       "ZTT_GEMM_F32": 1,
+      "ZTT_GEMM_BLOCK_INT_U4": 1,
+      "ZTT_GEMM_BLOCK_INT_I8": 1,
       "ZTT_GEMM_F16": 1,
       "ZTT_GEMM_BF16": 1,
       "RVV": 0
@@ -86,6 +92,8 @@
     "capabilities": {
       "ZTT": 1,
       "ZTT_GEMM_F32": 1,
+      "ZTT_GEMM_BLOCK_INT_U4": 1,
+      "ZTT_GEMM_BLOCK_INT_I8": 1,
       "ZTT_GEMM_F16": 1,
       "ZTT_GEMM_BF16": 1,
       "RVV": 0
@@ -109,6 +117,8 @@
     "capabilities": {
       "ZTT": 1,
       "ZTT_GEMM_F32": 1,
+      "ZTT_GEMM_BLOCK_INT_U4": 1,
+      "ZTT_GEMM_BLOCK_INT_I8": 1,
       "ZTT_GEMM_F16": 0,
       "ZTT_GEMM_BF16": 0,
       "RVV": 0
@@ -132,6 +142,8 @@
     "capabilities": {
       "ZTT": 1,
       "ZTT_GEMM_F32": 1,
+      "ZTT_GEMM_BLOCK_INT_U4": 1,
+      "ZTT_GEMM_BLOCK_INT_I8": 1,
       "ZTT_GEMM_F16": 1,
       "ZTT_GEMM_BF16": 1,
       "RVV": 0

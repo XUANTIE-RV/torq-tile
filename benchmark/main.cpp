@@ -28,6 +28,12 @@ namespace torq_tile
 namespace benchmark
 {
 
+#if TORQ_TILE_HAS_ZTT_GEMM_BLOCK_INT_U4
+void register_gemm_i8_u4_ztt_benchmarks();
+#endif
+#if TORQ_TILE_HAS_ZTT_GEMM_BLOCK_INT_I8
+void register_gemm_i8_i8_ztt_benchmarks();
+#endif
 #if TORQ_TILE_HAS_ZTT_GEMM_F32
 void register_gemm_f32_f32_ztt_benchmarks();
 #endif
@@ -106,6 +112,12 @@ void register_gemm_f64_f64_rvv_benchmarks();
 
 inline void register_gemm_benchmarks()
 {
+#if TORQ_TILE_HAS_ZTT_GEMM_BLOCK_INT_U4
+    register_gemm_i8_u4_ztt_benchmarks();
+#endif
+#if TORQ_TILE_HAS_ZTT_GEMM_BLOCK_INT_I8
+    register_gemm_i8_i8_ztt_benchmarks();
+#endif
 #if TORQ_TILE_HAS_ZTT_GEMM_F32
     register_gemm_f32_f32_ztt_benchmarks();
 #endif

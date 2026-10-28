@@ -138,6 +138,26 @@ torq_tile_check_isa("
 # Source Files Collection
 # ============================================================================
 
+# Compile the real fixed-register implementation, including all NLEN dispatches.
+torq_tile_check_isa("
+    #include \"${PROJECT_SOURCE_DIR}/src/gemm/gemm_i8_u4/gemm_1xnbias_clamp_f32_qsi8d256p_qau4c32p/tqt_gemm_1xnbias_clamp_f32_qsi8d256p_qau4c32p_1nlenx1nlen_ztt.cpp\"
+    int main() { return 0; }
+" TORQ_TILE_CAN_COMPILE_ZTT_GEMM_BLOCK_INT_U4)
+
+# Compile the real fixed-register implementation, including all NLEN dispatches.
+torq_tile_check_isa("
+    #include \"${PROJECT_SOURCE_DIR}/src/gemm/gemm_i8_i8/gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p/tqt_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_1nlenx1nlen_ztt.cpp\"
+    int main() { return 0; }
+" TORQ_TILE_CAN_COMPILE_ZTT_GEMM_BLOCK_INT_I8)
+
+set(TORQ_TILE_ZTT_GEMM_BLOCK_INT_U4_SOURCES
+    src/gemm/gemm_i8_u4/gemm_1xnbias_clamp_f32_qsi8d256p_qau4c32p/tqt_gemm_1xnbias_clamp_f32_qsi8d256p_qau4c32p_1nlenx1nlen_ztt.cpp
+)
+
+set(TORQ_TILE_ZTT_GEMM_BLOCK_INT_I8_SOURCES
+    src/gemm/gemm_i8_i8/gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p/tqt_gemm_1xnbias_clamp_f32_qsi8d256p_qsi8c16p_1nlenx1nlen_ztt.cpp
+)
+
 set(TORQ_TILE_ZTT_GEMM_F16_SOURCES
     src/gemm/gemm_f16_f16/gemm_1xnbias_clamp_f16_f16_f16/tqt_gemm_1xnbias_clamp_f16_f16_f16_1nlenxpnlen_ztt.cpp
     src/gemm/gemm_f16_f16/gemm_1xnbias_clamp_f16_f16_f16t/tqt_gemm_1xnbias_clamp_f16_f16_f16t_1nlenxpnlen_ztt.cpp
@@ -430,6 +450,12 @@ set(TORQ_TILE_RVV_F64_SOURCES
 
 set(TORQ_TILE_ALL_SOURCES "")
 
+if(TORQ_TILE_CAN_COMPILE_ZTT AND TORQ_TILE_CAN_COMPILE_ZTT_GEMM_BLOCK_INT_U4)
+    list(APPEND TORQ_TILE_ALL_SOURCES ${TORQ_TILE_ZTT_GEMM_BLOCK_INT_U4_SOURCES})
+endif()
+if(TORQ_TILE_CAN_COMPILE_ZTT AND TORQ_TILE_CAN_COMPILE_ZTT_GEMM_BLOCK_INT_I8)
+    list(APPEND TORQ_TILE_ALL_SOURCES ${TORQ_TILE_ZTT_GEMM_BLOCK_INT_I8_SOURCES})
+endif()
 if(TORQ_TILE_CAN_COMPILE_ZTT AND TORQ_TILE_CAN_COMPILE_ZTT_GEMM_F16)
     list(APPEND TORQ_TILE_ALL_SOURCES ${TORQ_TILE_ZTT_GEMM_F16_SOURCES})
 endif()

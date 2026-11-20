@@ -5,10 +5,17 @@
 #
 
 cmake_minimum_required(VERSION 3.16)
+
+set(TORQ_TILE_VERSION_MAJOR 1)
+set(TORQ_TILE_VERSION_MINOR 0)
+set(TORQ_TILE_VERSION_PATCH 0)
+set(TORQ_TILE_VERSION_BASE
+    "${TORQ_TILE_VERSION_MAJOR}.${TORQ_TILE_VERSION_MINOR}.${TORQ_TILE_VERSION_PATCH}")
 project(torq-tile
-    VERSION 0.1.0
+    VERSION ${TORQ_TILE_VERSION_BASE}
     LANGUAGES C CXX
 )
+message(STATUS "TORQ-Tile version: ${PROJECT_VERSION}")
 
 # ============================================================================
 # Project Options

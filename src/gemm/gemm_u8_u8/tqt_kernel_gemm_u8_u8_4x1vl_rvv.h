@@ -109,18 +109,39 @@ static inline void tqt_vwmaccu_kernel_gemm_u8_u8_4x1vl_rvv(size_t vl,
     static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
 
     asm volatile("vsetvli zero, %0, e8, m1, ta, ma\n\t" : : "r"(vl) :);
-    if constexpr (MR >= 1)
-        asm volatile("lbu a0, 0(%0)" : : "r"(a_ptrs[0]) : "a0", "memory");
-    asm volatile("vwmulu.vx v8, v0, a0" : : : "v8", "v9");
-    if constexpr (MR >= 2)
-        asm volatile("lbu a1, 0(%0)" : : "r"(a_ptrs[1]) : "a1", "memory");
-    asm volatile("vwmulu.vx v10, v0, a1" : : : "v10", "v11");
-    if constexpr (MR >= 3)
-        asm volatile("lbu a2, 0(%0)" : : "r"(a_ptrs[2]) : "a2", "memory");
-    asm volatile("vwmulu.vx v12, v0, a2" : : : "v12", "v13");
-    if constexpr (MR >= 4)
-        asm volatile("lbu a3, 0(%0)" : : "r"(a_ptrs[3]) : "a3", "memory");
-    asm volatile("vwmulu.vx v14, v0, a3" : : : "v14", "v15");
+    // Keep the scalar load and its consumer in the same asm block.
+    if constexpr (MR >= 1) {
+        asm volatile(
+            "lbu a0, 0(%0)\n\t"
+            "vwmulu.vx v8, v0, a0"
+            :
+            : "r"(a_ptrs[0])
+            : "a0", "v8", "v9", "memory");
+    }
+    if constexpr (MR >= 2) {
+        asm volatile(
+            "lbu a1, 0(%0)\n\t"
+            "vwmulu.vx v10, v0, a1"
+            :
+            : "r"(a_ptrs[1])
+            : "a1", "v10", "v11", "memory");
+    }
+    if constexpr (MR >= 3) {
+        asm volatile(
+            "lbu a2, 0(%0)\n\t"
+            "vwmulu.vx v12, v0, a2"
+            :
+            : "r"(a_ptrs[2])
+            : "a2", "v12", "v13", "memory");
+    }
+    if constexpr (MR >= 4) {
+        asm volatile(
+            "lbu a3, 0(%0)\n\t"
+            "vwmulu.vx v14, v0, a3"
+            :
+            : "r"(a_ptrs[3])
+            : "a3", "v14", "v15", "memory");
+    }
 
     asm volatile("vsetvli zero, %0, e16, m2, ta, ma\n\t" : : "r"(vl) :);
     if constexpr (MR >= 1)

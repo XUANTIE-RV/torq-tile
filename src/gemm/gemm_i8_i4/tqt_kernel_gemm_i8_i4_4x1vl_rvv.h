@@ -156,21 +156,38 @@ static inline void tqt_vmacc_lo_kernel_gemm_i8_i4_4x1vl_rvv(size_t vl,
     static_assert(MR >= 1 && MR <= 4, "MR must be in range [1, 4]");
 
     asm volatile("vsetvli zero, %0, e8, m1, ta, ma\n\t" : : "r"(vl) :);
+    // Keep the scalar load and its consumer in the same asm block.
     if constexpr (MR >= 1) {
-        asm volatile("lb a0, 0(%0)" : : "r"(a_ptrs[0]) : "a0", "memory");
-        asm volatile("vwmul.vx v8, v0, a0" : : : "v8", "v9");
+        asm volatile(
+            "lb a0, 0(%0)\n\t"
+            "vwmul.vx v8, v0, a0"
+            :
+            : "r"(a_ptrs[0])
+            : "a0", "v8", "v9", "memory");
     }
     if constexpr (MR >= 2) {
-        asm volatile("lb a1, 0(%0)" : : "r"(a_ptrs[1]) : "a1", "memory");
-        asm volatile("vwmul.vx v10, v0, a1" : : : "v10", "v11");
+        asm volatile(
+            "lb a1, 0(%0)\n\t"
+            "vwmul.vx v10, v0, a1"
+            :
+            : "r"(a_ptrs[1])
+            : "a1", "v10", "v11", "memory");
     }
     if constexpr (MR >= 3) {
-        asm volatile("lb a2, 0(%0)" : : "r"(a_ptrs[2]) : "a2", "memory");
-        asm volatile("vwmul.vx v12, v0, a2" : : : "v12", "v13");
+        asm volatile(
+            "lb a2, 0(%0)\n\t"
+            "vwmul.vx v12, v0, a2"
+            :
+            : "r"(a_ptrs[2])
+            : "a2", "v12", "v13", "memory");
     }
     if constexpr (MR >= 4) {
-        asm volatile("lb a3, 0(%0)" : : "r"(a_ptrs[3]) : "a3", "memory");
-        asm volatile("vwmul.vx v14, v0, a3" : : : "v14", "v15");
+        asm volatile(
+            "lb a3, 0(%0)\n\t"
+            "vwmul.vx v14, v0, a3"
+            :
+            : "r"(a_ptrs[3])
+            : "a3", "v14", "v15", "memory");
     }
 
     asm volatile("vsetvli zero, %0, e16, m2, ta, ma\n\t" : : "r"(vl) :);
@@ -196,20 +213,36 @@ static inline void tqt_vmacc_hi_kernel_gemm_i8_i4_4x1vl_rvv(size_t vl,
 
     asm volatile("vsetvli zero, %0, e8, m1, ta, ma\n\t" : : "r"(vl) :);
     if constexpr (MR >= 1) {
-        asm volatile("lb a0, 0(%0)" : : "r"(a_ptrs[0]) : "a0", "memory");
-        asm volatile("vwmul.vx v8, v1, a0" : : : "v8", "v9");
+        asm volatile(
+            "lb a0, 0(%0)\n\t"
+            "vwmul.vx v8, v1, a0"
+            :
+            : "r"(a_ptrs[0])
+            : "a0", "v8", "v9", "memory");
     }
     if constexpr (MR >= 2) {
-        asm volatile("lb a1, 0(%0)" : : "r"(a_ptrs[1]) : "a1", "memory");
-        asm volatile("vwmul.vx v10, v1, a1" : : : "v10", "v11");
+        asm volatile(
+            "lb a1, 0(%0)\n\t"
+            "vwmul.vx v10, v1, a1"
+            :
+            : "r"(a_ptrs[1])
+            : "a1", "v10", "v11", "memory");
     }
     if constexpr (MR >= 3) {
-        asm volatile("lb a2, 0(%0)" : : "r"(a_ptrs[2]) : "a2", "memory");
-        asm volatile("vwmul.vx v12, v1, a2" : : : "v12", "v13");
+        asm volatile(
+            "lb a2, 0(%0)\n\t"
+            "vwmul.vx v12, v1, a2"
+            :
+            : "r"(a_ptrs[2])
+            : "a2", "v12", "v13", "memory");
     }
     if constexpr (MR >= 4) {
-        asm volatile("lb a3, 0(%0)" : : "r"(a_ptrs[3]) : "a3", "memory");
-        asm volatile("vwmul.vx v14, v1, a3" : : : "v14", "v15");
+        asm volatile(
+            "lb a3, 0(%0)\n\t"
+            "vwmul.vx v14, v1, a3"
+            :
+            : "r"(a_ptrs[3])
+            : "a3", "v14", "v15", "memory");
     }
 
     asm volatile("vsetvli zero, %0, e16, m2, ta, ma\n\t" : : "r"(vl) :);

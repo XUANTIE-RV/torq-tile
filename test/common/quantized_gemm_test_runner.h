@@ -5358,9 +5358,11 @@ void check_requantized_i8_contract(size_t m_step, size_t n_step, Run run)
 {
     check_requantized_i8_rounding_modes<PerRow>(m_step, n_step, run);
     const float scales[] = {0.5f, 1.0f, 2.0f, 0x1p-33f, 0x1p16f};
-    for (size_t k : {size_t(0), size_t(1), size_t(35)}) {
-        for (int32_t input_zp : {-128, 37, 127}) {
-            for (size_t tail : {size_t(0), size_t(1)}) {
+    for (size_t k : {size_t(0), size_t(1), size_t(35), 2 * n_step + 3}) {
+        for (int32_t input_zp : {-128, 0, 37, 127}) {
+            // Include a partial second panel and multiple output tiles so the
+            // zero-point fast path and per-tile correction reuse are covered.
+            for (size_t tail : {size_t(0), size_t(1), n_step / 2 + 1}) {
                 const size_t m = 2 * m_step + tail;
                 const size_t n = 2 * n_step + tail;
                 const size_t lda = k + 3;

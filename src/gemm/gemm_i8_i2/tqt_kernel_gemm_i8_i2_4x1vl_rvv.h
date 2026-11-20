@@ -177,21 +177,38 @@ static inline void tqt_vmacc_kernel_gemm_i8_i2_4x1vl_rvv(size_t vl, const int8_t
     asm volatile("vsetvli zero, %0, e16, m2, ta, ma\n\t" : : "r"(vl) :);
     asm volatile("vsext.vf2 v8, v1" : : : "v8", "v9");
 
+    // Keep the scalar load and its consumer in the same asm block.
     if constexpr (MR >= 1) {
-        asm volatile("lb a0, 0(%0)" : : "r"(a_ptrs[0]) : "a0", "memory");
-        asm volatile("vwmacc.vx v16, a0, v8" : : : "v16", "v17", "v18", "v19");
+        asm volatile(
+            "lb a0, 0(%0)\n\t"
+            "vwmacc.vx v16, a0, v8"
+            :
+            : "r"(a_ptrs[0])
+            : "a0", "v16", "v17", "v18", "v19", "memory");
     }
     if constexpr (MR >= 2) {
-        asm volatile("lb a1, 0(%0)" : : "r"(a_ptrs[1]) : "a1", "memory");
-        asm volatile("vwmacc.vx v20, a1, v8" : : : "v20", "v21", "v22", "v23");
+        asm volatile(
+            "lb a1, 0(%0)\n\t"
+            "vwmacc.vx v20, a1, v8"
+            :
+            : "r"(a_ptrs[1])
+            : "a1", "v20", "v21", "v22", "v23", "memory");
     }
     if constexpr (MR >= 3) {
-        asm volatile("lb a2, 0(%0)" : : "r"(a_ptrs[2]) : "a2", "memory");
-        asm volatile("vwmacc.vx v24, a2, v8" : : : "v24", "v25", "v26", "v27");
+        asm volatile(
+            "lb a2, 0(%0)\n\t"
+            "vwmacc.vx v24, a2, v8"
+            :
+            : "r"(a_ptrs[2])
+            : "a2", "v24", "v25", "v26", "v27", "memory");
     }
     if constexpr (MR >= 4) {
-        asm volatile("lb a3, 0(%0)" : : "r"(a_ptrs[3]) : "a3", "memory");
-        asm volatile("vwmacc.vx v28, a3, v8" : : : "v28", "v29", "v30", "v31");
+        asm volatile(
+            "lb a3, 0(%0)\n\t"
+            "vwmacc.vx v28, a3, v8"
+            :
+            : "r"(a_ptrs[3])
+            : "a3", "v28", "v29", "v30", "v31", "memory");
     }
 }
 

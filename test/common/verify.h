@@ -20,8 +20,8 @@ struct VerificationResult
 {
     bool passed;
     std::string error_message;
-    float max_abs_error;
-    float avg_abs_error;
+    double max_abs_error;
+    double avg_abs_error;
     float cosine_similarity;
     size_t num_errors;
 };

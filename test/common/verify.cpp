@@ -9,6 +9,7 @@
 #include <cmath>
 #include <iomanip>
 #include <sstream>
+#include <type_traits>
 
 namespace torq_tile
 {
@@ -19,6 +20,11 @@ template <typename T>
 VerificationResult verify_gemm_result(const T *reference, const T *actual, size_t size,
                                       float max_abs_error_threshold, float min_cosine_similarity)
 {
+    // Double preserves FP64 inputs and exactly represents INT32 values and differences.
+    // Retain the existing arithmetic for FP32/FP16/BF16 comparisons.
+    using ErrorType =
+        std::conditional_t<std::is_same_v<T, double> || std::is_same_v<T, int32_t>, double, float>;
+
     VerificationResult result;
     result.passed = true;
     result.max_abs_error = 0.0f;
@@ -26,26 +32,26 @@ VerificationResult verify_gemm_result(const T *reference, const T *actual, size_
     result.cosine_similarity = 0.0f;
     result.num_errors = 0;
 
-    float total_abs_error = 0.0f;
+    ErrorType total_abs_error = 0.0;
 
     // Track max error location
     size_t max_error_index = 0;
-    float max_error_ref_f = 0.0f;
-    float max_error_act_f = 0.0f;
+    ErrorType max_error_ref = 0.0;
+    ErrorType max_error_act = 0.0;
 
     // Calculate absolute errors
     for (size_t i = 0; i < size; ++i) {
-        float ref_f = static_cast<float>(reference[i]);
-        float act_f = static_cast<float>(actual[i]);
-        float abs_error = std::fabs(ref_f - act_f);
+        ErrorType ref_value = static_cast<ErrorType>(reference[i]);
+        ErrorType act_value = static_cast<ErrorType>(actual[i]);
+        ErrorType abs_error = std::fabs(ref_value - act_value);
 
         total_abs_error += abs_error;
 
         if (abs_error > result.max_abs_error) {
             result.max_abs_error = abs_error;
             max_error_index = i;
-            max_error_ref_f = ref_f;
-            max_error_act_f = act_f;
+            max_error_ref = ref_value;
+            max_error_act = act_value;
         }
 
         if (abs_error > max_abs_error_threshold) {
@@ -53,7 +59,7 @@ VerificationResult verify_gemm_result(const T *reference, const T *actual, size_
         }
     }
 
-    result.avg_abs_error = (size > 0) ? (total_abs_error / static_cast<float>(size)) : 0.0f;
+    result.avg_abs_error = (size > 0) ? (total_abs_error / static_cast<ErrorType>(size)) : 0.0;
 
     // Calculate cosine similarity
     double dot_product = 0.0;
@@ -61,8 +67,8 @@ VerificationResult verify_gemm_result(const T *reference, const T *actual, size_
     double act_norm_sq = 0.0;
 
     for (size_t i = 0; i < size; ++i) {
-        double ref_d = static_cast<double>(static_cast<float>(reference[i]));
-        double act_d = static_cast<double>(static_cast<float>(actual[i]));
+        double ref_d = static_cast<double>(static_cast<ErrorType>(reference[i]));
+        double act_d = static_cast<double>(static_cast<ErrorType>(actual[i]));
 
         dot_product += ref_d * act_d;
         ref_norm_sq += ref_d * ref_d;
@@ -91,8 +97,8 @@ VerificationResult verify_gemm_result(const T *reference, const T *actual, size_
                   << "  Cosine similarity threshold: " << min_cosine_similarity << "\n"
                   << "  Max absolute error: " << result.max_abs_error << " at index "
                   << max_error_index << "\n"
-                  << "    Reference value: " << max_error_ref_f << "\n"
-                  << "    Actual value: " << max_error_act_f << "\n"
+                  << "    Reference value: " << max_error_ref << "\n"
+                  << "    Actual value: " << max_error_act << "\n"
                   << "  Average absolute error: " << result.avg_abs_error << "\n"
                   << "  Cosine similarity: " << result.cosine_similarity << "\n"
                   << "  Number of errors: " << result.num_errors << "/" << size;

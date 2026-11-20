@@ -304,6 +304,7 @@ set(TORQ_TILE_RVV_F16_SOURCES
     src/gemm/gemm_f32_f16/gemm_1xnbias_clamp_f32_f32_f16t/tqt_gemm_1xnbias_clamp_f32_f32_f16t_8x1vl_rvv.cpp
     src/gemm/gemm_f32_f16/gemm_1xnbias_clamp_f32_f32p_f16p/tqt_gemm_1xnbias_clamp_f32_f32p_f16p_8x1vl_rvv.cpp
     src/gemm/gemm_f16_f16/gemm_1xnbias_clamp_f16_f16_f16/tqt_gemm_1xnbias_clamp_f16_f16_f16_8x3vl_rvv.cpp
+    src/gemm/gemm_f16_f16/gemm_1xnbias_clamp_f16_f16_f16/tqt_gemm_1xnbias_clamp_f16_f16_f16_8x1vl_f32acc_rvv.cpp
     src/gemm/gemm_f16_f16/gemm_1xnbias_clamp_f16_f16_f16/tqt_gemm_1xnbias_clamp_f16_f16_f16_4x4vl_rvv.cpp
     src/gemm/gemm_f16_f16/gemm_1xnbias_clamp_f16_f16_f16/tqt_gemm_1xnbias_clamp_f16_f16_f16_2x8vl_rvv.cpp
     src/gemm/gemm_f16_f16/gemm_1xnbias_clamp_f16_f16_f16t/tqt_gemm_1xnbias_clamp_f16_f16_f16t_8x3vl_rvv.cpp
@@ -316,7 +317,9 @@ set(TORQ_TILE_RVV_F16_SOURCES
     src/gemm/gemm_f16_f16/gemm_1xnbias_clamp_f16_f16p_f16p/tqt_gemm_1xnbias_clamp_f16_f16p_f16p_2x8vl_rvv.cpp
     src/gemm/gemm_f16_f16/gemm_1xnbias_clamp_f16_f16p_f16p/tqt_gemm_1xnbias_clamp_f16_f16p_f16p_8x1vl_f32acc_rvv.cpp
     src/gemm/gemm_f16_f16/gemm_mx1bias_clamp_f16_f16_f16/tqt_gemm_mx1bias_clamp_f16_f16_f16_8x3vl_rvv.cpp
+    src/gemm/gemm_f16_f16/gemm_mx1bias_clamp_f16_f16_f16/tqt_gemm_mx1bias_clamp_f16_f16_f16_8x1vl_f32acc_rvv.cpp
     src/gemm/gemm_f16_f16/gemm_mx1bias_clamp_f16_f16p_f16p/tqt_gemm_mx1bias_clamp_f16_f16p_f16p_8x3vl_rvv.cpp
+    src/gemm/gemm_f16_f16/gemm_mx1bias_clamp_f16_f16p_f16p/tqt_gemm_mx1bias_clamp_f16_f16p_f16p_8x1vl_f32acc_rvv.cpp
     src/gemm/gemm_f16_i4/gemm_1xnbias_clamp_f16_f16_qsi4c2t/tqt_gemm_1xnbias_clamp_f16_f16_qsi4c2t_8x2vl_rvv.cpp
     src/gemm/gemm_f16_i4/gemm_1xnbias_clamp_f16_f16p_qsi4c2p/tqt_gemm_1xnbias_clamp_f16_f16p_qsi4c2p_8x2vl_rvv.cpp
     src/gemm/gemm_f16_i4/gemm_1xnbias_clamp_f32_f16_qsi4c2t/tqt_gemm_1xnbias_clamp_f32_f16_qsi4c2t_8x2vl_rvv.cpp
@@ -346,10 +349,14 @@ set(TORQ_TILE_RVV_F16_SOURCES
     src/gemm/gemm_i8_i4/gemm_1xnbias_clamp_f16_qsi8d2p_qai4c2p/tqt_gemm_1xnbias_clamp_f16_qsi8d2p_qai4c2p_4x1vl_rvv.cpp
     src/gemm/gemm_i8_i4/gemm_1xnbiasf32_clamp_f16_qsi8d2p_qai4c2p/tqt_gemm_1xnbiasf32_clamp_f16_qsi8d2p_qai4c2p_4x1vl_rvv.cpp
     src/conv/conv_f16_f16/convcf_mx1bias_clamp_f16_f16_f16/tqt_convcf_mx1bias_clamp_f16_f16_f16_8x3vl_rvv.cpp
+    src/conv/conv_f16_f16/convcf_mx1bias_clamp_f16_f16_f16/tqt_convcf_mx1bias_clamp_f16_f16_f16_8x1vl_f32acc_rvv.cpp
     src/conv/conv_f16_f16/convcf_mx1bias_clamp_f16_f16p_f16p/tqt_convcf_mx1bias_clamp_f16_f16p_f16p_8x3vl_rvv.cpp
+    src/conv/conv_f16_f16/convcf_mx1bias_clamp_f16_f16p_f16p/tqt_convcf_mx1bias_clamp_f16_f16p_f16p_8x1vl_f32acc_rvv.cpp
     src/conv/conv_f16_f16/convcl_1xnbias_clamp_f16_f16_f16t/tqt_convcl_1xnbias_clamp_f16_f16_f16t_8x3vl_rvv.cpp
+    src/conv/conv_f16_f16/convcl_1xnbias_clamp_f16_f16_f16t/tqt_convcl_1xnbias_clamp_f16_f16_f16t_8x1vl_f32acc_rvv.cpp
     src/conv/conv_f16_f16/convcl_1xnbias_clamp_f16_f16_f16p/tqt_convcl_1xnbias_clamp_f16_f16_f16p_8x3vl_rvv.cpp
     src/conv/conv_f16_f16/convcl_1xnbias_clamp_f16_f16p_f16p/tqt_convcl_1xnbias_clamp_f16_f16p_f16p_8x3vl_rvv.cpp
+    src/conv/conv_f16_f16/convcl_1xnbias_clamp_f16_f16p_f16p/tqt_convcl_1xnbias_clamp_f16_f16p_f16p_8x1vl_f32acc_rvv.cpp
     src/conv/igemm_f16_f16/igemmcf_mx1bias_clamp_f16_f16_f16/tqt_igemmcf_mx1bias_clamp_f16_f16_f16_3vlx8_rvv.cpp
     src/conv/igemm_f16_f16/igemmcf_mx1bias_clamp_f16_f16p_f16/tqt_igemmcf_mx1bias_clamp_f16_f16p_f16_3vlx8_rvv.cpp
     src/conv/igemm_f16_f16/igemmcl_1xnbias_clamp_f16_f16_f16t/tqt_igemmcl_1xnbias_clamp_f16_f16_f16t_8x3vl_rvv.cpp

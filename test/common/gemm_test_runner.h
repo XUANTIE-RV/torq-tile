@@ -209,6 +209,11 @@ inline void resolve_tile_sizes(const GemmTestParams &params, size_t m_step, size
 inline std::string validate_params(const GemmTestParams &params, size_t m_step, size_t n_step,
                                    size_t m_tile, size_t n_tile, size_t k_tile)
 {
+    const LoopDim expected_order[] = {LoopDim::M, LoopDim::N, LoopDim::K};
+    if (!std::is_permutation(params.loop_order, params.loop_order + 3, expected_order)) {
+        return "loop_order must be a permutation of M, N, K";
+    }
+
     // Only enforce step-alignment when doing external tiling (tile < total dim).
     // When tile == total dim, the kernel handles M/N iteration internally and
     // supports arbitrary (non-aligned) dimensions.
@@ -1238,6 +1243,146 @@ void run_gemm_accumulation_precision_test(const Row &native, const Row &wide, co
             EXPECT_EQ(static_cast<float>(dw[i]), static_cast<float>(static_cast<T>(base + k + 1)));
             EXPECT_NE(dn[i], dw[i]);
         }
+    }
+}
+
+// These exact dyadic inputs distinguish FP32 accumulation from FP16 accumulation,
+// premature narrowing before bias, and overflow before cancellation. Each run uses
+// independent strides and checks output padding as well as input preservation.
+template <typename Run>
+void check_f16_f32acc(size_t m_step, size_t n_step, BLayout layout, BiasMode bias_mode, Run run)
+{
+    constexpr size_t guard = 8;
+    const float16_t sentinel = static_cast<float16_t>(-123);
+    const size_t shapes[][2] = {
+        {1, 1}, {m_step - 1, n_step - 1}, {m_step, n_step}, {m_step + 1, n_step + 3}};
+    for (const auto &shape : shapes) {
+        const size_t m = shape[0], n = shape[1];
+        for (int scenario = 0; scenario < 3; ++scenario) {
+            const size_t k = scenario == 2 ? 129 : 258;
+            const size_t lda = k + 3;
+            const size_t ldb = (layout == BLayout::kTransposed ? k : n) + 5;
+            const size_t b_rows = layout == BLayout::kTransposed ? n : k;
+            const size_t ldc = n + 7, ldd = n + 11;
+            const size_t bias_size = bias_mode == BiasMode::kMx1 ? m : n;
+            for (bool has_c : {false, true}) {
+                for (bool has_bias : {false, true}) {
+                    for (bool clamp : {false, true}) {
+                        SCOPED_TRACE(::testing::Message()
+                                     << "m=" << m << " n=" << n << " scenario=" << scenario << " C="
+                                     << has_c << " bias=" << has_bias << " clamp=" << clamp);
+                        std::vector<float16_t> a(2 * guard + m * lda, sentinel);
+                        std::vector<float16_t> b(2 * guard + b_rows * ldb, sentinel);
+                        std::vector<float16_t> c(2 * guard + m * ldc, sentinel);
+                        std::vector<float16_t> bias(2 * guard + bias_size, sentinel);
+                        std::vector<float16_t> d(2 * guard + m * ldd, sentinel);
+                        auto expected = d;
+                        for (size_t i = 0; i < m; ++i) {
+                            for (size_t p = 0; p < k; ++p) {
+                                const float value = scenario == 2               ? 64.0f
+                                                    : (scenario == 1 && p == 0) ? 2048.0f
+                                                                                : 1.0f;
+                                a[guard + i * lda + p] = static_cast<float16_t>(value);
+                            }
+                            for (size_t j = 0; j < n; ++j) {
+                                c[guard + i * ldc + j] = static_cast<float16_t>(
+                                    (scenario == 0 ? 2048.0f : 0.0f) + 4 * i + 2 * j);
+                            }
+                        }
+                        for (size_t p = 0; p < k; ++p) {
+                            for (size_t j = 0; j < n; ++j) {
+                                const size_t idx =
+                                    layout == BLayout::kTransposed ? j * ldb + p : p * ldb + j;
+                                b[guard + idx] = static_cast<float16_t>(scenario == 2 ? 8 : 1);
+                            }
+                        }
+                        for (size_t i = 0; i < bias_size; ++i) {
+                            bias[guard + i] = static_cast<float16_t>(
+                                (scenario == 2 ? -65504.0f : -2048.0f) + 32 * (i % 5));
+                        }
+                        const auto original_a = a, original_b = b, original_c = c,
+                                   original_bias = bias;
+                        const float16_t lo = static_cast<float16_t>(clamp ? -16 : -INFINITY);
+                        const float16_t hi = static_cast<float16_t>(clamp ? 300 : INFINITY);
+                        for (size_t i = 0; i < m; ++i) {
+                            for (size_t j = 0; j < n; ++j) {
+                                float acc =
+                                    has_c ? static_cast<float>(c[guard + i * ldc + j]) : 0.0f;
+                                for (size_t p = 0; p < k; ++p) {
+                                    const size_t idx =
+                                        layout == BLayout::kTransposed ? j * ldb + p : p * ldb + j;
+                                    acc = std::fma(static_cast<float>(a[guard + i * lda + p]),
+                                                   static_cast<float>(b[guard + idx]), acc);
+                                }
+                                if (has_bias) {
+                                    acc += static_cast<float>(
+                                        bias[guard + (bias_mode == BiasMode::kMx1 ? i : j)]);
+                                }
+                                if (clamp) {
+                                    acc = std::fmin(std::fmax(acc, static_cast<float>(lo)),
+                                                    static_cast<float>(hi));
+                                }
+                                expected[guard + i * ldd + j] = static_cast<float16_t>(acc);
+                            }
+                        }
+                        run(m, n, k, a.data() + guard, lda, b.data() + guard, ldb,
+                            has_c ? c.data() + guard : nullptr, ldc, d.data() + guard, ldd,
+                            has_bias ? bias.data() + guard : nullptr, lo, hi);
+                        for (size_t i = 0; i < d.size(); ++i) {
+                            ASSERT_EQ(static_cast<float>(d[i]), static_cast<float>(expected[i]))
+                                << "output/guard index=" << i;
+                        }
+                        EXPECT_EQ(
+                            std::memcmp(a.data(), original_a.data(), a.size() * sizeof(float16_t)),
+                            0);
+                        EXPECT_EQ(
+                            std::memcmp(b.data(), original_b.data(), b.size() * sizeof(float16_t)),
+                            0);
+                        EXPECT_EQ(
+                            std::memcmp(c.data(), original_c.data(), c.size() * sizeof(float16_t)),
+                            0);
+                        EXPECT_EQ(std::memcmp(bias.data(), original_bias.data(),
+                                              bias.size() * sizeof(float16_t)),
+                                  0);
+                    }
+                }
+            }
+        }
+    }
+}
+
+template <typename Run>
+void check_f16_f32acc_nonpacked(size_t m_step, size_t n_step, BLayout layout, BiasMode bias_mode,
+                                Run run)
+{
+    check_f16_f32acc(
+        m_step, n_step, layout, bias_mode,
+        [run](size_t m, size_t n, size_t k, const float16_t *a, size_t lda, const float16_t *b,
+              size_t ldb, const float16_t *c, size_t ldc, float16_t *d, size_t ldd,
+              const float16_t *bias, float16_t lo,
+              float16_t hi) { run(m, n, k, a, lda, 0, b, ldb, 0, c, ldc, d, ldd, bias, lo, hi); });
+}
+
+template <typename Run, typename PackA, typename PackB, typename PackBt>
+void check_f16_f32acc_packed(size_t m_step, size_t n_step, BiasMode bias_mode, Run run,
+                             PackA pack_a, PackB pack_b, PackBt pack_bt)
+{
+    for (BLayout layout : {BLayout::kRowMajor, BLayout::kTransposed}) {
+        SCOPED_TRACE(layout == BLayout::kRowMajor ? "pack_b" : "pack_bt");
+        check_f16_f32acc(
+            m_step, n_step, layout, bias_mode,
+            [=](size_t m, size_t n, size_t k, const float16_t *a, size_t lda, const float16_t *b,
+                size_t ldb, const float16_t *c, size_t ldc, float16_t *d, size_t ldd,
+                const float16_t *bias, float16_t lo, float16_t hi) {
+                std::vector<float16_t> ap(m * k), bp(n * k);
+                pack_a(m, k, lda, k, 0, a, ap.data());
+                if (layout == BLayout::kTransposed) {
+                    pack_bt(n, k, ldb, k, 0, b, bp.data());
+                } else {
+                    pack_b(n, k, ldb, k, 0, b, bp.data());
+                }
+                run(m, n, k, ap.data(), k, 0, bp.data(), k, 0, c, ldc, d, ldd, bias, lo, hi);
+            });
     }
 }
 

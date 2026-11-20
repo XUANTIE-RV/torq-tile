@@ -11,12 +11,9 @@
 
 using namespace torq_tile::test;
 
-// The sigmoid comes from the cephes polynomial exp in src/common/tqt_math_rvv.h
-// followed by a correctly-rounded divide, so the absolute error of the result
-// scales with |x|. Sweeping x over the [-10, 10] range used by these tests
-// measures a maximum absolute error of 1.1e-6 and a maximum relative error of
-// 1.4e-7. The established acceptance budget below is preserved; it is not
-// tightened to this measured error.
+// Keep the established absolute-error and cosine acceptance budgets.
+// Activation accuracy includes the divide,
+// the optional gate/up multiply, and (for FP16) the final narrowing conversion.
 static constexpr float max_abs_error = 5e-5f;
 static constexpr float min_cosine = 0.999999f;
 
@@ -48,3 +45,9 @@ TEST(Test_silu_f32_f32_1x4vl_rvv, Steps)
 
 INSTANTIATE_TEST_SUITE_P(ActivationTests, Test_silu_f32_f32_1x4vl_rvv, activation_test_values(),
                          ActivationTestParamNameGenerator());
+
+TEST(Test_silu_f32_f32_1x4vl_rvv, SpecialValues)
+{
+    run_silu_special_values_test<float>(tqt_run_silu_f32_f32_1x4vl_rvv,
+                                        tqt_get_n_step_silu_f32_f32_1x4vl_rvv(), max_abs_error);
+}

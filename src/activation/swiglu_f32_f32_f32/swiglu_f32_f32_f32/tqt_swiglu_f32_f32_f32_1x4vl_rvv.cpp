@@ -45,14 +45,10 @@ size_t tqt_get_n_step_swiglu_f32_f32_f32_1x4vl_rvv(void)
 // ============================================================================
 // Internal: SwiGLU over one contiguous run of n elements
 // The gate is folded as a / (1 + exp(-a)); the single divide is cheaper and more
-// accurate than a reciprocal estimate plus a Newton correction. The polynomial
-// exp keeps several vector groups live, so the tile stays at LMUL=4 to avoid
-// spilling.
+// accurate than a reciprocal estimate plus a Newton correction. Keep the existing
+// LMUL=4 tile while using the shared FMA-based exp.
 //
-// The linear operand is loaded only after tqt_vexp_f32m4 has returned. exp holds
-// up to five LMUL=4 groups live at its peak, and the caller's gate group makes
-// six of the eight groups the ISA offers; hoisting this load above the exp call
-// would add a seventh and push the allocator into spills. Keep it here.
+// Load the linear operand after exp and the divide to limit live vector groups.
 // ============================================================================
 
 static inline void swiglu_kernel_4vl(size_t n, const float *a, const float *b, float *c)

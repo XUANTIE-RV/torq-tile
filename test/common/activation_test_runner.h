@@ -8,6 +8,11 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -551,6 +556,170 @@ void run_gated_activation_fused_layout_test(GatedActivationRunFunc run, size_t m
         ASSERT_EQ(static_cast<float>(out_fused[k]), static_cast<float>(out_split[k]))
             << "fused [M, 2N] layout disagrees with split buffers at element " << k;
     }
+}
+
+// ============================================================================
+// SiLU/SwiGLU special values and FP16 input coverage
+// ============================================================================
+
+inline double silu_special_reference(double x)
+{
+    if (x == -std::numeric_limits<double>::infinity()) {
+        // Native PyTorch/GGML SiLU forward evaluates -Inf / +Inf as NaN.
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    // Avoid overflow in the independent double-precision finite reference.
+    if (x < 0.0) {
+        const double e = std::exp(x);
+        return (x * e) / (1.0 + e);
+    }
+    return x / (1.0 + std::exp(-x));
+}
+
+template <typename T>
+void check_silu_special_value(T value, double reference, float tolerance)
+{
+    const double actual = static_cast<double>(value);
+    const double rounded = static_cast<double>(static_cast<T>(reference));
+    if (std::isnan(rounded)) {
+        ASSERT_TRUE(std::isnan(actual));
+    } else if (std::isinf(rounded)) {
+        ASSERT_EQ(actual, rounded);
+    } else {
+        ASSERT_TRUE(std::isfinite(actual));
+        ASSERT_LE(std::abs(actual - reference), static_cast<double>(tolerance));
+        if (reference == 0.0) {
+            ASSERT_EQ(actual, 0.0);
+            ASSERT_EQ(std::signbit(actual), std::signbit(reference));
+        }
+    }
+}
+
+template <typename T>
+void check_silu_special_matrix(const std::vector<T> &output, const std::vector<double> &reference,
+                               size_t m, size_t n, size_t stride, float tolerance)
+{
+    ASSERT_EQ(output.front(), static_cast<T>(42));
+    ASSERT_EQ(output.back(), static_cast<T>(42));
+    for (size_t row = 0; row < m; ++row) {
+        for (size_t col = 0; col < n; ++col) {
+            SCOPED_TRACE(::testing::Message() << "row=" << row << " col=" << col);
+            check_silu_special_value(output[1 + row * stride + col], reference[row * n + col],
+                                     tolerance);
+            ASSERT_FALSE(::testing::Test::HasFatalFailure());
+        }
+        for (size_t col = n; col < stride; ++col) {
+            ASSERT_EQ(output[1 + row * stride + col], static_cast<T>(42));
+        }
+    }
+}
+
+template <typename T>
+void run_silu_special_values_test(ActivationRunFunc run, size_t n_step, float tolerance)
+{
+    const float inf = std::numeric_limits<float>::infinity();
+    const float limit = sizeof(T) == 2 ? 65504.0f : std::numeric_limits<float>::max();
+    const std::vector<float> values = {
+        -inf,  -limit, -100.0f, -89.0f, -88.0f, -10.0f, -1.0f,
+        -0.0f, 0.0f,   1.0f,    10.0f,  limit,  inf,    std::numeric_limits<float>::quiet_NaN()};
+    constexpr size_t m = 3;
+    for (size_t n : {size_t{1}, size_t{3}, n_step - 1, n_step, n_step + 1, 2 * n_step + 3}) {
+        for (size_t padding : {size_t{0}, size_t{5}}) {
+            const size_t stride = n + padding;
+            std::vector<T> input(m * stride + 2, static_cast<T>(42));
+            std::vector<double> reference(m * n);
+            for (size_t row = 0; row < m; ++row) {
+                for (size_t col = 0; col < n; ++col) {
+                    const T x = static_cast<T>(values[(row * n + col) % values.size()]);
+                    input[1 + row * stride + col] = x;
+                    reference[row * n + col] = silu_special_reference(static_cast<double>(x));
+                }
+            }
+            for (bool inplace : {false, true}) {
+                std::vector<T> a = input;
+                std::vector<T> output(m * stride + 2, static_cast<T>(42));
+                std::vector<T> &destination = inplace ? a : output;
+                run(m, n, a.data() + 1, stride, destination.data() + 1, stride);
+                check_silu_special_matrix(destination, reference, m, n, stride, tolerance);
+                ASSERT_FALSE(::testing::Test::HasFatalFailure());
+                if (!inplace) {
+                    ASSERT_EQ(std::memcmp(a.data(), input.data(), input.size() * sizeof(T)), 0);
+                }
+            }
+        }
+    }
+}
+
+template <typename T>
+void run_swiglu_special_values_test(GatedActivationRunFunc run, size_t n_step, float tolerance)
+{
+    const float inf = std::numeric_limits<float>::infinity();
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const std::vector<float> gates = {-inf, -1.0f, -0.0f, 0.0f, 1.0f, inf, nan};
+    const std::vector<float> ups = {-inf, -3.0f, -0.0f, 0.0f, 3.0f, inf, nan};
+    constexpr size_t m = 3;
+    for (size_t n : {size_t{1}, size_t{3}, n_step - 1, n_step, n_step + 1, 2 * n_step + 3}) {
+        for (size_t padding : {size_t{0}, size_t{5}}) {
+            const size_t stride = n + padding;
+            std::vector<T> gate(m * stride + 2, static_cast<T>(42));
+            std::vector<T> up(m * stride + 2, static_cast<T>(42));
+            std::vector<double> reference(m * n);
+            for (size_t row = 0; row < m; ++row) {
+                for (size_t col = 0; col < n; ++col) {
+                    const size_t index = row * n + col;
+                    const T a = static_cast<T>(gates[(index / ups.size()) % gates.size()]);
+                    const T b = static_cast<T>(ups[index % ups.size()]);
+                    gate[1 + row * stride + col] = a;
+                    up[1 + row * stride + col] = b;
+                    reference[index] =
+                        silu_special_reference(static_cast<double>(a)) * static_cast<double>(b);
+                }
+            }
+            // Separate output, output aliasing gate, and output aliasing up.
+            for (int alias : {0, 1, 2}) {
+                std::vector<T> a = gate;
+                std::vector<T> b = up;
+                std::vector<T> output(m * stride + 2, static_cast<T>(42));
+                std::vector<T> &destination = alias == 1 ? a : alias == 2 ? b : output;
+                run(m, n, a.data() + 1, stride, b.data() + 1, stride, destination.data() + 1,
+                    stride);
+                check_silu_special_matrix(destination, reference, m, n, stride, tolerance);
+                ASSERT_FALSE(::testing::Test::HasFatalFailure());
+                if (alias != 1) {
+                    ASSERT_EQ(std::memcmp(a.data(), gate.data(), gate.size() * sizeof(T)), 0);
+                }
+                if (alias != 2) {
+                    ASSERT_EQ(std::memcmp(b.data(), up.data(), up.size() * sizeof(T)), 0);
+                }
+            }
+        }
+    }
+}
+
+template <typename T>
+void run_silu_all_fp16_values_test(ActivationRunFunc run, float tolerance)
+{
+    static_assert(sizeof(T) == sizeof(uint16_t), "This test enumerates binary16 inputs.");
+    constexpr size_t n = 1u << 16;
+    std::vector<T> input(n);
+    std::vector<T> output(n);
+    for (size_t i = 0; i < n; ++i) {
+        const uint16_t bits = static_cast<uint16_t>(i);
+        std::memcpy(&input[i], &bits, sizeof(bits));
+    }
+    run(1, n, input.data(), n, output.data(), n);
+    double max_absolute_error = 0.0;
+    for (size_t i = 0; i < n; ++i) {
+        const double reference = silu_special_reference(static_cast<double>(input[i]));
+        check_silu_special_value(output[i], reference, tolerance);
+        ASSERT_FALSE(::testing::Test::HasFatalFailure()) << "input bits = " << i;
+        if (std::isfinite(reference)) {
+            max_absolute_error =
+                std::max(max_absolute_error, std::abs(static_cast<double>(output[i]) - reference));
+        }
+    }
+    ::testing::Test::RecordProperty("fp16_exhaustive_max_abs_error",
+                                    std::to_string(max_absolute_error));
 }
 
 }  // namespace test

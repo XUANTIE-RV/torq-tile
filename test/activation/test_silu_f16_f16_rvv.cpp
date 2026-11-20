@@ -11,12 +11,9 @@
 
 using namespace torq_tile::test;
 
-// The kernel widens to FP32, evaluates the cephes polynomial exp and the divide
-// there, and narrows once on store, so the error is dominated by that final
-// rounding to FP16 rather than by the polynomial: over the [-10, 10] range used by
-// these tests the measured maximum absolute error is 2.7e-3, exactly the error of
-// rounding the exact result to FP16. The existing budget adds about 3.7x
-// headroom over that measurement.
+// Keep the established absolute-error and cosine acceptance budgets.
+// Activation accuracy includes the divide,
+// the optional gate/up multiply, and (for FP16) the final narrowing conversion.
 static constexpr float max_abs_error = 1e-2f;
 static constexpr float min_cosine = 0.9999f;
 
@@ -48,3 +45,14 @@ TEST(Test_silu_f16_f16_1x2vl_rvv, Steps)
 
 INSTANTIATE_TEST_SUITE_P(ActivationTests, Test_silu_f16_f16_1x2vl_rvv, activation_test_values(),
                          ActivationTestParamNameGenerator());
+
+TEST(Test_silu_f16_f16_1x2vl_rvv, SpecialValues)
+{
+    run_silu_special_values_test<float16_t>(tqt_run_silu_f16_f16_1x2vl_rvv,
+                                            tqt_get_n_step_silu_f16_f16_1x2vl_rvv(), max_abs_error);
+}
+
+TEST(Test_silu_f16_f16_1x2vl_rvv, AllFp16Inputs)
+{
+    run_silu_all_fp16_values_test<float16_t>(tqt_run_silu_f16_f16_1x2vl_rvv, max_abs_error);
+}

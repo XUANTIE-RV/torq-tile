@@ -11,15 +11,9 @@
 
 using namespace torq_tile::test;
 
-// The SiLU term comes from the cephes polynomial exp in src/common/tqt_math_rvv.h
-// followed by a correctly-rounded divide, and is then multiplied by the linear
-// operand, so the absolute error of the result is the SiLU error scaled by |b|.
-// The SiLU error over the [-10, 10] range used by these tests is at most 1.1e-6,
-// which the |b| <= 10 factor lifts to ~1.1e-5; the rounding of the product adds up
-// to |c| * 2^-24 = 6e-6. Over this shape set the measured maximum is 1.5e-5.
-//
-// Preserve the established acceptance budget rather than tightening it to
-// this range-specific measurement.
+// Keep the established absolute-error and cosine acceptance budgets.
+// Activation accuracy includes the divide,
+// the optional gate/up multiply, and (for FP16) the final narrowing conversion.
 static constexpr float max_abs_error = 5e-4f;
 static constexpr float min_cosine = 0.999999f;
 
@@ -78,3 +72,10 @@ TEST(Test_swiglu_f32_f32_f32_1x4vl_rvv, Steps)
 
 INSTANTIATE_TEST_SUITE_P(GatedActivationTests, Test_swiglu_f32_f32_f32_1x4vl_rvv,
                          gated_activation_test_values(), ActivationTestParamNameGenerator());
+
+TEST(Test_swiglu_f32_f32_f32_1x4vl_rvv, SpecialValues)
+{
+    run_swiglu_special_values_test<float>(tqt_run_swiglu_f32_f32_f32_1x4vl_rvv,
+                                          tqt_get_n_step_swiglu_f32_f32_f32_1x4vl_rvv(),
+                                          max_abs_error);
+}

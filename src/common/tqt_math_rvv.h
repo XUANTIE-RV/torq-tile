@@ -29,95 +29,97 @@
 // exp
 // ----------------------------------------------------------------------------
 //
-// Cephes single-precision exponential: exp(x) = 2^n * exp(g), with
-// n = floor(x * log2(e) + 0.5) and g = x - n * ln(2) in [-0.35, 0.35], a range a
-// degree-5 polynomial covers. ln(2) is split into C1 + C2 so the range reduction
-// keeps its low bits.
+// exp(x) = 2^n * (1 + poly(r)), r = x - n * ln(2). The coefficients and grouped
+// degree-5 evaluation follow Arm's optimized expf, also used by GGML. Adding
+// 0x1.8p23f rounds x * log2(e) to an integer under RNE and encodes that integer
+// in the significand, avoiding numeric float/integer conversions.
+// Reference: Arm optimized-routines, math/aarch64/advsimd/v_expf_inline.h.
 //
 // Contract of the generated tqt_vexp_f32m<LMUL>:
-//   - The argument is saturated into [-88.376, 88.376] first, so no argument
-//     overflows to infinity: above that range the result saturates around
-//     2.4e38 instead. Callers that divide by the result therefore see a
-//     denominator that stops growing, which bounds how small their quotient can
-//     get - see the negative-tail note in the RVV SiLU kernel headers.
-//   - The 2^n step writes a biased exponent field directly, so it cannot
-//     produce a subnormal: every argument <= -87.6832 returns +0.0. That
-//     includes the [-88.376, -87.6832] sliver whose true value is a
-//     representable f32 subnormal, where the relative error is therefore 100%.
-//     Over [-87.6832, 88.376] the relative error is on the order of 1e-7.
-//   - NaN and +Inf are NOT handled, and specifically NaN does not propagate:
-//     vfmin / vfmax follow IEEE minimumNumber / maximumNumber, so both are
-//     replaced by the clamp bound in the very first instruction and the function
-//     returns ~2.4e38. -Inf happens to give the correct +0.0.
+//   - Requires round-to-nearest, ties-to-even (RNE); does not change frm.
+//   - exp(+/-0) = 1, exp(-Inf) = +0, exp(+Inf) = +Inf; NaNs propagate.
+//   - Split scaling preserves subnormal results and permits overflow to +Inf.
+//     Finite inputs are not clamped to a finite saturation value.
+//   - Accuracy is validated through the consuming micro-kernel tests.
+//     Correct rounding and exhaustive all-f32 accuracy are not guaranteed.
+//   - NaN payloads and floating-point exception flags are not specified. The
+//     exceptional path can evaluate intermediate values discarded by a merge.
 //
-// The evaluation keeps up to five vector groups live (the caller's argument, the
-// reduced x, n, and the two polynomial temporaries), so an LMUL=8 instantiation
-// would need every architectural vector register and spill. LMUL=4 is the widest
-// group that leaves the register allocator room.
+// Select and prepare scaling before polynomial evaluation. This keeps exponent
+// temporaries out of the FMA chain and leaves room for the caller's SiLU gate.
 
-#define TQT_RVV_EXP_HI 88.3762626647949f
-#define TQT_RVV_EXP_LO -88.3762626647949f
+#define TQT_RVV_EXP_SHIFT 0x1.8p23f
+#define TQT_RVV_EXP_LOG2EF 0x1.715476p+0f
+#define TQT_RVV_EXP_C1 0x1.62e4p-1f
+#define TQT_RVV_EXP_C2 0x1.7f7d1cp-20f
 
-#define TQT_RVV_EXP_LOG2EF 1.44269504088896341f
-#define TQT_RVV_EXP_C1 0.693359375f
-#define TQT_RVV_EXP_C2 -2.12194440e-4f
-
-#define TQT_RVV_EXP_P0 1.9875691500E-4f
-#define TQT_RVV_EXP_P1 1.3981999507E-3f
-#define TQT_RVV_EXP_P2 8.3334519073E-3f
-#define TQT_RVV_EXP_P3 4.1665795894E-2f
-#define TQT_RVV_EXP_P4 1.6666665459E-1f
-#define TQT_RVV_EXP_P5 5.0000001201E-1f
+#define TQT_RVV_EXP_P0 0x1.ffffecp-1f
+#define TQT_RVV_EXP_P1 0x1.fffdb6p-2f
+#define TQT_RVV_EXP_P2 0x1.555e66p-3f
+#define TQT_RVV_EXP_P3 0x1.573e2ep-5f
+#define TQT_RVV_EXP_P4 0x1.0e4020p-7f
 
 /// Generates `tqt_vexp_f32m<LMUL>(vfloat32m<LMUL>_t x, size_t vl)`.
 ///
 /// @param LMUL Vector length multiplier of the operand group (1, 2, 4 or 8).
 /// @param MLEN Mask length matching LMUL for 32-bit elements (32 / LMUL).
-#define TQT_RVV_F32_EXP_OP(LMUL, MLEN)                                                      \
-    static inline vfloat32m##LMUL##_t tqt_vexp_f32m##LMUL(vfloat32m##LMUL##_t x, size_t vl) \
-    {                                                                                       \
-        vfloat32m##LMUL##_t fx, tmp, y, z;                                                  \
-                                                                                            \
-        /* Saturate so the 2^n reconstruction can neither overflow nor wrap. */             \
-        x = __riscv_vfmin_vf_f32m##LMUL(x, TQT_RVV_EXP_HI, vl);                             \
-        x = __riscv_vfmax_vf_f32m##LMUL(x, TQT_RVV_EXP_LO, vl);                             \
-                                                                                            \
-        /* n = floor(x * log2(e) + 0.5): round to nearest, then correct down. */            \
-        fx = __riscv_vfmv_v_f_f32m##LMUL(0.5f, vl);                                         \
-        fx = __riscv_vfmacc_vf_f32m##LMUL(fx, TQT_RVV_EXP_LOG2EF, x, vl);                   \
-        tmp = __riscv_vfcvt_f_x_v_f32m##LMUL(__riscv_vfcvt_x_f_v_i32m##LMUL(fx, vl), vl);   \
-        vbool##MLEN##_t mask = __riscv_vmfgt_vv_f32m##LMUL##_b##MLEN(tmp, fx, vl);          \
-        fx = __riscv_vfsub_vf_f32m##LMUL##_mu(mask, tmp, tmp, 1.0f, vl);                    \
-                                                                                            \
-        /* g = x - n * ln(2), with ln(2) split into C1 + C2. */                             \
-        tmp = __riscv_vfmul_vf_f32m##LMUL(fx, TQT_RVV_EXP_C1, vl);                          \
-        z = __riscv_vfmul_vf_f32m##LMUL(fx, TQT_RVV_EXP_C2, vl);                            \
-        x = __riscv_vfsub_vv_f32m##LMUL(x, tmp, vl);                                        \
-        x = __riscv_vfsub_vv_f32m##LMUL(x, z, vl);                                          \
-                                                                                            \
-        /* exp(g) = 1 + g + g^2 * poly5(g). */                                              \
-        y = __riscv_vfmul_vf_f32m##LMUL(x, TQT_RVV_EXP_P0, vl);                             \
-        z = __riscv_vfmul_vv_f32m##LMUL(x, x, vl);                                          \
-        y = __riscv_vfadd_vf_f32m##LMUL(y, TQT_RVV_EXP_P1, vl);                             \
-        y = __riscv_vfmul_vv_f32m##LMUL(y, x, vl);                                          \
-        y = __riscv_vfadd_vf_f32m##LMUL(y, TQT_RVV_EXP_P2, vl);                             \
-        y = __riscv_vfmul_vv_f32m##LMUL(y, x, vl);                                          \
-        y = __riscv_vfadd_vf_f32m##LMUL(y, TQT_RVV_EXP_P3, vl);                             \
-        y = __riscv_vfmul_vv_f32m##LMUL(y, x, vl);                                          \
-        y = __riscv_vfadd_vf_f32m##LMUL(y, TQT_RVV_EXP_P4, vl);                             \
-        y = __riscv_vfmul_vv_f32m##LMUL(y, x, vl);                                          \
-        y = __riscv_vfadd_vf_f32m##LMUL(y, TQT_RVV_EXP_P5, vl);                             \
-        y = __riscv_vfmul_vv_f32m##LMUL(y, z, vl);                                          \
-        y = __riscv_vfadd_vv_f32m##LMUL(y, x, vl);                                          \
-        y = __riscv_vfadd_vf_f32m##LMUL(y, 1.0f, vl);                                       \
-                                                                                            \
-        /* 2^n by writing the biased exponent field directly. */                            \
-        vint32m##LMUL##_t mm = __riscv_vfcvt_x_f_v_i32m##LMUL(fx, vl);                      \
-        mm = __riscv_vadd_vx_i32m##LMUL(mm, 0x7f, vl);                                      \
-        mm = __riscv_vsll_vx_i32m##LMUL(mm, 23, vl);                                        \
-        vfloat32m##LMUL##_t pow2n = __riscv_vreinterpret_v_i32m##LMUL##_f32m##LMUL(mm);     \
-                                                                                            \
-        return __riscv_vfmul_vv_f32m##LMUL(y, pow2n, vl);                                   \
+#define TQT_RVV_F32_EXP_OP(LMUL, MLEN)                                                             \
+    static inline vfloat32m##LMUL##_t tqt_vexp_poly_f32m##LMUL(vfloat32m##LMUL##_t x, float c1,    \
+                                                               float c3, size_t vl)                \
+    {                                                                                              \
+        /* poly(x) = P0*x + x^2 * (P1 + P2*x + x^2 * (P3 + P4*x)). */                              \
+        vfloat32m##LMUL##_t u = __riscv_vfmul_vv_f32m##LMUL(x, x, vl);                             \
+        vfloat32m##LMUL##_t p = __riscv_vfmv_v_f_f32m##LMUL(c3, vl);                               \
+        p = __riscv_vfmacc_vf_f32m##LMUL(p, TQT_RVV_EXP_P4, x, vl);                                \
+        vfloat32m##LMUL##_t q = __riscv_vfmv_v_f_f32m##LMUL(c1, vl);                               \
+        q = __riscv_vfmacc_vf_f32m##LMUL(q, TQT_RVV_EXP_P2, x, vl);                                \
+        q = __riscv_vfmacc_vv_f32m##LMUL(q, p, u, vl);                                             \
+        p = __riscv_vfmul_vf_f32m##LMUL(x, TQT_RVV_EXP_P0, vl);                                    \
+        return __riscv_vfmacc_vv_f32m##LMUL(p, q, u, vl);                                          \
+    }                                                                                              \
+    static inline vfloat32m##LMUL##_t tqt_vexp_f32m##LMUL(vfloat32m##LMUL##_t x, size_t vl)        \
+    {                                                                                              \
+        vfloat32m##LMUL##_t z = __riscv_vfmv_v_f_f32m##LMUL(TQT_RVV_EXP_SHIFT, vl);                \
+        z = __riscv_vfmacc_vf_f32m##LMUL(z, TQT_RVV_EXP_LOG2EF, x, vl);                            \
+        vfloat32m##LMUL##_t n = __riscv_vfsub_vf_f32m##LMUL(z, TQT_RVV_EXP_SHIFT, vl);             \
+        x = __riscv_vfnmsac_vf_f32m##LMUL(x, TQT_RVV_EXP_C1, n, vl);                               \
+        x = __riscv_vfnmsac_vf_f32m##LMUL(x, TQT_RVV_EXP_C2, n, vl);                               \
+        vfloat32m##LMUL##_t abs_n = __riscv_vfabs_v_f32m##LMUL(n, vl);                             \
+        vbool##MLEN##_t special = __riscv_vmfgt_vf_f32m##LMUL##_b##MLEN(abs_n, 126.0f, vl);        \
+        vuint32m##LMUL##_t e =                                                                     \
+            __riscv_vsll_vx_u32m##LMUL(__riscv_vreinterpret_v_f32m##LMUL##_u32m##LMUL(z), 23, vl); \
+        vfloat32m##LMUL##_t scale = __riscv_vreinterpret_v_u32m##LMUL##_f32m##LMUL(                \
+            __riscv_vadd_vx_u32m##LMUL(e, 0x3f800000, vl));                                        \
+        if (!__riscv_vcpop_m_b##MLEN(special, vl)) {                                               \
+            vfloat32m##LMUL##_t p =                                                                \
+                tqt_vexp_poly_f32m##LMUL(x, TQT_RVV_EXP_P1, TQT_RVV_EXP_P3, vl);                   \
+            return __riscv_vfmacc_vv_f32m##LMUL(scale, p, scale, vl);                              \
+        }                                                                                          \
+                                                                                                   \
+        /* Keep GCC from speculating exceptional scales into the normal path. */                   \
+        __asm__ volatile("" : "+vr"(n), "+vr"(e));                                                 \
+        /* Prepare both scales before the polynomial so n/e/abs_n die early at LMUL=4. */          \
+        vbool##MLEN##_t extreme = __riscv_vmfgt_vf_f32m##LMUL##_b##MLEN(abs_n, 192.0f, vl);        \
+        vint32m##LMUL##_t sign =                                                                   \
+            __riscv_vsra_vx_i32m##LMUL(__riscv_vreinterpret_v_f32m##LMUL##_i32m##LMUL(n), 31, vl); \
+        vuint32m##LMUL##_t d = __riscv_vand_vx_u32m##LMUL(                                         \
+            __riscv_vreinterpret_v_i32m##LMUL##_u32m##LMUL(sign), 0x82000000u, vl);                \
+        vfloat32m##LMUL##_t s1 = __riscv_vreinterpret_v_u32m##LMUL##_f32m##LMUL(                   \
+            __riscv_vadd_vx_u32m##LMUL(d, 0x7f000000, vl));                                        \
+        vfloat32m##LMUL##_t s2 =                                                                   \
+            __riscv_vreinterpret_v_u32m##LMUL##_f32m##LMUL(__riscv_vsub_vv_u32m##LMUL(e, d, vl));  \
+        s2 = __riscv_vmerge_vvm_f32m##LMUL(scale, s2, special, vl);                                \
+        s1 = __riscv_vfmerge_vfm_f32m##LMUL(s1, 1.0f, __riscv_vmnot_m_b##MLEN(special, vl), vl);   \
+        /* Extreme lanes evaluate s1*s1 (zero or infinity), without keeping a late mask. */        \
+        s2 = __riscv_vmerge_vvm_f32m##LMUL(s2, s1, extreme, vl);                                   \
+        x = __riscv_vfmerge_vfm_f32m##LMUL(x, 0.0f, extreme, vl);                                  \
+        /* Keep polynomial broadcasts after scale preparation, without a runtime fence. */         \
+        float c1 = TQT_RVV_EXP_P1;                                                                 \
+        float c3 = TQT_RVV_EXP_P3;                                                                 \
+        __asm__ volatile("" : "+vr"(x), "+f"(c1), "+f"(c3) : "vr"(s1), "vr"(s2));                  \
+        vfloat32m##LMUL##_t p = tqt_vexp_poly_f32m##LMUL(x, c1, c3, vl);                           \
+        s2 = __riscv_vfmacc_vv_f32m##LMUL(s2, p, s2, vl);                                          \
+        return __riscv_vfmul_vv_f32m##LMUL(s2, s1, vl);                                            \
     }
 
 // Instantiated LMULs. LMUL=4 serves both RVV SiLU variants: the FP32 kernel

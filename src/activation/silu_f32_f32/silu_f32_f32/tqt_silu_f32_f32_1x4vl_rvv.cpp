@@ -45,8 +45,8 @@ size_t tqt_get_n_step_silu_f32_f32_1x4vl_rvv(void)
 // ============================================================================
 // Internal: SiLU over one contiguous run of n elements
 // Evaluated as a / (1 + exp(-a)); the single divide is cheaper and more accurate
-// than a reciprocal estimate plus a Newton correction. The polynomial exp keeps
-// several vector groups live, so the tile stays at LMUL=4 to avoid spilling.
+// than a reciprocal estimate plus a Newton correction. Keep the existing LMUL=4
+// tile while using the shared FMA-based exp.
 // ============================================================================
 
 static inline void silu_kernel_4vl(size_t n, const float *a, float *c)
@@ -57,7 +57,8 @@ static inline void silu_kernel_4vl(size_t n, const float *a, float *c)
         vfloat32m4_t va = __riscv_vle32_v_f32m4(a + i, vl);
         vfloat32m4_t ve = tqt_vexp_f32m4(__riscv_vfneg_v_f32m4(va, vl), vl);
         vfloat32m4_t vd = __riscv_vfadd_vf_f32m4(ve, 1.0f, vl);
-        __riscv_vse32_v_f32m4(c + i, __riscv_vfdiv_vv_f32m4(va, vd, vl), vl);
+        vfloat32m4_t vs = __riscv_vfdiv_vv_f32m4(va, vd, vl);
+        __riscv_vse32_v_f32m4(c + i, vs, vl);
         i += vl;
     }
 }

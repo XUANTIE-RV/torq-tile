@@ -22,30 +22,23 @@ extern "C" {
 /// of one f16m2 group.
 /// Computes: c[i, j] = a[i, j] * sigmoid(a[i, j]), sigmoid(x) = 1 / (1 + exp(-x))
 ///
-/// Every arithmetic step runs in FP32: the input is widened once, `exp`, the add
-/// and the divide are evaluated at single precision, and the result is narrowed
-/// once on store. FP16 has too few significand bits for the cephes polynomial, so
-/// evaluating it natively would cost far more accuracy than the two conversions
-/// cost throughput. The kernel evaluates the equivalent form
-/// c = a / (1 + exp(-a)), which needs one full-precision divide instead of a
-/// reciprocal estimate plus a correction step. `exp` comes from the shared
-/// polynomial in `src/common/tqt_math_rvv.h`; its LMUL=4 instantiation is what
-/// pins the FP16 load group to f16m2.
+/// The SiLU term is evaluated as a / (1 + exp(-a)) using the shared FMA-based
+/// exp in src/common/tqt_math_rvv.h and a full-precision divide. RNE rounding
+/// is required; the kernel does not change frm. The existing LMUL=4 FP32
+/// compute group is retained.
+/// Inputs are widened to FP32 before all arithmetic; the final result is
+/// narrowed once. FP32 approximation changes can alter FP16 rounding near a
+/// midpoint, so correctly-rounded or bit-identical FP16 results are not promised.
+/// Accuracy includes the exp approximation, divide rounding, and any final
+/// FP16 conversion. Use the existing absolute-error and cosine test budgets
+/// over their tested activation range; this is not a global relative-error bound.
 ///
-/// Accuracy: sweeping a over [-10, 10] measures a maximum absolute error of
-/// 2.7e-3, which is exactly the error of rounding the mathematically exact result
-/// to FP16 over the same range, so the polynomial contributes nothing measurable
-/// at that scale. Checked exhaustively over all 63488 finite FP16 inputs, the
-/// result is bit-identical to the correctly-rounded one for all but a single
-/// input: a = 2^-24 returns +0 instead of the smallest subnormal, because the
-/// FP32 intermediate 1 + exp(-a) rounds to exactly 2.0f and the quotient then
-/// lands on a round-to-nearest-even tie. Relative error is unbounded in the
-/// saturating tails, where the result flushes to +/-0.
-///
-/// The FP32 kernel's negative-tail saturation error cannot occur here: FP16 caps
-/// |a| at 65504, so a / 2.4e38 always rounds to +/-0, which is correct. Non-finite
-/// inputs are still not handled: silu(NaN) = NaN and silu(+Inf) = +Inf are as
-/// expected, but silu(-Inf) = -Inf where the limit is 0.
+/// The exp helper preserves subnormal outputs and overflows to +Inf. For a
+/// sufficiently negative finite gate, the denominator overflows and SiLU returns
+/// -0; the result no longer grows with |a| in that tail. NaNs propagate,
+/// silu(+Inf) = +Inf, silu(-Inf) = NaN, and input signed zeros are preserved.
+/// The -Inf result follows the direct division used by native PyTorch/GGML SiLU.
+/// NaN payloads and floating-point exception flags are not specified.
 ///
 /// When both matrices are fully packed (lda == n and ldc == n) the M x N
 /// traversal collapses into one contiguous run of m * n elements.

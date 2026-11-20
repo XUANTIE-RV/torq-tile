@@ -11,13 +11,9 @@
 
 using namespace torq_tile::test;
 
-// This variant widens both operands to FP32, runs exp / add / divide / multiply at
-// single precision and narrows once on store, so the dominant error term is that
-// single rounding of the result to FP16. Over the [-10, 10] range used by these
-// tests the measured maximum is 7.8e-3.
-//
-// Preserve the established acceptance budget rather than tightening it to
-// this range-specific measurement.
+// Keep the established absolute-error and cosine acceptance budgets.
+// Activation accuracy includes the divide,
+// the optional gate/up multiply, and (for FP16) the final narrowing conversion.
 static constexpr float max_abs_error = 1e-1f;
 static constexpr float min_cosine = 0.9999f;
 
@@ -74,3 +70,10 @@ TEST(Test_swiglu_f16_f16_f16_1x2vl_rvv, Steps)
 
 INSTANTIATE_TEST_SUITE_P(GatedActivationTests, Test_swiglu_f16_f16_f16_1x2vl_rvv,
                          gated_activation_test_values(), ActivationTestParamNameGenerator());
+
+TEST(Test_swiglu_f16_f16_f16_1x2vl_rvv, SpecialValues)
+{
+    run_swiglu_special_values_test<float16_t>(tqt_run_swiglu_f16_f16_f16_1x2vl_rvv,
+                                              tqt_get_n_step_swiglu_f16_f16_f16_1x2vl_rvv(),
+                                              max_abs_error);
+}

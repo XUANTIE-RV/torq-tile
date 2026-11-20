@@ -49,11 +49,7 @@ size_t tqt_get_n_step_swiglu_f16_f16_f16_1x2vl_rvv(void)
 // narrowing store. The f16m2 load group is what the LMUL=4 exp instantiation
 // widens into.
 //
-// The linear operand is loaded and widened only after tqt_vexp_f32m4 has returned.
-// exp holds up to five LMUL=4 groups live at its peak, and the caller's widened
-// gate group makes six of the eight groups the ISA offers; hoisting this load
-// above the exp call would add a seventh and push the allocator into spills.
-// Keep it here.
+// Load and widen the linear operand after exp and the divide to limit live groups.
 // ============================================================================
 
 static inline void swiglu_kernel_2vl(size_t n, const float16_t *a, const float16_t *b, float16_t *c)

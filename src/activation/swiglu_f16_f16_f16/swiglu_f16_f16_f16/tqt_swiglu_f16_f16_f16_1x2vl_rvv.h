@@ -27,22 +27,24 @@ extern "C" {
 /// gate-and-up buffer is addressed without repacking: pass a = base, lda = 2 * n
 /// and b = base + n, ldb = 2 * n.
 ///
-/// Both operands are widened to FP32 once, and every arithmetic step - `exp`, the
-/// add, the divide and the final multiply - runs at single precision before a
-/// single narrowing store. `exp` comes from the shared cephes polynomial in
-/// `src/common/tqt_math_rvv.h`; it keeps several vector groups live, so LMUL=4 on
-/// the FP32 side (an `f16m2` load group) is the widest tile that leaves the
-/// register allocator room.
+/// The SiLU term is evaluated as a / (1 + exp(-a)) using the shared FMA-based
+/// exp in src/common/tqt_math_rvv.h and a full-precision divide. RNE rounding
+/// is required; the kernel does not change frm. The existing LMUL=4 FP32
+/// compute group is retained.
+/// Inputs are widened to FP32 before all arithmetic; the final result is
+/// narrowed once. FP32 approximation changes can alter FP16 rounding near a
+/// midpoint, so correctly-rounded or bit-identical FP16 results are not promised.
+/// The final multiply by b also runs in FP32. Absolute error includes the SiLU
+/// error scaled by |b|, the multiply rounding, and any final FP16 conversion.
 ///
-/// Accuracy: the FP32 intermediate error is far below FP16 resolution, so the
-/// dominant term is the single rounding of the result to FP16. Sweeping a and b
-/// over [-10, 10] measures a maximum absolute error of 7.8e-3.
-///
-/// Far into the negative tail of `a` the polynomial `exp` saturates and the SiLU
-/// term stops approaching 0, but for FP16 inputs the saturation point (-88.376)
-/// is well inside the representable range and the resulting error stays below
-/// FP16 resolution. Non-finite inputs are not handled: silu(-Inf) = -Inf where the
-/// limit is 0.
+/// The exp helper preserves subnormal outputs and overflows to +Inf. For a
+/// sufficiently negative finite gate, the denominator overflows and SiLU returns
+/// -0; the result no longer grows with |a| in that tail. NaNs propagate,
+/// silu(+Inf) = +Inf, silu(-Inf) = NaN, and input signed zeros are preserved.
+/// The -Inf result follows the direct division used by native PyTorch/GGML SiLU.
+/// The gate is multiplied by b using ordinary floating-point semantics:
+/// a NaN gate, zero times infinity, or a NaN linear operand produces NaN.
+/// NaN payloads and floating-point exception flags are not specified.
 ///
 /// When all three matrices are fully packed (lda == ldb == ldc == n) the M x N
 /// traversal collapses into one contiguous run of m * n elements.

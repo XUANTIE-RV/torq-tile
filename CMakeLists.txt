@@ -479,22 +479,22 @@ if(TORQ_TILE_CAN_COMPILE_RVV)
 endif()
 
 # Add RVV FP16 sources if detected
-if(TORQ_TILE_CAN_COMPILE_RVV AND TORQ_TILE_CAN_COMPILE_RVV_F16)
+if(TORQ_TILE_CAN_COMPILE_RVV_F16)
     list(APPEND TORQ_TILE_ALL_SOURCES ${TORQ_TILE_RVV_F16_SOURCES})
 endif()
 
 # Add RVV BF16 sources if detected
-if(TORQ_TILE_CAN_COMPILE_RVV AND TORQ_TILE_CAN_COMPILE_RVV_BF16)
+if(TORQ_TILE_CAN_COMPILE_RVV_BF16)
     list(APPEND TORQ_TILE_ALL_SOURCES ${TORQ_TILE_RVV_BF16_SOURCES})
 endif()
 
 # Add BF16-input, FP16-output GEMM sources if vector FP16 conversions are available.
-if(TORQ_TILE_CAN_COMPILE_RVV AND TORQ_TILE_CAN_COMPILE_RVV_BF16_TO_F16)
+if(TORQ_TILE_CAN_COMPILE_RVV_BF16_TO_F16)
     list(APPEND TORQ_TILE_ALL_SOURCES ${TORQ_TILE_RVV_BF16_TO_F16_SOURCES})
 endif()
 
 # Add RVV F64 sources if detected
-if(TORQ_TILE_CAN_COMPILE_RVV AND TORQ_TILE_CAN_COMPILE_RVV_F64)
+if(TORQ_TILE_CAN_COMPILE_RVV_F64)
     list(APPEND TORQ_TILE_ALL_SOURCES ${TORQ_TILE_RVV_F64_SOURCES})
 endif()
 
@@ -530,6 +530,13 @@ foreach(backend RVV ZTT)
 endforeach()
 configure_file(cmake/tqt_compile_config.h.in
     "${CMAKE_CURRENT_BINARY_DIR}/include/torq_tile/tqt_compile_config.h" @ONLY)
+
+# Toolchain files may set normal variables that are absent from CMakeCache.txt.
+# Record their effective values for the example runner's library reuse checks.
+foreach(setting C_COMPILER CXX_COMPILER C_COMPILER_TARGET CXX_COMPILER_TARGET SYSROOT)
+    set(TORQ_TILE_BUILD_${setting} "${CMAKE_${setting}}" CACHE INTERNAL
+        "Effective CMake ${setting} used to build torq_tile" FORCE)
+endforeach()
 
 if(TORQ_TILE_BUILD_SHARED)
     add_library(torq_tile SHARED ${TORQ_TILE_ALL_SOURCES})

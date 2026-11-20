@@ -1,0 +1,105 @@
+#
+# SPDX-FileCopyrightText: Copyright 2024-2026 C-SKY Microsystems Co., Ltd.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+cmake_minimum_required(VERSION 3.16)
+project(tqt_example_packed_gemm LANGUAGES C CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+get_filename_component(TORQ_TILE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../.." ABSOLUTE)
+
+# An explicit package shares one prebuilt library across independent examples.
+# Otherwise FetchContent builds the local checkout without tests or benchmarks.
+if(torq_tile_DIR)
+    find_package(torq_tile CONFIG REQUIRED PATHS "${torq_tile_DIR}" NO_DEFAULT_PATH)
+    set(example_library torq_tile::torq_tile)
+    get_target_property(example_includes torq_tile::torq_tile INTERFACE_INCLUDE_DIRECTORIES)
+else()
+    include(FetchContent)
+    set(TORQ_TILE_BUILD_TEST OFF CACHE BOOL "" FORCE)
+    set(TORQ_TILE_BUILD_BENCHMARK OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(torq_tile SOURCE_DIR "${TORQ_TILE_SOURCE_DIR}")
+    FetchContent_MakeAvailable(torq_tile)
+    set(example_library torq_tile)
+    # The library generates its public installed header layout at configure time.
+    set(example_includes "${torq_tile_BINARY_DIR}/install/include" "${torq_tile_BINARY_DIR}/include")
+endif()
+
+# Read the matching library's public build facts; no consumer ISA selection.
+unset(example_config_header CACHE)
+find_file(example_config_header torq_tile/tqt_compile_config.h
+    PATHS ${example_includes} NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
+if(NOT example_config_header)
+    message(FATAL_ERROR "The library is missing torq_tile/tqt_compile_config.h")
+endif()
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${example_config_header}")
+file(STRINGS "${example_config_header}" capabilities
+    REGEX "^#define TORQ_TILE_(HAS_[A-Z0-9_]+|BUILT_FREESTANDING) [01]$")
+foreach(definition IN LISTS capabilities)
+    if(definition MATCHES "^#define (TORQ_TILE_[A-Z0-9_]+) ([01])$")
+        set(${CMAKE_MATCH_1} ${CMAKE_MATCH_2})
+    endif()
+endforeach()
+if(NOT DEFINED TORQ_TILE_BUILT_FREESTANDING OR TORQ_TILE_BUILT_FREESTANDING)
+    message(FATAL_ERROR "Examples require a hosted torq_tile library")
+endif()
+
+set(TORQ_TILE_EXAMPLE_RUNNER "" CACHE STRING "Command prefix for running examples (for example QEMU)")
+option(TQT_ALLOW_EMPTY_EXAMPLES "Allow batch discovery of unsupported scenarios" OFF)
+if(TORQ_TILE_EXAMPLE_RUNNER OR NOT CMAKE_CROSSCOMPILING)
+    enable_testing()
+endif()
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/examples.tsv" "name\tstate\tsource\trequirements\n")
+
+# Keep registrations on one line: the batch runner and audit read this metadata.
+function(torq_tile_add_example name source)
+    cmake_parse_arguments(EX "THREADS" "" "REQUIRES" ${ARGN})
+    set(available FALSE)
+    foreach(feature IN LISTS EX_REQUIRES)
+        if(NOT DEFINED TORQ_TILE_HAS_${feature})
+            message(FATAL_ERROR "Unknown library capability: TORQ_TILE_HAS_${feature}")
+        endif()
+        if(TORQ_TILE_HAS_${feature})
+            set(available TRUE)
+        endif()
+    endforeach()
+    string(JOIN "," requirements ${EX_REQUIRES})
+    if(NOT available)
+        message(STATUS "Example ${name}: SKIP (requires ${requirements})")
+        file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/examples.tsv" "${name}\tskipped\t${source}\t${requirements}\n")
+        return()
+    endif()
+    set(target tqt_example_${name})
+    add_executable(${target} "${source}")
+    target_link_libraries(${target} PRIVATE ${example_library})
+    target_include_directories(${target} PRIVATE ${example_includes})
+    set_target_properties(${target} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin")
+    if(TORQ_TILE_HAS_ZTT_GEMM_F32)
+        target_compile_options(${target} PRIVATE -fno-unwind-tables -fno-asynchronous-unwind-tables)
+    endif()
+    if(EX_THREADS)
+        set(THREADS_PREFER_PTHREAD_FLAG TRUE)
+        if(CMAKE_CROSSCOMPILING)
+            set(CMAKE_HAVE_LIBC_PTHREAD FALSE)
+        endif()
+        find_package(Threads REQUIRED)
+        target_link_libraries(${target} PRIVATE Threads::Threads)
+    endif()
+    if(TORQ_TILE_EXAMPLE_RUNNER OR NOT CMAKE_CROSSCOMPILING)
+        separate_arguments(runner UNIX_COMMAND "${TORQ_TILE_EXAMPLE_RUNNER}")
+        add_test(NAME example.${name} COMMAND ${runner} $<TARGET_FILE:${target}>)
+        set_tests_properties(example.${name} PROPERTIES LABELS examples TIMEOUT 120
+            FAIL_REGULAR_EXPRESSION "Status: FAILED;Mismatch;FAILED:")
+    endif()
+    file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/examples.tsv" "${name}\tavailable\t${source}\t${requirements}\n")
+    set_property(DIRECTORY APPEND PROPERTY TQT_EXAMPLE_TARGETS ${target})
+endfunction()
+
+torq_tile_add_example(packed_gemm packed_gemm.cpp REQUIRES RVV ZTT_GEMM_F32)
+
+get_property(example_targets DIRECTORY PROPERTY TQT_EXAMPLE_TARGETS)
+if(NOT example_targets AND NOT TQT_ALLOW_EMPTY_EXAMPLES)
+    message(FATAL_ERROR "No supported examples in this directory; check the library capabilities")
+endif()

@@ -22,6 +22,11 @@ extern "C" {
 /// dependency chain; the partials are combined before store.
 /// m_step = 2 (M-direction unroll), n_step = 2 * 4 * vlmax.
 /// Computes: c[n] = init[n] + sum_{m=0}^{M-1} a[m, n]
+///
+/// Numerical behavior: accumulation uses FP32 without compensation. Strong
+/// cancellation may lose small contributions. Results need not match an FP64
+/// reference; bitwise reproducibility across register widths or backends is not
+/// guaranteed.
 
 /// Gets m step value (reduction-direction unroll factor).
 ///

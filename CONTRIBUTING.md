@@ -31,8 +31,9 @@ Thank you for your interest in contributing to TORQ-Tile! Please be respectful a
 
 ## Adding a New Micro-Kernel
 
-Follow the [filename convention](README.md#filename-convention) and use an existing
-same-family variant as a reference. Matrix/conv families
+Follow the descriptor-specific naming and family rules in
+[`docs/reference/naming_convention.md`](docs/reference/naming_convention.md) and
+[`docs/contributing/architecture.md`](docs/contributing/architecture.md). Matrix/conv families
 normally group by base A/B types; elementwise and reduction use operation/type families; activation
 uses the complete KERNEL_BASE as its family label. Source/header names are
 `tqt_<KERNEL_BASE>_<tile>_[<strategy>_]<arch>.{cpp,h}`; `t` means transposed, `p` means packed,

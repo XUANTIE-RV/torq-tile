@@ -22,6 +22,12 @@ extern "C" {
 /// dependency chain; the partials are combined before the 1/M scaling.
 /// m_step = 2 (M-direction unroll), n_step = 2 * 4 * vlmax.
 /// Computes: c[n] = init[n] + (1/M) * sum_{m=0}^{M-1} a[m, n]
+///
+/// Numerical behavior: the sum is accumulated in FP32 before reciprocal scaling.
+/// Intermediate overflow is possible even when the exact mean is finite.
+/// Accumulation uses no compensation, so strong cancellation may lose small
+/// contributions. Results need not match an FP64 reference; bitwise reproducibility
+/// across register widths or backends is not guaranteed.
 
 /// Gets m step value (reduction-direction unroll factor).
 ///

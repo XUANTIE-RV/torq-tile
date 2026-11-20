@@ -21,6 +21,11 @@ extern "C" {
 /// so the reduction chains issue without cross-row data dependencies.
 /// m_step = 4, n_step = 4 * csrr_vlenb() / sizeof(float).
 /// Computes: c[m] = init[m] + sum_{n=0}^{N-1} a[m, n]
+///
+/// Numerical behavior: accumulation uses FP32 without compensation. Strong
+/// cancellation may lose small contributions. Results need not match an FP64
+/// reference; bitwise reproducibility across register widths or backends is not
+/// guaranteed.
 
 /// Gets m step value (non-reduction dimension tile size).
 ///

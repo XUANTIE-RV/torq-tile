@@ -44,3 +44,46 @@ TEST_P(Test_divvs_f16_f16_f16_8vl_rvv, Correctness)
 
 INSTANTIATE_TEST_SUITE_P(ElementwiseTests, Test_divvs_f16_f16_f16_8vl_rvv,
                          common_elementwise_test_values(), ElementwiseTestParamNameGenerator());
+
+TEST(Test_divvs_f16_f16_f16_8vl_rvv, AllSubnormalDivisors)
+{
+    for (uint16_t magnitude = 1; magnitude < 0x0400; ++magnitude) {
+        for (uint16_t sign : {0x0000, 0x8000}) {
+            SCOPED_TRACE(testing::Message() << "divisor_bits=" << (magnitude | sign));
+            const float16_t divisor = elementwise_test_value_from_bits<float16_t>(
+                static_cast<uint16_t>(magnitude | sign));
+            ASSERT_NO_FATAL_FAILURE(
+                run_divvs_subnormal_identity_test(divisor, tqt_run_divvs_f16_f16_f16_8vl_rvv));
+        }
+    }
+}
+
+TEST(Test_divvs_f16_f16_f16_8vl_rvv, SubnormalBoundaries)
+{
+    std::vector<float16_t> divisors;
+    for (uint16_t magnitude : {0x0001, 0x0002, 0x0100, 0x0200, 0x03ff}) {
+        for (uint16_t sign : {0x0000, 0x8000}) {
+            divisors.push_back(elementwise_test_value_from_bits<float16_t>(
+                static_cast<uint16_t>(magnitude | sign)));
+        }
+    }
+    run_divvs_boundary_test(divisors, true, tqt_get_n_step_divvs_f16_f16_f16_8vl_rvv(),
+                            elementwise_test_value_from_bits<float16_t>(uint16_t{0x0001}),
+                            elementwise_test_value_from_bits<float16_t>(uint16_t{0x7bff}),
+                            tqt_run_divvs_f16_f16_f16_8vl_rvv);
+}
+
+TEST(Test_divvs_f16_f16_f16_8vl_rvv, ReciprocalPathPreserved)
+{
+    std::vector<float16_t> divisors;
+    for (uint16_t magnitude : {0x0000, 0x0400, 0x0401, 0x3c00, 0x4200, 0x7bff, 0x7c00, 0x7e00}) {
+        for (uint16_t sign : {0x0000, 0x8000}) {
+            divisors.push_back(elementwise_test_value_from_bits<float16_t>(
+                static_cast<uint16_t>(magnitude | sign)));
+        }
+    }
+    run_divvs_boundary_test(divisors, false, tqt_get_n_step_divvs_f16_f16_f16_8vl_rvv(),
+                            elementwise_test_value_from_bits<float16_t>(uint16_t{0x0001}),
+                            elementwise_test_value_from_bits<float16_t>(uint16_t{0x7bff}),
+                            tqt_run_divvs_f16_f16_f16_8vl_rvv);
+}

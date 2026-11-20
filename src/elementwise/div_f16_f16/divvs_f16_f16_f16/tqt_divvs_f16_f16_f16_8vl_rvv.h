@@ -20,10 +20,12 @@ extern "C" {
 /// n_step = 8 * csrr_vlenb() / sizeof(float16_t).
 /// Computes: c[i] = a[i] / b, i in [0, n)
 ///
-/// Implemented as a reciprocal multiply — the scalar reciprocal 1/b is computed
-/// once (in fp32, rounded to fp16) and each element is multiplied by it
-/// (c[i] = a[i] * (1/b)) since a multiply is much cheaper than a divide. Results
-/// may differ from a true per-element division by a small number of ULPs.
+/// Nonzero subnormal divisors use per-element division to avoid reciprocal
+/// overflow. All other divisors, including zero, Inf and NaN, use a reciprocal
+/// multiply for performance: compute 1/b once in FP32, round to FP16, then
+/// c[i] = a[i] * (1/b). Reciprocal rounding can change results, especially for
+/// large divisors whose reciprocals are subnormal. Results and floating-point
+/// exception flags are not guaranteed to match per-element division for all inputs.
 
 /// Gets n step value (processing width per inner step).
 ///

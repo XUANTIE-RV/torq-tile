@@ -43,3 +43,35 @@ TEST_P(Test_divvs_f32_f32_f32_8vl_rvv, Correctness)
 
 INSTANTIATE_TEST_SUITE_P(ElementwiseTests, Test_divvs_f32_f32_f32_8vl_rvv,
                          common_elementwise_test_values(), ElementwiseTestParamNameGenerator());
+
+TEST(Test_divvs_f32_f32_f32_8vl_rvv, SubnormalDivisors)
+{
+    std::vector<float> divisors;
+    for (uint32_t magnitude : {0x00000001u, 0x00000002u, 0x00200000u, 0x00400000u, 0x007fffffu}) {
+        for (uint32_t sign : {0u, 0x80000000u}) {
+            const float divisor = elementwise_test_value_from_bits<float>(magnitude | sign);
+            ASSERT_NO_FATAL_FAILURE(
+                run_divvs_subnormal_identity_test(divisor, tqt_run_divvs_f32_f32_f32_8vl_rvv));
+            divisors.push_back(divisor);
+        }
+    }
+    run_divvs_boundary_test(divisors, true, tqt_get_n_step_divvs_f32_f32_f32_8vl_rvv(),
+                            elementwise_test_value_from_bits<float>(0x00000001u),
+                            elementwise_test_value_from_bits<float>(0x7f7fffffu),
+                            tqt_run_divvs_f32_f32_f32_8vl_rvv);
+}
+
+TEST(Test_divvs_f32_f32_f32_8vl_rvv, ReciprocalPathPreserved)
+{
+    std::vector<float> divisors;
+    for (uint32_t magnitude : {0x00000000u, 0x00800000u, 0x00800001u, 0x3f800000u, 0x40400000u,
+                               0x7f7fffffu, 0x7f800000u, 0x7fc00000u}) {
+        for (uint32_t sign : {0u, 0x80000000u}) {
+            divisors.push_back(elementwise_test_value_from_bits<float>(magnitude | sign));
+        }
+    }
+    run_divvs_boundary_test(divisors, false, tqt_get_n_step_divvs_f32_f32_f32_8vl_rvv(),
+                            elementwise_test_value_from_bits<float>(0x00000001u),
+                            elementwise_test_value_from_bits<float>(0x7f7fffffu),
+                            tqt_run_divvs_f32_f32_f32_8vl_rvv);
+}

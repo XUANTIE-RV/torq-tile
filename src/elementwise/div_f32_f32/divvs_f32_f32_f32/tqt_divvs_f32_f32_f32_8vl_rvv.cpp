@@ -35,6 +35,23 @@ void tqt_run_divvs_f32_f32_f32_8vl_rvv(size_t n, const void *a_ptr, float b, voi
     const float *a = (const float *)a_ptr;
     float *c = (float *)c_ptr;
 
+    // A nonzero subnormal divisor can overflow its reciprocal. Divide directly
+    // so finite quotients and signed zeros are not lost to an infinite reciprocal.
+    uint32_t b_bits;
+    TQT_MEMCPY(&b_bits, &b, sizeof(b_bits));
+    const uint32_t magnitude = b_bits & 0x7fffffff;
+    if (magnitude != 0 && magnitude < 0x00800000) {
+        size_t i = 0;
+        while (i < n) {
+            size_t vl = __riscv_vsetvl_e32m8(n - i);
+            vfloat32m8_t va = __riscv_vle32_v_f32m8(a + i, vl);
+            vfloat32m8_t vc = __riscv_vfdiv_vf_f32m8(va, b, vl);
+            __riscv_vse32_v_f32m8(c + i, vc, vl);
+            i += vl;
+        }
+        return;
+    }
+
     // The divisor is a scalar, so compute its reciprocal once and turn the
     // per-element divide into a (much cheaper) multiply: c[i] = a[i] * (1 / b).
     const float inv_b = 1.0f / b;
